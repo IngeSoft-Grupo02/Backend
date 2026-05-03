@@ -68,6 +68,7 @@ application-dev.properties
 .env
 .env.*
 
+
 # === Sistema Operativo ===
 .DS_Store
 .DS_Store?
