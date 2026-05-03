@@ -41,3 +41,12 @@ logs/
 
 ### Variables de entorno ###
 .env
+
+# Archivos de configuración local (Spring)
+application-local.properties
+application-local.yml
+application-dev.properties
+
+# Errores de JVM
+hs_err_pid*
+replay_pid*
