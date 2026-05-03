@@ -1,0 +1,77 @@
+# === Java & Spring Boot ===
+# Ignorar archivos compilados (.class)
+*.class
+
+# Archivos de log
+*.log
+
+# Archivos de BlueJ
+*.ctxt
+
+# Mobile Tools for Java (J2ME)
+.mtj.tmp/
+
+# Archivos de empaquetado (JAR, WAR, EAR)
+*.jar
+*.war
+*.ear
+
+# Crasher logs (Java)
+hs_err_pid*
+replay_pid*
+
+# === Maven ===
+# La carpeta target contiene todo lo generado por Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+# No ignoramos .mvn/wrapper/ para que otros puedan usar ./mvnw sin instalar Maven
+
+# === IDEs ===
+# JetBrains (IntelliJ IDEA)
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+
+# Eclipse
+.metadata
+bin/
+tmp/
+*.tmp
+*.bak
+*.swp
+*~.nib
+local.properties
+.settings/
+.loadpath
+.recommenders
+.project
+.classpath
+.factorypath
+
+# Visual Studio Code
+.vscode/
+
+# === Spring Boot / Entornos ===
+# Archivos de configuración con credenciales (recomendado ignorar versiones locales)
+application-local.properties
+application-local.yml
+application-dev.properties
+.env
+
+# === Sistema Operativo ===
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
