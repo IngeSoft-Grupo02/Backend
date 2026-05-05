@@ -5,8 +5,6 @@ import jakarta.persistence.*;
 import lombok.Setter;
 import pe.edu.pucp.kingstore.domain.model.BaseEntity;
 import pe.edu.pucp.kingstore.domain.model.order.enums.OrderStatus;
-import pe.edu.pucp.kingstore.domain.model.quotation.QuotationItem;
-import pe.edu.pucp.kingstore.domain.model.quotation.enums.QuotationStatus;
 import pe.edu.pucp.kingstore.domain.model.quotation.Quotation;
 
 import java.time.LocalDateTime;

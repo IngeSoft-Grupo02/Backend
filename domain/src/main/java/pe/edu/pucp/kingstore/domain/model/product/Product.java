@@ -5,10 +5,8 @@ import lombok.Getter;
 import lombok.Setter;
 import pe.edu.pucp.kingstore.domain.model.BaseEntity;
 import pe.edu.pucp.kingstore.domain.model.product.enums.Material;
-import pe.edu.pucp.kingstore.domain.model.product.enums.ProductStatus;
 import pe.edu.pucp.kingstore.domain.model.store.Store;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 

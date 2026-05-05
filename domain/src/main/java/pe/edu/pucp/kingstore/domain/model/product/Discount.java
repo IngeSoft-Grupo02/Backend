@@ -3,11 +3,8 @@ package pe.edu.pucp.kingstore.domain.model.product;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
-import pe.edu.pucp.kingstore.domain.model.product.Product;
 import pe.edu.pucp.kingstore.domain.model.BaseEntity;
 import pe.edu.pucp.kingstore.domain.model.product.enums.VolumeType;
-
-import java.time.LocalDateTime;
 
 @Getter
 @Setter
