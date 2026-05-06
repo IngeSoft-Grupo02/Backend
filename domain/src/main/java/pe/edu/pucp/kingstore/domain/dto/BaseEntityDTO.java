@@ -1,4 +1,4 @@
-package pe.edu.pucp.kingstore.dto;
+package pe.edu.pucp.kingstore.domain.dto;
 
 import lombok.Data;
 

@@ -1,12 +1,16 @@
-package pe.edu.pucp.kingstore.dto.user;
+package pe.edu.pucp.kingstore.domain.dto.user;
 
 import lombok.Data;
+import lombok.EqualsAndHashCode;
+import pe.edu.pucp.kingstore.domain.dto.BaseEntityDTO;
 import pe.edu.pucp.kingstore.domain.model.user.enums.DocumentType;
 import pe.edu.pucp.kingstore.domain.model.user.enums.Gender;
 import java.time.LocalDate;
 
 @Data
-public class PersonDTO {
+@EqualsAndHashCode(callSuper = true)
+
+public class PersonDTO extends BaseEntityDTO {
     private Integer id;
     private String documentNumber;
     private DocumentType documentType;

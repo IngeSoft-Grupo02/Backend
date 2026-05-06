@@ -1,4 +1,4 @@
-package pe.edu.pucp.kingstore.dto.user;
+package pe.edu.pucp.kingstore.domain.dto.user;
 
 import lombok.Data;
 import lombok.EqualsAndHashCode;

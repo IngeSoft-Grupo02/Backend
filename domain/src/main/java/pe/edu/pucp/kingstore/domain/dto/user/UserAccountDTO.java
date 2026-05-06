@@ -1,8 +1,8 @@
-package pe.edu.pucp.kingstore.dto.user;
+package pe.edu.pucp.kingstore.domain.dto.user;
 
 import lombok.Data;
 import lombok.EqualsAndHashCode;
-import pe.edu.pucp.kingstore.dto.BaseEntityDTO;
+import pe.edu.pucp.kingstore.domain.dto.BaseEntityDTO;
 
 @Data
 @EqualsAndHashCode(callSuper = true)
