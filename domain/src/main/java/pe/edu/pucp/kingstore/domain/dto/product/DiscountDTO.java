@@ -7,8 +7,10 @@ import pe.edu.pucp.kingstore.domain.model.product.enums.VolumeType;
 
 @Data
 @EqualsAndHashCode(callSuper = true)
-public class DIscountDTO extends BaseEntityDTO {
+public class DiscountDTO extends BaseEntityDTO {
     private ProductDTO product;
-    private VolumeType volumeType;
-
+    private VolumeType volumneType;
+    private int minQuantity;
+    private int maxQuantity;
+    private double discountPercentage;
 }
