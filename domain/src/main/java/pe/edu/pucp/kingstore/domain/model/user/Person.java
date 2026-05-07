@@ -28,7 +28,7 @@ public class Person extends BaseEntity {
     @Column(nullable = false, length = 100)
     private String paternalSurname;
 
-    @Column(length = 100)
+    @Column(nullable = false, length = 100)
     private String maternalSurname;
 
     @Column(nullable = false)

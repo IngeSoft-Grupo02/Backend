@@ -39,12 +39,12 @@ public class Product extends BaseEntity {
     //private ProductStatus status;  // check this attribute
 
     @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
-    @JoinColumn(name = "product_id")
+    @JoinColumn(name = "product_id", nullable = false)
     private List<Attribute> attributes;
 
 
     @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
-    @JoinColumn(name = "product_id")
+    @JoinColumn(name = "product_id", nullable = false)
     private List<ProductVariant> variants;
 
     @Column(length = 400)

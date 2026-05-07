@@ -4,6 +4,7 @@
 
 # Archivos de log
 *.log
+kingstore.log.*.gz
 
 # Archivos de BlueJ
 *.ctxt
