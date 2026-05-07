@@ -20,7 +20,7 @@ public class Quotation extends BaseEntity {
     private ShoppingCart shoppingCart;
 
     @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
-    @JoinColumn(name = "quotation_id")
+    @JoinColumn(name = "quotation_id", nullable = false)
     private List<QuotationItem> items;
 
     @Column(nullable = false)
