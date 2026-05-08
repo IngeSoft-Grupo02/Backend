@@ -2,17 +2,22 @@ package pe.edu.pucp.kingstore.config;
 
 import com.ulisesbocchio.jasyptspringboot.annotation.EnableEncryptableProperties;
 import org.jasypt.encryption.pbe.PooledPBEStringEncryptor;
-import org.jasypt.encryption.pbe.StandardPBEStringEncryptor;
 import org.jasypt.encryption.pbe.config.SimpleStringPBEConfig;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+
 /**
  * Configuración de Jasypt para desencriptación automática de propiedades sensibles.
  * 
  * SEGURIDAD:
- * - La clave de encriptación se obtiene SOLO de la variable de entorno JASYPT_ENCRYPTOR_PASSWORD
+ * - La clave de encriptación se puede obtener de la variable de entorno JASYPT_ENCRYPTOR_PASSWORD
+ * - En pruebas locales también puede cargarse desde el archivo .env
  * - Esta clave NUNCA debe estar en el código fuente ni en Git
  * - Ver .env.example para estructura del archivo .env
  * 
@@ -27,7 +32,7 @@ import org.springframework.context.annotation.Configuration;
 @EnableEncryptableProperties
 public class JasyptConfig {
 
-    @Value("${jasypt.encryptor.password:#{null}}")
+    @Value("${jasypt.encryptor.password:}")
     private String encryptorPassword;
 
     /**
@@ -42,10 +47,8 @@ public class JasyptConfig {
         PooledPBEStringEncryptor encryptor = new PooledPBEStringEncryptor();
         SimpleStringPBEConfig config = new SimpleStringPBEConfig();
         
-        // Obtener la clave SOLO de la variable de entorno (la forma más segura)
-        String password = System.getenv("JASYPT_ENCRYPTOR_PASSWORD");
-        
-        if (password == null || password.isEmpty()) {
+        String password = resolveEncryptorPassword();
+        if (password == null || password.isBlank()) {
             throw new IllegalArgumentException(
                     "ERROR: Variable de entorno JASYPT_ENCRYPTOR_PASSWORD no definida.\n" +
                     "Soluciones:\n" +
@@ -60,9 +63,66 @@ public class JasyptConfig {
         config.setKeyObtentionIterations("1000");
         config.setPoolSize("1");
         config.setProviderName("SunJCE");
-        config.setStringOutputType("hex");
+        config.setStringOutputType("base64");
         
         encryptor.setConfig(config);
         return encryptor;
+    }
+
+    private String resolveEncryptorPassword() {
+        if (encryptorPassword != null && !encryptorPassword.isBlank()) {
+            return encryptorPassword;
+        }
+
+        String envPassword = System.getenv("JASYPT_ENCRYPTOR_PASSWORD");
+        if (envPassword != null && !envPassword.isBlank()) {
+            return envPassword;
+        }
+
+        String sysPassword = System.getProperty("JASYPT_ENCRYPTOR_PASSWORD");
+        if (sysPassword != null && !sysPassword.isBlank()) {
+            return sysPassword;
+        }
+
+        return readPasswordFromDotEnv();
+    }
+
+    private String readPasswordFromDotEnv() {
+        Path envPath = findDotEnvPath();
+        if (envPath == null || !Files.exists(envPath)) {
+            return null;
+        }
+
+        try {
+            List<String> lines = Files.readAllLines(envPath);
+            for (String line : lines) {
+                String clean = line.trim();
+                if (clean.startsWith("#") || clean.isEmpty()) {
+                    continue;
+                }
+                String[] parts = clean.split("=", 2);
+                if (parts.length == 2 && "JASYPT_ENCRYPTOR_PASSWORD".equals(parts[0].trim())) {
+                    return parts[1].trim();
+                }
+            }
+        } catch (IOException ignored) {
+            // Ignorar: si no se puede leer el archivo, seguimos intentando otras fuentes.
+        }
+        return null;
+    }
+
+    private Path findDotEnvPath() {
+        Path current = Path.of(System.getProperty("user.dir"));
+        for (int i = 0; i < 5; i++) {
+            Path candidate = current.resolve(".env");
+            if (Files.exists(candidate)) {
+                return candidate;
+            }
+            current = current.getParent();
+            if (current == null) {
+                break;
+            }
+        }
+        return null;
     }
 }
