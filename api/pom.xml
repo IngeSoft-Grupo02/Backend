@@ -14,7 +14,7 @@
 
     <artifactId>api</artifactId>
 
-    <dependencie>
+    <dependencies>
         <dependency>
             <groupId>pe.edu.pucp.kingstore</groupId>
             <artifactId>domain</artifactId>
