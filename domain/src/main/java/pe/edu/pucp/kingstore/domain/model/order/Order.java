@@ -21,7 +21,7 @@ public class Order extends BaseEntity {
     private Quotation quotation;
 
     @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
-    @JoinColumn(name = "order_id")
+    @JoinColumn(name = "order_id", nullable = false)
     private List<OrderItem> items;
 
     @OneToOne(cascade = CascadeType.ALL)
