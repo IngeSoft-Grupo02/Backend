@@ -11,7 +11,7 @@ import java.time.LocalDate;
 @EqualsAndHashCode(callSuper = true)
 
 public class PersonDTO extends BaseEntityDTO {
-    private Integer id;
+    //se elimino ID (repetido, base entity ya lo maneja)
     private String documentNumber;
     private DocumentType documentType;
     private String firstName;

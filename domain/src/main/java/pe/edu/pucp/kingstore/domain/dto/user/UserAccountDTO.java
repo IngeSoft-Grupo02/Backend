@@ -8,5 +8,6 @@ import pe.edu.pucp.kingstore.domain.dto.BaseEntityDTO;
 @EqualsAndHashCode(callSuper = true)
 public class UserAccountDTO extends BaseEntityDTO {
     private String email;
-    private String password;
+    //No enviamos el password
+
 }

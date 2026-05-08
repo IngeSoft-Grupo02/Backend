@@ -11,7 +11,7 @@ import java.time.LocalDate;
 @Data
 @EqualsAndHashCode(callSuper = true)
 public class PaymentReceiptDTO extends BaseEntityDTO {
-    private OrderDTO order;
+    private Integer orderId;
     private LocalDate issueDate;
     private String ruc;
     private Double totalWithoutTax;

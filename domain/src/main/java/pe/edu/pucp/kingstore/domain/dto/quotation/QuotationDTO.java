@@ -12,7 +12,7 @@ import java.util.List;
 @Data
 @EqualsAndHashCode(callSuper = true)
 public class QuotationDTO extends BaseEntityDTO {
-    private ShoppingCartDTO shoppingCart;
+    private Integer shoppingCartId;
     private List<QuotationItemDTO> items;
     private double subTotal;
     private double discount;
@@ -20,6 +20,6 @@ public class QuotationDTO extends BaseEntityDTO {
     private QuotationStatus status;
     private LocalDateTime requestedAt;
     private LocalDateTime responseAt;
-    private String Description;
+    private String description; //sintaxis corregida a camelCase
     private String observation;
 }

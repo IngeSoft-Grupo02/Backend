@@ -12,11 +12,11 @@ import java.util.List;
 @Data
 @EqualsAndHashCode(callSuper = true)
 public class OrderDTO extends BaseEntityDTO {
-    private QuotationDTO quotation;
+    private Integer quotationId;
     private List<OrderItemDTO> items;
     private ShippingDetailDTO shippingDetail;
     private LocalDateTime createdAt;
-    private LocalDateTime partialTotal;
+    private Double partialTotal; // se cambio el tipo de data a double
     private Double totalDiscount;
     private OrderStatus status;
 }

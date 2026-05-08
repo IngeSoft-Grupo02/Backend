@@ -14,6 +14,6 @@ public class CustomDesignDTO extends BaseEntityDTO {
     private String observations;
     private LocalDateTime sentAt;
     private LocalDateTime reviewedAt;
-    private ProductDTO product;
+    private Integer productId;
 
 }

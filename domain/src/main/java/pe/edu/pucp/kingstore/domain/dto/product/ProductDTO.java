@@ -11,7 +11,7 @@ import java.util.List;
 @Data
 @EqualsAndHashCode(callSuper = true)
 public class ProductDTO extends BaseEntityDTO {
-    private StoreDTO store;
+    private String storeSlug; // identificador
     private String name;
     private List<String> imageUrls;
     private double costPrice;

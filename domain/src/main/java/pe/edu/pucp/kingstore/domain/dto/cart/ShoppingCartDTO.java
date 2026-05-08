@@ -14,5 +14,5 @@ public class ShoppingCartDTO extends BaseEntityDTO {
     private double subtotal;
     private double discount;
     private double totalAmount;
-    private CustomerDTO customer;
+    private Integer customerId; // paso solo ID para identificar luego Customer
 }
