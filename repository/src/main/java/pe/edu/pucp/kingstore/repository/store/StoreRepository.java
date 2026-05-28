@@ -1,0 +1,27 @@
+package pe.edu.pucp.kingstore.repository.store;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.query.Procedure;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+import pe.edu.pucp.kingstore.domain.model.store.Store;
+import pe.edu.pucp.kingstore.domain.model.store.enums.StoreStatus;
+
+import java.util.List;
+import java.util.Optional;
+
+
+@Repository
+public interface StoreRepository
+        extends JpaRepository<Store, Integer> {
+    Optional<Store> findBySlug(String slug);
+    List<Store> findByActive(Boolean active);
+    List<Store> findByStoreStatus(StoreStatus status);
+   // @Procedure(name = "find_active_slug_by_merchant")
+    //Optional<String> findActiveSlugByMerchant(@Param("p_user_account_id")Integer userAccountId);
+   Optional<Store> findByMerchant_UserAccount_IdAndStoreStatus(
+           Integer userAccountId,
+           StoreStatus storeStatus
+   );
+
+}

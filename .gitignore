@@ -4,6 +4,7 @@
 
 # Archivos de log
 *.log
+kingstore.log.*.gz
 
 # Archivos de BlueJ
 *.ctxt
@@ -66,7 +67,8 @@ application-local.properties
 application-local.yml
 application-dev.properties
 .env
-.env.*
+.env.local
+.env.*.local
 
 
 # === Sistema Operativo ===

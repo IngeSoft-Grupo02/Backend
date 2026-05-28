@@ -1,10 +1,9 @@
 package pe.edu.pucp.kingstore.domain.model.order.enums;
 
 public enum OrderStatus {
-    REGISTERED,
-    PAID,
+    PAYMENT_CONFIRMED,
     IN_PREPARATION,
-    SHIPPED,
+    IN_TRANSIT,
     DELIVERED,
     CANCELLED
 }

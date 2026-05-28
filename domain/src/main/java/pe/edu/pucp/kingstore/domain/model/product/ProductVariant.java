@@ -3,7 +3,6 @@ package pe.edu.pucp.kingstore.domain.model.product;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
-import org.hibernate.annotations.TypeBinderType;
 import pe.edu.pucp.kingstore.domain.model.BaseEntity;
 import pe.edu.pucp.kingstore.domain.model.product.enums.Color;
 import pe.edu.pucp.kingstore.domain.model.product.enums.Size;
@@ -13,9 +12,9 @@ import pe.edu.pucp.kingstore.domain.model.product.enums.Size;
 @Entity
 @Table(name = "product_variant")
 public class ProductVariant extends BaseEntity {
-    @Enumerated(EnumType.STRING)
+
     @Column(nullable = false)
-    private Size size;
+    private String size;
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Color color;

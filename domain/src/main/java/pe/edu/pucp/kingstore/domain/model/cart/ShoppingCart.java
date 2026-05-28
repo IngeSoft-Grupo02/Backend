@@ -14,7 +14,7 @@ import java.util.List;
 
 public class ShoppingCart extends BaseEntity {
     @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
-    @JoinColumn(name = "shopping_cart_id")
+    @JoinColumn(name = "shopping_cart_id", nullable = false)
     private List<CartItem> items;
 
     @Column(nullable = false)

@@ -7,7 +7,8 @@ import pe.edu.pucp.kingstore.domain.model.BaseEntity;
 import pe.edu.pucp.kingstore.domain.model.store.enums.ColorPalette;
 import pe.edu.pucp.kingstore.domain.model.store.enums.CustomerGender;
 import pe.edu.pucp.kingstore.domain.model.store.enums.StoreCategory;
-
+import pe.edu.pucp.kingstore.domain.model.store.enums.StoreStatus;
+import pe.edu.pucp.kingstore.domain.model.user.Merchant;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -59,8 +60,17 @@ public class Store extends BaseEntity {
     @Column(nullable = false)
     private ColorPalette colorPalette;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private StoreStatus storeStatus;
+
+    @ManyToOne
+    @JoinColumn(name = "merchant_id")
+    private Merchant merchant;  // un comerciante por tienda
+
     @PrePersist
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();
     }
+
 }

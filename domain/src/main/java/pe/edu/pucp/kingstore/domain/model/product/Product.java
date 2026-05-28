@@ -5,10 +5,8 @@ import lombok.Getter;
 import lombok.Setter;
 import pe.edu.pucp.kingstore.domain.model.BaseEntity;
 import pe.edu.pucp.kingstore.domain.model.product.enums.Material;
-import pe.edu.pucp.kingstore.domain.model.product.enums.ProductStatus;
 import pe.edu.pucp.kingstore.domain.model.store.Store;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 
@@ -41,12 +39,12 @@ public class Product extends BaseEntity {
     //private ProductStatus status;  // check this attribute
 
     @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
-    @JoinColumn(name = "product_id")
+    @JoinColumn(name = "product_id", nullable = false)
     private List<Attribute> attributes;
 
 
     @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
-    @JoinColumn(name = "product_id")
+    @JoinColumn(name = "product_id", nullable = false)
     private List<ProductVariant> variants;
 
     @Column(length = 400)

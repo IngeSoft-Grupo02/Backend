@@ -2,7 +2,7 @@ package pe.edu.pucp.kingstore.domain.model.product;
 
 
 import jakarta.persistence.*;
-        import lombok.Getter;
+import lombok.Getter;
 import lombok.Setter;
 import pe.edu.pucp.kingstore.domain.model.BaseEntity;
 

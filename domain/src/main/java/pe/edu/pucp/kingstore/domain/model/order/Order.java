@@ -1,12 +1,10 @@
 package pe.edu.pucp.kingstore.domain.model.order;
 
 import jakarta.persistence.*;
-        import lombok.Getter;
+import lombok.Getter;
 import lombok.Setter;
 import pe.edu.pucp.kingstore.domain.model.BaseEntity;
 import pe.edu.pucp.kingstore.domain.model.order.enums.OrderStatus;
-import pe.edu.pucp.kingstore.domain.model.quotation.QuotationItem;
-import pe.edu.pucp.kingstore.domain.model.quotation.enums.QuotationStatus;
 import pe.edu.pucp.kingstore.domain.model.quotation.Quotation;
 
 import java.time.LocalDateTime;
@@ -23,7 +21,7 @@ public class Order extends BaseEntity {
     private Quotation quotation;
 
     @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
-    @JoinColumn(name = "order_id")
+    @JoinColumn(name = "order_id", nullable = false)
     private List<OrderItem> items;
 
     @OneToOne(cascade = CascadeType.ALL)
