@@ -294,7 +294,7 @@ public class QuotationTestDataUtil {
     //ProductVariant
     public static ProductVariant createTestProductVariantA() {
         ProductVariant variant = new ProductVariant();
-        variant.setSize(Size.M);
+        variant.setSize("M");
         variant.setColor(Color.RED);
         variant.setStock(10);
         return variant;
@@ -302,7 +302,7 @@ public class QuotationTestDataUtil {
 
     public static ProductVariant createTestProductVariantB() {
         ProductVariant variant = new ProductVariant();
-        variant.setSize(Size.L);
+        variant.setSize("L");
         variant.setColor(Color.BLUE);
         variant.setStock(5);
         return variant;
@@ -310,7 +310,7 @@ public class QuotationTestDataUtil {
 
     public static ProductVariant createTestProductVariantC() {
         ProductVariant variant = new ProductVariant();
-        variant.setSize(Size.XL);
+        variant.setSize("XL");
         variant.setColor(Color.GREEN);
         variant.setStock(40);
         return variant;

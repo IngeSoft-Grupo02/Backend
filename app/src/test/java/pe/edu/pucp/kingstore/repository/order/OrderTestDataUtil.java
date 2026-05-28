@@ -33,7 +33,7 @@ public class OrderTestDataUtil {
         Order order = new Order();
         order.setFinalTotal(145.20);
         order.setPartialTotal(70.3);
-        order.setStatus(OrderStatus.REGISTERED);
+        order.setStatus(OrderStatus.IN_PREPARATION);
         order.setTotalDiscount(0.2);
         order.setShippingDetail(createShippingDetail());
         order.setQuotation(quotation);
@@ -55,7 +55,7 @@ public class OrderTestDataUtil {
         Order order = new Order();
         order.setFinalTotal(45.20);
         order.setPartialTotal(15.3);
-        order.setStatus(OrderStatus.REGISTERED);
+        order.setStatus(OrderStatus.IN_PREPARATION);
         order.setTotalDiscount(0.1);
         order.setShippingDetail(createShippingDetail());
         order.setQuotation(quotation);
@@ -402,7 +402,7 @@ public class OrderTestDataUtil {
     //ProductVariant
     public static ProductVariant createTestProductVariantA() {
         ProductVariant variant = new ProductVariant();
-        variant.setSize(Size.M);
+        variant.setSize("M");
         variant.setColor(Color.RED);
         variant.setStock(10);
         return variant;
@@ -410,7 +410,7 @@ public class OrderTestDataUtil {
 
     public static ProductVariant createTestProductVariantB() {
         ProductVariant variant = new ProductVariant();
-        variant.setSize(Size.L);
+        variant.setSize("L");
         variant.setColor(Color.BLUE);
         variant.setStock(5);
         return variant;
@@ -418,7 +418,7 @@ public class OrderTestDataUtil {
 
     public static ProductVariant createTestProductVariantC() {
         ProductVariant variant = new ProductVariant();
-        variant.setSize(Size.XL);
+        variant.setSize("XL");
         variant.setColor(Color.GREEN);
         variant.setStock(40);
         return variant;

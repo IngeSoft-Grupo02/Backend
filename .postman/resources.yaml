@@ -1,0 +1,8 @@
+# Use this workspace to collaborate
+workspace:
+  id: a5f98854-dbbb-4157-883e-eb1ac9ce2ff6
+
+localResources:
+  docs:
+    - ../readme.md
+    - ../ENCRYPTION_GUIDE.md
