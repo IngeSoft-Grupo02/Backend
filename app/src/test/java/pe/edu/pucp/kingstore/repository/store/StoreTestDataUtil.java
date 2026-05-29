@@ -4,6 +4,7 @@ import pe.edu.pucp.kingstore.domain.model.store.Store;
 import pe.edu.pucp.kingstore.domain.model.store.enums.ColorPalette;
 import pe.edu.pucp.kingstore.domain.model.store.enums.CustomerGender;
 import pe.edu.pucp.kingstore.domain.model.store.enums.StoreCategory;
+import pe.edu.pucp.kingstore.domain.model.store.enums.StoreStatus;
 
 import java.util.ArrayList;
 
@@ -29,6 +30,7 @@ public class StoreTestDataUtil {
         store.getGenders().add(CustomerGender.MEN);
         store.getGenders().add(CustomerGender.WOMEN);
 
+        store.setStoreStatus(StoreStatus.ACTIVE);
         return store;
     }
 
@@ -53,6 +55,7 @@ public class StoreTestDataUtil {
         store.getGenders().add(CustomerGender.WOMEN);
         store.getGenders().add(CustomerGender.KIDS);
 
+        store.setStoreStatus(StoreStatus.ACTIVE);
         return store;
     }
 
@@ -76,6 +79,7 @@ public class StoreTestDataUtil {
         store.getGenders().add(CustomerGender.MEN);
         store.getGenders().add(CustomerGender.KIDS);
 
+        store.setStoreStatus(StoreStatus.ACTIVE);
         return store;
     }
 

@@ -9,4 +9,6 @@ public class LoginResponseDTO {
     private Integer id;
     private String email;
     private Role role;
+    private String storeSlug;
+    private String token;
 }

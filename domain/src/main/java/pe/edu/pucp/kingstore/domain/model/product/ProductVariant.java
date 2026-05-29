@@ -12,9 +12,9 @@ import pe.edu.pucp.kingstore.domain.model.product.enums.Size;
 @Entity
 @Table(name = "product_variant")
 public class ProductVariant extends BaseEntity {
-    @Enumerated(EnumType.STRING)
+
     @Column(nullable = false)
-    private Size size;
+    private String size;
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Color color;

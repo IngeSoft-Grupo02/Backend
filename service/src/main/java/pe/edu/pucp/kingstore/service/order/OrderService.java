@@ -52,7 +52,7 @@ public class OrderService extends AbstractCrudService<Order> {
             throw new BusinessRuleException("Order must belong to a quotation");
         }
         if (order.getStatus() == null) {
-            order.setStatus(OrderStatus.REGISTERED);
+            order.setStatus(OrderStatus.PAYMENT_CONFIRMED);
         }
         recalculateTotals(order);
     }

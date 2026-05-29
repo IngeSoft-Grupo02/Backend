@@ -109,7 +109,7 @@ public class OrderRepositoryTests {
         Order order = underTest.save(OrderTestDataUtil.createOrderA(quotation, product));
 
         order.getItems().removeFirst();
-        order.setStatus(OrderStatus.PAID);
+        order.setStatus(OrderStatus.PAYMENT_CONFIRMED);
 
         underTest.save(order);
         Optional<Order> result = underTest.findById(order.getId());
@@ -188,7 +188,7 @@ public class OrderRepositoryTests {
         Order orderB = underTest.save(OrderTestDataUtil.createOrderB(quotationB, product));
         Order orderC = underTest.save(OrderTestDataUtil.createOrderC(quotationC, product));
 
-        List<Order> result = underTest.findByStatus(OrderStatus.REGISTERED);
+        List<Order> result = underTest.findByStatus(OrderStatus.IN_PREPARATION);
 
         assertThat(result)
                 .hasSize(2)

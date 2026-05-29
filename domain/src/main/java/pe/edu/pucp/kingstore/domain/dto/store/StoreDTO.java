@@ -13,6 +13,7 @@ import java.util.List;
 @Data
 @EqualsAndHashCode(callSuper = true)
 public class StoreDTO extends BaseEntityDTO {
+    private Integer merchantId;
     private String storeName;
     private String slug;
     private String description;
