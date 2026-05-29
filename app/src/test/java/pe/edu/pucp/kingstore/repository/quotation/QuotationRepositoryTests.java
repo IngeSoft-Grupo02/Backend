@@ -41,8 +41,10 @@ public class QuotationRepositoryTests {
     @Test
     public void testThatQuotationCanBeCreatedAndRecalled(){
         UserAccount userAccount = userAccountRepository.save(QuotationTestDataUtil.createUserAccountA());
-        Customer customer = customerRepository.save(QuotationTestDataUtil.createCustomerA(userAccount));
         Store store = storeRepository.save(QuotationTestDataUtil.createTestStore());
+        Customer customer = QuotationTestDataUtil.createCustomerA(userAccount);
+        customer.setStore(store);
+        customer = customerRepository.save(customer);
         Product product = productRepository.save(QuotationTestDataUtil.createTestProduct(store));
         ShoppingCart shoppingCart = shoppingCartRepository.save(QuotationTestDataUtil.createShoppingCartA(customer,
                 product));
@@ -59,8 +61,10 @@ public class QuotationRepositoryTests {
     @Test
     public void testThatMultipleQuotationsCanBeCreatedAndRecalled(){
         UserAccount userAccount = userAccountRepository.save(QuotationTestDataUtil.createUserAccountA());
-        Customer customer = customerRepository.save(QuotationTestDataUtil.createCustomerA(userAccount));
         Store store = storeRepository.save(QuotationTestDataUtil.createTestStore());
+        Customer customer = QuotationTestDataUtil.createCustomerA(userAccount);
+        customer.setStore(store);
+        customer = customerRepository.save(customer);
         Product product = productRepository.save(QuotationTestDataUtil.createTestProduct(store));
 
         ShoppingCart shoppingCartA = shoppingCartRepository.save(QuotationTestDataUtil.createShoppingCartA(customer,
@@ -89,8 +93,10 @@ public class QuotationRepositoryTests {
     @Test
     public void testThatQuotationCanBeUpdated(){
         UserAccount userAccount = userAccountRepository.save(QuotationTestDataUtil.createUserAccountA());
-        Customer customer = customerRepository.save(QuotationTestDataUtil.createCustomerA(userAccount));
         Store store = storeRepository.save(QuotationTestDataUtil.createTestStore());
+        Customer customer = QuotationTestDataUtil.createCustomerA(userAccount);
+        customer.setStore(store);
+        customer = customerRepository.save(customer);
         Product product = productRepository.save(QuotationTestDataUtil.createTestProduct(store));
         ShoppingCart shoppingCart = shoppingCartRepository.save(QuotationTestDataUtil.createShoppingCartA(customer,
                 product));
@@ -111,8 +117,10 @@ public class QuotationRepositoryTests {
     @Test
     public void testThatQuotationCanBeDeleted(){
         UserAccount userAccount = userAccountRepository.save(QuotationTestDataUtil.createUserAccountA());
-        Customer customer = customerRepository.save(QuotationTestDataUtil.createCustomerA(userAccount));
         Store store = storeRepository.save(QuotationTestDataUtil.createTestStore());
+        Customer customer = QuotationTestDataUtil.createCustomerA(userAccount);
+        customer.setStore(store);
+        customer = customerRepository.save(customer);
         Product product = productRepository.save(QuotationTestDataUtil.createTestProduct(store));
         ShoppingCart shoppingCart = shoppingCartRepository.save(QuotationTestDataUtil.createShoppingCartA(customer,
                 product));
@@ -129,8 +137,10 @@ public class QuotationRepositoryTests {
     @Test
     public void testThatFindByShoppingCartIdWorks(){
         UserAccount userAccount = userAccountRepository.save(QuotationTestDataUtil.createUserAccountA());
-        Customer customer = customerRepository.save(QuotationTestDataUtil.createCustomerA(userAccount));
         Store store = storeRepository.save(QuotationTestDataUtil.createTestStore());
+        Customer customer = QuotationTestDataUtil.createCustomerA(userAccount);
+        customer.setStore(store);
+        customer = customerRepository.save(customer);
         Product product = productRepository.save(QuotationTestDataUtil.createTestProduct(store));
 
         ShoppingCart shoppingCartA = shoppingCartRepository.save(QuotationTestDataUtil.createShoppingCartA(customer,
@@ -153,8 +163,10 @@ public class QuotationRepositoryTests {
     @Test
     public void testThatFindByStatusWorks(){
         UserAccount userAccount = userAccountRepository.save(QuotationTestDataUtil.createUserAccountA());
-        Customer customer = customerRepository.save(QuotationTestDataUtil.createCustomerA(userAccount));
         Store store = storeRepository.save(QuotationTestDataUtil.createTestStore());
+        Customer customer = QuotationTestDataUtil.createCustomerA(userAccount);
+        customer.setStore(store);
+        customer = customerRepository.save(customer);
         Product product = productRepository.save(QuotationTestDataUtil.createTestProduct(store));
 
         ShoppingCart shoppingCartA = shoppingCartRepository.save(QuotationTestDataUtil.createShoppingCartA(customer,

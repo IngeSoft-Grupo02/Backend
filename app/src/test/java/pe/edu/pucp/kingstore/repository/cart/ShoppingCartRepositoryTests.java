@@ -37,8 +37,10 @@ public class ShoppingCartRepositoryTests {
     @Test
     public void testThatShoppingCartCanBeCreatedAndRecalled(){
         UserAccount userAccount = userAccountRepository.save(CartTestDataUtil.createUserAccountA());
-        Customer customer = customerRepository.save(CartTestDataUtil.createCustomerA(userAccount));
         Store store = storeRepository.save(CartTestDataUtil.createTestStore());
+        Customer customer = CartTestDataUtil.createCustomerA(userAccount);
+        customer.setStore(store);
+        customer = customerRepository.save(customer);
         Product product = productRepository.save(CartTestDataUtil.createTestProduct(store));
 
         ShoppingCart shoppingCart = underTest.save(CartTestDataUtil.createShoppingCartA(customer, product));
@@ -54,8 +56,10 @@ public class ShoppingCartRepositoryTests {
     @Test
     public void testThatMultipleShoppingCartsCanBeCreatedAndRecalled(){
         UserAccount userAccount = userAccountRepository.save(CartTestDataUtil.createUserAccountA());
-        Customer customer = customerRepository.save(CartTestDataUtil.createCustomerA(userAccount));
         Store store = storeRepository.save(CartTestDataUtil.createTestStore());
+        Customer customer = CartTestDataUtil.createCustomerA(userAccount);
+        customer.setStore(store);
+        customer = customerRepository.save(customer);
         Product product = productRepository.save(CartTestDataUtil.createTestProduct(store));
 
         ShoppingCart shoppingCartA = underTest.save(CartTestDataUtil.createShoppingCartA(customer, product));
@@ -77,8 +81,10 @@ public class ShoppingCartRepositoryTests {
     @Test
     public void testThatShoppingCartCanBeUpdated(){
         UserAccount userAccount = userAccountRepository.save(CartTestDataUtil.createUserAccountA());
-        Customer customer = customerRepository.save(CartTestDataUtil.createCustomerA(userAccount));
         Store store = storeRepository.save(CartTestDataUtil.createTestStore());
+        Customer customer = CartTestDataUtil.createCustomerA(userAccount);
+        customer.setStore(store);
+        customer = customerRepository.save(customer);
         Product product = productRepository.save(CartTestDataUtil.createTestProduct(store));
 
         ShoppingCart shoppingCart = underTest.save(CartTestDataUtil.createShoppingCartA(customer, product));
@@ -98,8 +104,10 @@ public class ShoppingCartRepositoryTests {
     @Test
     public void testThatShoppingCartCanBeDeleted(){
         UserAccount userAccount = userAccountRepository.save(CartTestDataUtil.createUserAccountA());
-        Customer customer = customerRepository.save(CartTestDataUtil.createCustomerA(userAccount));
         Store store = storeRepository.save(CartTestDataUtil.createTestStore());
+        Customer customer = CartTestDataUtil.createCustomerA(userAccount);
+        customer.setStore(store);
+        customer = customerRepository.save(customer);
         Product product = productRepository.save(CartTestDataUtil.createTestProduct(store));
 
         ShoppingCart shoppingCart = underTest.save(CartTestDataUtil.createShoppingCartA(customer, product));
@@ -117,11 +125,13 @@ public class ShoppingCartRepositoryTests {
     public void testThatFindByCustomerIdWorks() {
         UserAccount userAccountA = userAccountRepository.save(CartTestDataUtil.createUserAccountA());
         UserAccount userAccountB = userAccountRepository.save(CartTestDataUtil.createUserAccountB());
-
-        Customer customerA = customerRepository.save(CartTestDataUtil.createCustomerA(userAccountA));
-        Customer customerB = customerRepository.save(CartTestDataUtil.createCustomerB(userAccountB));
-
         Store store = storeRepository.save(CartTestDataUtil.createTestStore());
+        Customer customerA = CartTestDataUtil.createCustomerA(userAccountA);
+        customerA.setStore(store);
+        customerA = customerRepository.save(customerA);
+        Customer customerB = CartTestDataUtil.createCustomerB(userAccountB);
+        customerB.setStore(store);
+        customerB = customerRepository.save(customerB);
         Product product = productRepository.save(CartTestDataUtil.createTestProduct(store));
 
         ShoppingCart shoppingCartA = underTest.save(CartTestDataUtil.createShoppingCartA(customerA, product));

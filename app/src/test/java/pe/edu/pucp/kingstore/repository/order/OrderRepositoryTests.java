@@ -45,8 +45,10 @@ public class OrderRepositoryTests {
     @Test
     public void testThatOrderCanBeCreatedAndRecalled(){
         UserAccount userAccount = userAccountRepository.save(OrderTestDataUtil.createUserAccountA());
-        Customer customer = customerRepository.save(OrderTestDataUtil.createCustomerA(userAccount));
         Store store = storeRepository.save(OrderTestDataUtil.createTestStore());
+        Customer customer = OrderTestDataUtil.createCustomerA(userAccount);
+        customer.setStore(store);
+        customer = customerRepository.save(customer);
         Product product = productRepository.save(OrderTestDataUtil.createTestProduct(store));
         ShoppingCart shoppingCart = shoppingCartRepository.save(OrderTestDataUtil.createShoppingCartA(customer,
                 product));
@@ -65,8 +67,10 @@ public class OrderRepositoryTests {
     @Test
     public void testThatMultipleOrdersCanBeCreatedAndRecalled(){
         UserAccount userAccount = userAccountRepository.save(OrderTestDataUtil.createUserAccountA());
-        Customer customer = customerRepository.save(OrderTestDataUtil.createCustomerA(userAccount));
         Store store = storeRepository.save(OrderTestDataUtil.createTestStore());
+        Customer customer = OrderTestDataUtil.createCustomerA(userAccount);
+        customer.setStore(store);
+        customer = customerRepository.save(customer);
         Product product = productRepository.save(OrderTestDataUtil.createTestProduct(store));
 
         ShoppingCart shoppingCartA = shoppingCartRepository.save(OrderTestDataUtil.createShoppingCartA(customer,
@@ -99,8 +103,10 @@ public class OrderRepositoryTests {
     @Test
     public void testThatOrderCanBeUpdated(){
         UserAccount userAccount = userAccountRepository.save(OrderTestDataUtil.createUserAccountA());
-        Customer customer = customerRepository.save(OrderTestDataUtil.createCustomerA(userAccount));
         Store store = storeRepository.save(OrderTestDataUtil.createTestStore());
+        Customer customer = OrderTestDataUtil.createCustomerA(userAccount);
+        customer.setStore(store);
+        customer = customerRepository.save(customer);
         Product product = productRepository.save(OrderTestDataUtil.createTestProduct(store));
         ShoppingCart shoppingCart = shoppingCartRepository.save(OrderTestDataUtil.createShoppingCartA(customer,
                 product));
@@ -122,8 +128,10 @@ public class OrderRepositoryTests {
     @Test
     public void testThatOrderCanBeDeleted(){
         UserAccount userAccount = userAccountRepository.save(OrderTestDataUtil.createUserAccountA());
-        Customer customer = customerRepository.save(OrderTestDataUtil.createCustomerA(userAccount));
         Store store = storeRepository.save(OrderTestDataUtil.createTestStore());
+        Customer customer = OrderTestDataUtil.createCustomerA(userAccount);
+        customer.setStore(store);
+        customer = customerRepository.save(customer);
         Product product = productRepository.save(OrderTestDataUtil.createTestProduct(store));
         ShoppingCart shoppingCart = shoppingCartRepository.save(OrderTestDataUtil.createShoppingCartA(customer,
                 product));
@@ -141,8 +149,10 @@ public class OrderRepositoryTests {
     @Test
     public void testThatFindByQuotationIdWorks(){
         UserAccount userAccount = userAccountRepository.save(OrderTestDataUtil.createUserAccountA());
-        Customer customer = customerRepository.save(OrderTestDataUtil.createCustomerA(userAccount));
         Store store = storeRepository.save(OrderTestDataUtil.createTestStore());
+        Customer customer = OrderTestDataUtil.createCustomerA(userAccount);
+        customer.setStore(store);
+        customer = customerRepository.save(customer);
         Product product = productRepository.save(OrderTestDataUtil.createTestProduct(store));
 
         ShoppingCart shoppingCartA = shoppingCartRepository.save(OrderTestDataUtil.createShoppingCartA(customer,
@@ -169,8 +179,10 @@ public class OrderRepositoryTests {
     @Test
     public void testThatFindByStatusWorks(){
         UserAccount userAccount = userAccountRepository.save(OrderTestDataUtil.createUserAccountA());
-        Customer customer = customerRepository.save(OrderTestDataUtil.createCustomerA(userAccount));
         Store store = storeRepository.save(OrderTestDataUtil.createTestStore());
+        Customer customer = OrderTestDataUtil.createCustomerA(userAccount);
+        customer.setStore(store);
+        customer = customerRepository.save(customer);
         Product product = productRepository.save(OrderTestDataUtil.createTestProduct(store));
 
         ShoppingCart shoppingCartA = shoppingCartRepository.save(OrderTestDataUtil.createShoppingCartA(customer,

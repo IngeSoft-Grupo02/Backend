@@ -18,7 +18,11 @@ import pe.edu.pucp.kingstore.domain.model.quotation.Quotation;
 import pe.edu.pucp.kingstore.domain.model.quotation.QuotationItem;
 import pe.edu.pucp.kingstore.domain.model.quotation.enums.QuotationStatus;
 import pe.edu.pucp.kingstore.domain.model.store.Store;
-import pe.edu.pucp.kingstore.domain.model.store.enums.ColorPalette;
+import pe.edu.pucp.kingstore.domain.model.store.StoreCategory;
+import pe.edu.pucp.kingstore.domain.model.store.enums.PrimaryColor;
+import pe.edu.pucp.kingstore.domain.model.store.enums.SecondaryColor;
+import pe.edu.pucp.kingstore.domain.model.store.enums.StoreStatus;
+import pe.edu.pucp.kingstore.domain.model.store.enums.TertiaryColor;
 import pe.edu.pucp.kingstore.domain.model.user.Customer;
 import pe.edu.pucp.kingstore.domain.model.user.UserAccount;
 import pe.edu.pucp.kingstore.domain.model.user.enums.DocumentType;
@@ -434,8 +438,18 @@ public class PaymentTestDataUtil {
         Store store = new Store();
         store.setStoreName("Ripley");
         store.setSlug("ripley");
-        store.setColorPalette(ColorPalette.CORESTREET);
+        store.setCategory(category(1));
+        store.setPrimaryColor(PrimaryColor.ONYX_BLACK);
+        store.setSecondaryColor(SecondaryColor.OLIVE_DRAB);
+        store.setTertiaryColor(TertiaryColor.RICH_CAMEL);
+        store.setStoreStatus(StoreStatus.ACTIVE);
         return store;
+    }
+
+    private static StoreCategory category(Integer id) {
+        StoreCategory category = new StoreCategory();
+        category.setId(id);
+        return category;
     }
 
     //ProductVariant

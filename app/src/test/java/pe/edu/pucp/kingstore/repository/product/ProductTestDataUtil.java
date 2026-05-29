@@ -9,7 +9,11 @@ import pe.edu.pucp.kingstore.domain.model.product.enums.Material;
 import pe.edu.pucp.kingstore.domain.model.product.enums.Size;
 import pe.edu.pucp.kingstore.domain.model.product.enums.VolumeType;
 import pe.edu.pucp.kingstore.domain.model.store.Store;
-import pe.edu.pucp.kingstore.domain.model.store.enums.ColorPalette;
+import pe.edu.pucp.kingstore.domain.model.store.StoreCategory;
+import pe.edu.pucp.kingstore.domain.model.store.enums.PrimaryColor;
+import pe.edu.pucp.kingstore.domain.model.store.enums.SecondaryColor;
+import pe.edu.pucp.kingstore.domain.model.store.enums.StoreStatus;
+import pe.edu.pucp.kingstore.domain.model.store.enums.TertiaryColor;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -130,7 +134,11 @@ public class ProductTestDataUtil {
         Store store = new Store();
         store.setStoreName("Ripley");
         store.setSlug("ripley");
-        store.setColorPalette(ColorPalette.CORESTREET);
+        store.setCategory(category(1));
+        store.setPrimaryColor(PrimaryColor.ONYX_BLACK);
+        store.setSecondaryColor(SecondaryColor.OLIVE_DRAB);
+        store.setTertiaryColor(TertiaryColor.RICH_CAMEL);
+        store.setStoreStatus(StoreStatus.ACTIVE);
         return store;
     }
 
@@ -138,8 +146,18 @@ public class ProductTestDataUtil {
         Store store = new Store();
         store.setStoreName("Saga");
         store.setSlug("saga");
-        store.setColorPalette(ColorPalette.ATELIERMONO);
+        store.setCategory(category(2));
+        store.setPrimaryColor(PrimaryColor.DEEP_ZINC);
+        store.setSecondaryColor(SecondaryColor.SAGE);
+        store.setTertiaryColor(TertiaryColor.SILVER_MIST);
+        store.setStoreStatus(StoreStatus.ACTIVE);
         return store;
+    }
+
+    private static StoreCategory category(Integer id) {
+        StoreCategory category = new StoreCategory();
+        category.setId(id);
+        return category;
     }
     //Attribute
     public static Attribute createTestAttributeA() {
@@ -217,6 +235,5 @@ public class ProductTestDataUtil {
         return discount;
     }
 }
-
 
 

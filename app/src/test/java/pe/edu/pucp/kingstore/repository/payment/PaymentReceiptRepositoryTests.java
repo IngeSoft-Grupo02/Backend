@@ -49,8 +49,10 @@ public class PaymentReceiptRepositoryTests {
     @Test
     public void testThatPaymentReceiptCanBeCreatedAndRecalled(){
         UserAccount userAccount = userAccountRepository.save(PaymentTestDataUtil.createUserAccountA());
-        Customer customer = customerRepository.save(PaymentTestDataUtil.createCustomerA(userAccount));
         Store store = storeRepository.save(PaymentTestDataUtil.createTestStore());
+        Customer customer = PaymentTestDataUtil.createCustomerA(userAccount);
+        customer.setStore(store);
+        customer = customerRepository.save(customer);
         Product product = productRepository.save(PaymentTestDataUtil.createTestProduct(store));
         ShoppingCart shoppingCart = shoppingCartRepository.save(PaymentTestDataUtil.createShoppingCartA(customer,
                 product));
@@ -68,8 +70,10 @@ public class PaymentReceiptRepositoryTests {
     @Test
     public void testThatMultiplePaymentReceiptsCanBeCreatedAndRecalled(){
         UserAccount userAccount = userAccountRepository.save(PaymentTestDataUtil.createUserAccountA());
-        Customer customer = customerRepository.save(PaymentTestDataUtil.createCustomerA(userAccount));
         Store store = storeRepository.save(PaymentTestDataUtil.createTestStore());
+        Customer customer = PaymentTestDataUtil.createCustomerA(userAccount);
+        customer.setStore(store);
+        customer = customerRepository.save(customer);
         Product product = productRepository.save(PaymentTestDataUtil.createTestProduct(store));
 
         ShoppingCart shoppingCartA = shoppingCartRepository.save(PaymentTestDataUtil.createShoppingCartA(customer,
@@ -106,8 +110,10 @@ public class PaymentReceiptRepositoryTests {
     @Test
     public void testThatPaymentReceiptCanBeUpdated(){
         UserAccount userAccount = userAccountRepository.save(PaymentTestDataUtil.createUserAccountA());
-        Customer customer = customerRepository.save(PaymentTestDataUtil.createCustomerA(userAccount));
         Store store = storeRepository.save(PaymentTestDataUtil.createTestStore());
+        Customer customer = PaymentTestDataUtil.createCustomerA(userAccount);
+        customer.setStore(store);
+        customer = customerRepository.save(customer);
         Product product = productRepository.save(PaymentTestDataUtil.createTestProduct(store));
         ShoppingCart shoppingCart = shoppingCartRepository.save(PaymentTestDataUtil.createShoppingCartA(customer,
                 product));
@@ -129,8 +135,10 @@ public class PaymentReceiptRepositoryTests {
     @Test
     public void testThatPaymentReceiptCanBeDeleted(){
         UserAccount userAccount = userAccountRepository.save(PaymentTestDataUtil.createUserAccountA());
-        Customer customer = customerRepository.save(PaymentTestDataUtil.createCustomerA(userAccount));
         Store store = storeRepository.save(PaymentTestDataUtil.createTestStore());
+        Customer customer = PaymentTestDataUtil.createCustomerA(userAccount);
+        customer.setStore(store);
+        customer = customerRepository.save(customer);
         Product product = productRepository.save(PaymentTestDataUtil.createTestProduct(store));
         ShoppingCart shoppingCart = shoppingCartRepository.save(PaymentTestDataUtil.createShoppingCartA(customer,
                 product));
@@ -149,8 +157,10 @@ public class PaymentReceiptRepositoryTests {
     @Test
     public void testThatFindByOrderIdWorks(){
         UserAccount userAccount = userAccountRepository.save(PaymentTestDataUtil.createUserAccountA());
-        Customer customer = customerRepository.save(PaymentTestDataUtil.createCustomerA(userAccount));
         Store store = storeRepository.save(PaymentTestDataUtil.createTestStore());
+        Customer customer = PaymentTestDataUtil.createCustomerA(userAccount);
+        customer.setStore(store);
+        customer = customerRepository.save(customer);
         Product product = productRepository.save(PaymentTestDataUtil.createTestProduct(store));
 
         ShoppingCart shoppingCartA = shoppingCartRepository.save(PaymentTestDataUtil.createShoppingCartA(customer,

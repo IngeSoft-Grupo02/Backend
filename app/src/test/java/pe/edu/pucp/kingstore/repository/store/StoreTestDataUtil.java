@@ -1,11 +1,11 @@
 package pe.edu.pucp.kingstore.repository.store;
 
 import pe.edu.pucp.kingstore.domain.model.store.Store;
-import pe.edu.pucp.kingstore.domain.model.store.enums.ColorPalette;
-import pe.edu.pucp.kingstore.domain.model.store.enums.StoreCategory;
+import pe.edu.pucp.kingstore.domain.model.store.StoreCategory;
+import pe.edu.pucp.kingstore.domain.model.store.enums.PrimaryColor;
+import pe.edu.pucp.kingstore.domain.model.store.enums.SecondaryColor;
 import pe.edu.pucp.kingstore.domain.model.store.enums.StoreStatus;
-
-import java.util.ArrayList;
+import pe.edu.pucp.kingstore.domain.model.store.enums.TertiaryColor;
 
 public class StoreTestDataUtil {
     //Store
@@ -13,22 +13,12 @@ public class StoreTestDataUtil {
         Store store = new Store();
         store.setStoreName("Ripley");
         store.setSlug("ripley");
-        store.setColorPalette(ColorPalette.CORESTREET);
         store.setDescription("description A");
         store.setLogoUrl("logo A");
-        store.setPrimaryColor("blue");
-        store.setSecondaryColor("cyan");
-
-        //Store Category
-        store.setCategories(new ArrayList<>());
-        store.getCategories().add(StoreCategory.URBAN);
-        store.getCategories().add(StoreCategory.SPORTSWEAR);
-
-        //Store Gender
-        store.setGenders(new ArrayList<>());
-        store.getGenders().add(CustomerGender.MEN);
-        store.getGenders().add(CustomerGender.WOMEN);
-
+        store.setCategory(category(1));
+        store.setPrimaryColor(PrimaryColor.ONYX_BLACK);
+        store.setSecondaryColor(SecondaryColor.OLIVE_DRAB);
+        store.setTertiaryColor(TertiaryColor.RICH_CAMEL);
         store.setStoreStatus(StoreStatus.ACTIVE);
         return store;
     }
@@ -37,23 +27,13 @@ public class StoreTestDataUtil {
         Store store = new Store();
         store.setStoreName("Saga");
         store.setSlug("saga");
-        store.setColorPalette(ColorPalette.ATELIERMONO);
         store.setDescription("description B");
         store.setLogoUrl("logo B");
-        store.setPrimaryColor("red");
-        store.setSecondaryColor("orange");
+        store.setCategory(category(2));
+        store.setPrimaryColor(PrimaryColor.DEEP_ZINC);
+        store.setSecondaryColor(SecondaryColor.SAGE);
+        store.setTertiaryColor(TertiaryColor.SILVER_MIST);
         store.setActive(false);
-
-        //Store Category
-        store.setCategories(new ArrayList<>());
-        store.getCategories().add(StoreCategory.SPORTSWEAR);
-        store.getCategories().add(StoreCategory.CASUAL);
-
-        //Store Gender
-        store.setGenders(new ArrayList<>());
-        store.getGenders().add(CustomerGender.WOMEN);
-        store.getGenders().add(CustomerGender.KIDS);
-
         store.setStoreStatus(StoreStatus.ACTIVE);
         return store;
     }
@@ -62,24 +42,20 @@ public class StoreTestDataUtil {
         Store store = new Store();
         store.setStoreName("Bata");
         store.setSlug("bata");
-        store.setColorPalette(ColorPalette.LUXECAPSULE);
         store.setDescription("description c");
         store.setLogoUrl("logo C");
-        store.setPrimaryColor("green");
-        store.setSecondaryColor("yellow");
-
-        //Store Category
-        store.setCategories(new ArrayList<>());
-        store.getCategories().add(StoreCategory.URBAN);
-        store.getCategories().add(StoreCategory.CASUAL);
-
-        //Store Gender
-        store.setGenders(new ArrayList<>());
-        store.getGenders().add(CustomerGender.MEN);
-        store.getGenders().add(CustomerGender.KIDS);
-
+        store.setCategory(category(3));
+        store.setPrimaryColor(PrimaryColor.MIDNIGHT);
+        store.setSecondaryColor(SecondaryColor.SLATE);
+        store.setTertiaryColor(TertiaryColor.STONE);
         store.setStoreStatus(StoreStatus.ACTIVE);
         return store;
+    }
+
+    private static StoreCategory category(Integer id) {
+        StoreCategory category = new StoreCategory();
+        category.setId(id);
+        return category;
     }
 
 }

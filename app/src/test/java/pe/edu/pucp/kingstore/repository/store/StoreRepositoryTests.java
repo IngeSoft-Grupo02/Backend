@@ -25,10 +25,8 @@ public class StoreRepositoryTests {
         assertThat(result).isPresent();
         assertThat(result.get().getId()).isEqualTo(store.getId());
         assertThat(result.get().getSlug()).isEqualTo(store.getSlug());
-        assertThat(result.get().getCategories())
-                .hasSize(store.getCategories().size());
-        assertThat(result.get().getGenders())
-                .hasSize(store.getGenders().size());
+        assertThat(result.get().getCategory().getId())
+                .isEqualTo(store.getCategory().getId());
     }
 
     @Test
@@ -55,8 +53,6 @@ public class StoreRepositoryTests {
     public void testThatStoreCanBeUpdated(){
         Store store = underTest.save(StoreTestDataUtil.createTestStoreA());
 
-        store.getCategories().removeFirst();
-        store.getGenders().removeFirst();
         store.setDescription("updated description");
 
         Optional<Store> result = underTest.findById(store.getId());
@@ -66,11 +62,8 @@ public class StoreRepositoryTests {
         assertThat(result.get().getDescription())
                 .isEqualTo("updated description");
 
-        assertThat(result.get().getCategories())
-                .hasSize(store.getCategories().size());
-
-        assertThat(result.get().getGenders())
-                .hasSize(store.getGenders().size());
+        assertThat(result.get().getCategory().getId())
+                .isEqualTo(store.getCategory().getId());
     }
 
     @Test
