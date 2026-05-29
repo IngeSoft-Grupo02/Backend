@@ -8,6 +8,7 @@ import pe.edu.pucp.kingstore.domain.model.store.enums.StoreStatus;
 import pe.edu.pucp.kingstore.repository.store.StoreRepository;
 import pe.edu.pucp.kingstore.service.common.AbstractCrudService;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
+import pe.edu.pucp.kingstore.repository.user.MerchantRepository;
 
 import java.util.List;
 import java.util.Map;
@@ -17,11 +18,13 @@ import java.util.Optional;
 public class StoreService extends AbstractCrudService<Store> {
 
     private final StoreRepository storeRepository;
+	private final MerchantRepository merchantRepository;
 
-    public StoreService(StoreRepository storeRepository) {
-        super(storeRepository, "Store");
-        this.storeRepository = storeRepository;
-    }
+	public StoreService(StoreRepository storeRepository, MerchantRepository merchantRepository) {
+       super(storeRepository, "Store");
+       this.storeRepository    = storeRepository;
+       this.merchantRepository = merchantRepository;
+   }
 
     @Transactional(readOnly = true)
     public Optional<Store> findBySlug(String slug) {
@@ -69,6 +72,13 @@ public class StoreService extends AbstractCrudService<Store> {
         store.setGenders(dto.getGenders());
         store.setColorPalette(dto.getColorPalette());
         store.setStoreStatus(StoreStatus.ACTIVE);
+
+        // Vincular comerciante si viene el ID
+        if (dto.getMerchantId() != null) {
+            merchantRepository.findById(dto.getMerchantId())
+                    .ifPresent(store::setMerchant);
+        }
+
         return create(store);
     }
 
