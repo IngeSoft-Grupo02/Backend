@@ -2,22 +2,16 @@ package pe.edu.pucp.kingstore.domain.dto.bulk;
 
 import lombok.Data;
 
-/**
- * Representa una fila del CSV de carga masiva de tiendas.
- *
- * Columnas esperadas:
- *   storeName, slug, colorPalette (CORESTREET|ATELIERMONO|UTILITYDROP|LUXECAPSULE),
- *   description (opcional),
- *   merchantEmail (opcional – vincula la tienda al comerciante con ese email si ya existe en BD)
- *   logoFileName (opcional – nombre del archivo dentro del ZIP de logos, ej: mi_tienda.png)
- */
 @Data
 public class BulkStoreRowDTO {
-    private int rowNumber;
+    private int    rowNumber;
     private String storeName;
     private String slug;
-    private String colorPalette;
     private String description;
-    private String merchantEmail;   // opcional
-    private String logoFileName;    // opcional – se resuelve contra el ZIP
+    private String categoryId;      // ID numérico de StoreCategory
+    private String primaryColor;    // Enum: ONYX_BLACK, DEEP_ZINC, MIDNIGHT, CHARCOAL, ESPRESSO
+    private String secondaryColor;  // Enum: OLIVE_DRAB, SAGE, SLATE, TERRA, DUSTY_RED
+    private String tertiaryColor;   // Enum: RICH_CAMEL, RAW_GOLD, SILVER_MIST, COPPER, STONE
+    private String merchantEmail;   // Email del comerciante (obligatorio)
+    private String logoFileName;    // Nombre del archivo en el ZIP
 }

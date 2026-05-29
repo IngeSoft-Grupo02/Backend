@@ -2,7 +2,6 @@ package pe.edu.pucp.kingstore.repository.store;
 
 import pe.edu.pucp.kingstore.domain.model.store.Store;
 import pe.edu.pucp.kingstore.domain.model.store.enums.ColorPalette;
-import pe.edu.pucp.kingstore.domain.model.store.enums.CustomerGender;
 import pe.edu.pucp.kingstore.domain.model.store.enums.StoreCategory;
 import pe.edu.pucp.kingstore.domain.model.store.enums.StoreStatus;
 

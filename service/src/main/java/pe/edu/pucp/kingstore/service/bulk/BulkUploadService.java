@@ -4,19 +4,21 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import pe.edu.pucp.kingstore.domain.dto.bulk.*;
+import pe.edu.pucp.kingstore.domain.dto.store.StoreDTO;
 import pe.edu.pucp.kingstore.domain.dto.user.CreateUserDTO;
 import pe.edu.pucp.kingstore.domain.model.store.Store;
-import pe.edu.pucp.kingstore.domain.model.store.enums.ColorPalette;
-import pe.edu.pucp.kingstore.domain.model.store.enums.StoreStatus;
+import pe.edu.pucp.kingstore.domain.model.store.enums.PrimaryColor;
+import pe.edu.pucp.kingstore.domain.model.store.enums.SecondaryColor;
+import pe.edu.pucp.kingstore.domain.model.store.enums.TertiaryColor;
 import pe.edu.pucp.kingstore.domain.model.user.enums.DocumentType;
 import pe.edu.pucp.kingstore.domain.model.user.enums.Gender;
 import pe.edu.pucp.kingstore.domain.model.user.enums.Role;
+import pe.edu.pucp.kingstore.repository.store.StoreCategoryRepository;
 import pe.edu.pucp.kingstore.repository.store.StoreRepository;
 import pe.edu.pucp.kingstore.repository.user.MerchantRepository;
 import pe.edu.pucp.kingstore.repository.user.UserAccountRepository;
 import pe.edu.pucp.kingstore.service.storage.StorageService;
 import pe.edu.pucp.kingstore.service.store.StoreService;
-import pe.edu.pucp.kingstore.domain.dto.store.StoreDTO;
 import pe.edu.pucp.kingstore.service.user.UserAccountService;
 
 import java.io.*;
@@ -26,30 +28,19 @@ import java.util.*;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
-/**
- * Orquesta la carga masiva de comerciantes, tiendas y logos.
- *
- * Flujo:
- *   1. Parsear CSV de comerciantes → validar → persistir
- *   2. Parsear CSV de tiendas     → validar → persistir
- *   3. Descomprimir ZIP de logos  → subir a S3 → actualizar store.logoUrl
- *
- * Si una fila falla, se registra una incidencia y se continúa con el resto
- * (fail-per-row, no fail-fast), para que el admin vea todos los errores juntos.
- */
 @Service
 public class BulkUploadService {
 
-    // ── Extensiones de imagen permitidas ──────────────────────────
     private static final Set<String> ALLOWED_IMAGE_EXTENSIONS = Set.of("jpg", "jpeg", "png", "webp");
-    private static final long MAX_LOGO_SIZE_BYTES = 2L * 1024 * 1024; // 2 MB
+    private static final long MAX_LOGO_SIZE_BYTES = 2L * 1024 * 1024;
 
-    private final UserAccountService userAccountService;
-    private final StoreService storeService;
-    private final StoreRepository storeRepository;
-    private final UserAccountRepository userAccountRepository;
-    private final MerchantRepository merchantRepository;
-    private final StorageService storageService;
+    private final UserAccountService      userAccountService;
+    private final StoreService            storeService;
+    private final StoreRepository         storeRepository;
+    private final UserAccountRepository   userAccountRepository;
+    private final MerchantRepository      merchantRepository;
+    private final StoreCategoryRepository categoryRepository;
+    private final StorageService          storageService;
 
     public BulkUploadService(
             UserAccountService userAccountService,
@@ -57,18 +48,18 @@ public class BulkUploadService {
             StoreRepository storeRepository,
             UserAccountRepository userAccountRepository,
             MerchantRepository merchantRepository,
+            StoreCategoryRepository categoryRepository,
             StorageService storageService) {
-        this.userAccountService = userAccountService;
-        this.storeService = storeService;
-        this.storeRepository = storeRepository;
+        this.userAccountService    = userAccountService;
+        this.storeService          = storeService;
+        this.storeRepository       = storeRepository;
         this.userAccountRepository = userAccountRepository;
-        this.merchantRepository = merchantRepository;
-        this.storageService = storageService;
+        this.merchantRepository    = merchantRepository;
+        this.categoryRepository    = categoryRepository;
+        this.storageService        = storageService;
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    //  PUNTO DE ENTRADA PRINCIPAL
-    // ═══════════════════════════════════════════════════════════════
+    // ── Punto de entrada ──────────────────────────────────────────
 
     @Transactional
     public BulkUploadResponseDTO process(
@@ -78,25 +69,14 @@ public class BulkUploadService {
 
         BulkUploadResponseDTO response = BulkUploadResponseDTO.builder().build();
 
-        if (merchantsCsv != null && !merchantsCsv.isEmpty()) {
-            processMerchants(merchantsCsv, response);
-        }
-
-        if (storesCsv != null && !storesCsv.isEmpty()) {
-            processStores(storesCsv, response);
-        }
-
-        // Pasar storesCsv para resolver logoFileName → slug
-        if (logosZip != null && !logosZip.isEmpty()) {
-            processLogos(logosZip, storesCsv, response);
-        }
+        if (merchantsCsv != null && !merchantsCsv.isEmpty()) processMerchants(merchantsCsv, response);
+        if (storesCsv    != null && !storesCsv.isEmpty())    processStores(storesCsv, response);
+        if (logosZip     != null && !logosZip.isEmpty())     processLogos(logosZip, response);
 
         return response;
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    //  COMERCIANTES
-    // ═══════════════════════════════════════════════════════════════
+    // ── Comerciantes ──────────────────────────────────────────────
 
     private void processMerchants(MultipartFile file, BulkUploadResponseDTO response) throws IOException {
         List<BulkMerchantRowDTO> rows = parseMerchantCsv(file);
@@ -105,7 +85,6 @@ public class BulkUploadService {
 
         for (BulkMerchantRowDTO row : rows) {
             try {
-                // Validaciones
                 validateMerchantRow(row, file.getOriginalFilename(), response);
                 boolean hasErrors = response.getIncidences().stream()
                         .anyMatch(i -> i.getBlock() == BulkIncidenceDTO.IncidenceBlock.MERCHANTS
@@ -113,27 +92,19 @@ public class BulkUploadService {
                                 && i.getType() == BulkIncidenceDTO.IncidenceType.ERROR);
                 if (hasErrors) continue;
 
-                // Crear via servicio existente
-                CreateUserDTO dto = toCreateUserDTO(row);
-                userAccountService.createWithRole(dto);
+                userAccountService.createWithRole(toCreateUserDTO(row));
                 created++;
-
             } catch (Exception e) {
                 response.addIncidence(BulkIncidenceDTO.builder()
-                        .block(BulkIncidenceDTO.IncidenceBlock.MERCHANTS)
-                        .row(row.getRowNumber())
-                        .code("UNEXPECTED")
-                        .type(BulkIncidenceDTO.IncidenceType.ERROR)
-                        .detail(e.getMessage())
-                        .origin(file.getOriginalFilename())
-                        .build());
+                        .block(BulkIncidenceDTO.IncidenceBlock.MERCHANTS).row(row.getRowNumber())
+                        .code("UNEXPECTED").type(BulkIncidenceDTO.IncidenceType.ERROR)
+                        .detail(e.getMessage()).origin(file.getOriginalFilename()).build());
             }
         }
         response.setMerchantsCreated(created);
     }
 
     private void validateMerchantRow(BulkMerchantRowDTO row, String filename, BulkUploadResponseDTO resp) {
-        // email
         if (row.getEmail() == null || row.getEmail().isBlank()) {
             resp.addIncidence(incidence(BulkIncidenceDTO.IncidenceBlock.MERCHANTS, row.getRowNumber(),
                     "VAL_EMAIL", BulkIncidenceDTO.IncidenceType.ERROR, "Email es obligatorio", filename));
@@ -145,39 +116,28 @@ public class BulkUploadService {
                     "DUPLICATE", BulkIncidenceDTO.IncidenceType.ERROR, "Email ya registrado: " + row.getEmail(), filename));
         }
 
-        // password
-        if (row.getPassword() == null || row.getPassword().isBlank()) {
+        if (row.getPassword() == null || row.getPassword().isBlank())
             resp.addIncidence(incidence(BulkIncidenceDTO.IncidenceBlock.MERCHANTS, row.getRowNumber(),
                     "VAL_PASSWORD", BulkIncidenceDTO.IncidenceType.ERROR, "Password es obligatorio", filename));
-        }
 
-        // nombre
-        if (row.getFirstName() == null || row.getFirstName().isBlank()) {
+        if (row.getFirstName() == null || row.getFirstName().isBlank())
             resp.addIncidence(incidence(BulkIncidenceDTO.IncidenceBlock.MERCHANTS, row.getRowNumber(),
                     "VAL_NAME", BulkIncidenceDTO.IncidenceType.ERROR, "firstName es obligatorio", filename));
-        }
 
-        // RUC (11 dígitos)
-        if (row.getRuc() == null || !row.getRuc().matches("\\d{11}")) {
+        if (row.getRuc() == null || !row.getRuc().matches("\\d{11}"))
             resp.addIncidence(incidence(BulkIncidenceDTO.IncidenceBlock.MERCHANTS, row.getRowNumber(),
                     "VAL_RUC", BulkIncidenceDTO.IncidenceType.ERROR, "RUC debe tener 11 dígitos numéricos", filename));
-        }
 
-        // documentType
-        if (!isValidEnum(DocumentType.class, row.getDocumentType())) {
+        if (!isValidEnum(DocumentType.class, row.getDocumentType()))
             resp.addIncidence(incidence(BulkIncidenceDTO.IncidenceBlock.MERCHANTS, row.getRowNumber(),
                     "VAL_DOCTYPE", BulkIncidenceDTO.IncidenceType.ERROR,
                     "documentType inválido. Valores: DNI, PASSPORT, FOREIGN_ID_CARD", filename));
-        }
 
-        // gender
-        if (!isValidEnum(Gender.class, row.getGender())) {
+        if (!isValidEnum(Gender.class, row.getGender()))
             resp.addIncidence(incidence(BulkIncidenceDTO.IncidenceBlock.MERCHANTS, row.getRowNumber(),
                     "VAL_GENDER", BulkIncidenceDTO.IncidenceType.ERROR,
                     "gender inválido. Valores: MALE, FEMALE, NOT_SPECIFIED", filename));
-        }
 
-        // birthDate
         try {
             if (row.getBirthDate() != null && !row.getBirthDate().isBlank())
                 LocalDate.parse(row.getBirthDate());
@@ -187,9 +147,7 @@ public class BulkUploadService {
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    //  TIENDAS
-    // ═══════════════════════════════════════════════════════════════
+    // ── Tiendas ───────────────────────────────────────────────────
 
     private void processStores(MultipartFile file, BulkUploadResponseDTO response) throws IOException {
         List<BulkStoreRowDTO> rows = parseStoreCsv(file);
@@ -205,19 +163,13 @@ public class BulkUploadService {
                                 && i.getType() == BulkIncidenceDTO.IncidenceType.ERROR);
                 if (hasErrors) continue;
 
-                StoreDTO dto = toStoreDTO(row);
-                storeService.createFromDTO(dto);
+                storeService.createFromDTO(toStoreDTO(row));
                 created++;
-
             } catch (Exception e) {
                 response.addIncidence(BulkIncidenceDTO.builder()
-                        .block(BulkIncidenceDTO.IncidenceBlock.STORES)
-                        .row(row.getRowNumber())
-                        .code("UNEXPECTED")
-                        .type(BulkIncidenceDTO.IncidenceType.ERROR)
-                        .detail(e.getMessage())
-                        .origin(file.getOriginalFilename())
-                        .build());
+                        .block(BulkIncidenceDTO.IncidenceBlock.STORES).row(row.getRowNumber())
+                        .code("UNEXPECTED").type(BulkIncidenceDTO.IncidenceType.ERROR)
+                        .detail(e.getMessage()).origin(file.getOriginalFilename()).build());
             }
         }
         response.setStoresCreated(created);
@@ -242,152 +194,126 @@ public class BulkUploadService {
                     "DUPLICATE", BulkIncidenceDTO.IncidenceType.ERROR, "Slug ya registrado: " + row.getSlug(), filename));
         }
 
-        // colorPalette
-        if (!isValidEnum(ColorPalette.class, row.getColorPalette())) {
+        // categoryId — obligatorio y debe existir en BD
+        if (row.getCategoryId() == null || row.getCategoryId().isBlank()) {
             resp.addIncidence(incidence(BulkIncidenceDTO.IncidenceBlock.STORES, row.getRowNumber(),
-                    "VAL_PALETTE", BulkIncidenceDTO.IncidenceType.ERROR,
-                    "colorPalette inválido. Valores: CORESTREET, ATELIERMONO, UTILITYDROP, LUXECAPSULE", filename));
+                    "VAL_CATEGORY", BulkIncidenceDTO.IncidenceType.ERROR, "categoryId es obligatorio", filename));
+        } else {
+            try {
+                Integer catId = Integer.parseInt(row.getCategoryId());
+                if (categoryRepository.findById(catId).isEmpty()) {
+                    resp.addIncidence(incidence(BulkIncidenceDTO.IncidenceBlock.STORES, row.getRowNumber(),
+                            "REF_NOT_FOUND", BulkIncidenceDTO.IncidenceType.ERROR,
+                            "No existe categoría con ID: " + row.getCategoryId(), filename));
+                }
+            } catch (NumberFormatException e) {
+                resp.addIncidence(incidence(BulkIncidenceDTO.IncidenceBlock.STORES, row.getRowNumber(),
+                        "VAL_CATEGORY", BulkIncidenceDTO.IncidenceType.ERROR,
+                        "categoryId debe ser un número entero", filename));
+            }
         }
 
-        // merchantEmail (opcional, pero si viene debe existir)
-        if (row.getMerchantEmail() != null && !row.getMerchantEmail().isBlank()) {
-            boolean exists = userAccountRepository.findByEmail(row.getMerchantEmail().trim().toLowerCase()).isPresent();
-            if (!exists) {
-                resp.addIncidence(incidence(BulkIncidenceDTO.IncidenceBlock.STORES, row.getRowNumber(),
-                        "REF_NOT_FOUND", BulkIncidenceDTO.IncidenceType.WARNING,
-                        "merchantEmail no existe en BD: " + row.getMerchantEmail() + ". La tienda se creará sin comerciante asignado.", filename));
-            }
+        // primaryColor
+        if (!isValidEnum(PrimaryColor.class, row.getPrimaryColor()))
+            resp.addIncidence(incidence(BulkIncidenceDTO.IncidenceBlock.STORES, row.getRowNumber(),
+                    "VAL_PRIMARY_COLOR", BulkIncidenceDTO.IncidenceType.ERROR,
+                    "primaryColor inválido. Valores: ONYX_BLACK, DEEP_ZINC, MIDNIGHT, CHARCOAL, ESPRESSO", filename));
+
+        // secondaryColor
+        if (!isValidEnum(SecondaryColor.class, row.getSecondaryColor()))
+            resp.addIncidence(incidence(BulkIncidenceDTO.IncidenceBlock.STORES, row.getRowNumber(),
+                    "VAL_SECONDARY_COLOR", BulkIncidenceDTO.IncidenceType.ERROR,
+                    "secondaryColor inválido. Valores: OLIVE_DRAB, SAGE, SLATE, TERRA, DUSTY_RED", filename));
+
+        // tertiaryColor
+        if (!isValidEnum(TertiaryColor.class, row.getTertiaryColor()))
+            resp.addIncidence(incidence(BulkIncidenceDTO.IncidenceBlock.STORES, row.getRowNumber(),
+                    "VAL_TERTIARY_COLOR", BulkIncidenceDTO.IncidenceType.ERROR,
+                    "tertiaryColor inválido. Valores: RICH_CAMEL, RAW_GOLD, SILVER_MIST, COPPER, STONE", filename));
+
+        // merchantEmail — obligatorio y debe existir en BD
+        if (row.getMerchantEmail() == null || row.getMerchantEmail().isBlank()) {
+            resp.addIncidence(incidence(BulkIncidenceDTO.IncidenceBlock.STORES, row.getRowNumber(),
+                    "VAL_MERCHANT", BulkIncidenceDTO.IncidenceType.ERROR,
+                    "merchantEmail es obligatorio", filename));
+        } else if (userAccountRepository.findByEmail(row.getMerchantEmail().trim().toLowerCase()).isEmpty()) {
+            resp.addIncidence(incidence(BulkIncidenceDTO.IncidenceBlock.STORES, row.getRowNumber(),
+                    "REF_NOT_FOUND", BulkIncidenceDTO.IncidenceType.ERROR,
+                    "merchantEmail no existe en BD: " + row.getMerchantEmail(), filename));
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    //  LOGOS (ZIP → S3)
-    // ═══════════════════════════════════════════════════════════════
+    // ── Logos ─────────────────────────────────────────────────────
 
-    private void processLogos(MultipartFile zipFile, MultipartFile storesCsv,
-                              BulkUploadResponseDTO response) throws IOException {
+    private void processLogos(MultipartFile zipFile, BulkUploadResponseDTO response) throws IOException {
         int uploaded = 0;
-
-        // Construir mapa: logoFileName → slug de tienda (desde el CSV de tiendas)
-        Map<String, String> logoToSlug = new HashMap<>();
-        if (storesCsv != null && !storesCsv.isEmpty()) {
-            List<BulkStoreRowDTO> storeRows = parseStoreCsv(storesCsv);
-            for (BulkStoreRowDTO row : storeRows) {
-                if (row.getLogoFileName() != null && !row.getLogoFileName().isBlank()
-                        && row.getSlug() != null && !row.getSlug().isBlank()) {
-                    logoToSlug.put(row.getLogoFileName().trim().toLowerCase(),
-                            row.getSlug().trim().toLowerCase());
-                }
-            }
-        }
-
         try (ZipInputStream zis = new ZipInputStream(zipFile.getInputStream())) {
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
                 if (entry.isDirectory()) { zis.closeEntry(); continue; }
 
                 String entryName = entry.getName();
-                // Solo el nombre del archivo, sin path
-                String fileName = entryName.contains("/")
-                        ? entryName.substring(entryName.lastIndexOf('/') + 1)
-                        : entryName;
-                String ext = getExtension(fileName).toLowerCase();
+                String ext = getExtension(entryName).toLowerCase();
 
-                // Validar extensión
                 if (!ALLOWED_IMAGE_EXTENSIONS.contains(ext)) {
                     response.addIncidence(BulkIncidenceDTO.builder()
-                            .block(BulkIncidenceDTO.IncidenceBlock.IMAGES)
-                            .row(0).code("INVALID_EXT")
-                            .type(BulkIncidenceDTO.IncidenceType.WARNING)
-                            .detail("Extensión no permitida: " + fileName + ". Solo: jpg, jpeg, png, webp")
-                            .origin(zipFile.getOriginalFilename())
-                            .build());
-                    zis.closeEntry();
-                    continue;
+                            .block(BulkIncidenceDTO.IncidenceBlock.IMAGES).row(0)
+                            .code("INVALID_EXT").type(BulkIncidenceDTO.IncidenceType.WARNING)
+                            .detail("Extensión no permitida: " + entryName + ". Solo: jpg, jpeg, png, webp")
+                            .origin(zipFile.getOriginalFilename()).build());
+                    zis.closeEntry(); continue;
                 }
 
                 byte[] bytes = zis.readAllBytes();
-
-                // Validar tamaño (2 MB)
                 if (bytes.length > MAX_LOGO_SIZE_BYTES) {
                     response.addIncidence(BulkIncidenceDTO.builder()
-                            .block(BulkIncidenceDTO.IncidenceBlock.IMAGES)
-                            .row(0).code("SIZE_EXCEEDED")
-                            .type(BulkIncidenceDTO.IncidenceType.WARNING)
-                            .detail("Imagen supera 2 MB: " + fileName)
-                            .origin(zipFile.getOriginalFilename())
-                            .build());
-                    zis.closeEntry();
-                    continue;
+                            .block(BulkIncidenceDTO.IncidenceBlock.IMAGES).row(0)
+                            .code("SIZE_EXCEEDED").type(BulkIncidenceDTO.IncidenceType.WARNING)
+                            .detail("Imagen supera 2 MB: " + entryName)
+                            .origin(zipFile.getOriginalFilename()).build());
+                    zis.closeEntry(); continue;
                 }
 
-                // Buscar slug de tienda via mapa logoFileName → slug
-                String slug = logoToSlug.get(fileName.toLowerCase());
-                if (slug == null) {
-                    response.addIncidence(BulkIncidenceDTO.builder()
-                            .block(BulkIncidenceDTO.IncidenceBlock.IMAGES)
-                            .row(0).code("REF_NOT_FOUND")
-                            .type(BulkIncidenceDTO.IncidenceType.WARNING)
-                            .detail("El archivo \"" + fileName + "\" no está referenciado en ninguna fila del CSV de tiendas (columna logoFileName).")
-                            .origin(zipFile.getOriginalFilename())
-                            .build());
-                    zis.closeEntry();
-                    continue;
-                }
+                String fileName = entryName.contains("/")
+                        ? entryName.substring(entryName.lastIndexOf('/') + 1) : entryName;
+                String slug = fileName.contains(".")
+                        ? fileName.substring(0, fileName.lastIndexOf('.')) : fileName;
 
-                // Buscar tienda por slug
                 Optional<Store> storeOpt = storeRepository.findBySlug(slug);
                 if (storeOpt.isEmpty()) {
                     response.addIncidence(BulkIncidenceDTO.builder()
-                            .block(BulkIncidenceDTO.IncidenceBlock.IMAGES)
-                            .row(0).code("REF_NOT_FOUND")
-                            .type(BulkIncidenceDTO.IncidenceType.WARNING)
-                            .detail("No existe tienda con slug '" + slug + "' para imagen: " + fileName)
-                            .origin(zipFile.getOriginalFilename())
-                            .build());
-                    zis.closeEntry();
-                    continue;
+                            .block(BulkIncidenceDTO.IncidenceBlock.IMAGES).row(0)
+                            .code("REF_NOT_FOUND").type(BulkIncidenceDTO.IncidenceType.WARNING)
+                            .detail("No existe tienda con slug '" + slug + "' para imagen: " + entryName)
+                            .origin(zipFile.getOriginalFilename()).build());
+                    zis.closeEntry(); continue;
                 }
 
-                // Subir a storage (local o S3 según perfil)
                 String s3Key = "logos/" + slug + "." + ext;
                 String contentType = "image/" + (ext.equals("jpg") ? "jpeg" : ext);
-                String logoUrl = this.storageService.uploadBytes(s3Key, bytes, contentType);
+                String logoUrl = storageService.uploadBytes(s3Key, bytes, contentType);
 
-                // Actualizar tienda
                 Store store = storeOpt.get();
                 store.setLogoUrl(logoUrl);
                 storeRepository.save(store);
                 uploaded++;
-
                 zis.closeEntry();
             }
         }
-
         response.setLogosUploaded(uploaded);
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    //  PARSERS CSV
-    // ═══════════════════════════════════════════════════════════════
+    // ── Parsers CSV ───────────────────────────────────────────────
 
-    /**
-     * Parsea CSV simple (separado por comas, primera fila = cabecera).
-     * Soporta comillas dobles para campos con comas internas.
-     */
     private List<BulkMerchantRowDTO> parseMerchantCsv(MultipartFile file) throws IOException {
         List<BulkMerchantRowDTO> result = new ArrayList<>();
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
-
             String headerLine = reader.readLine();
             if (headerLine == null) return result;
-
             String[] headers = splitCsvLine(headerLine);
             Map<String, Integer> idx = buildIndex(headers);
-
-            String line;
-            int rowNum = 2; // fila 1 = cabecera
+            String line; int rowNum = 2;
             while ((line = reader.readLine()) != null) {
                 if (line.isBlank()) { rowNum++; continue; }
                 String[] cols = splitCsvLine(line);
@@ -404,7 +330,6 @@ public class BulkUploadService {
                 row.setPhone(get(cols, idx, "phone"));
                 row.setGender(get(cols, idx, "gender"));
                 row.setRuc(get(cols, idx, "ruc"));
-                row.setStoreId(get(cols, idx, "storeId"));
                 result.add(row);
                 rowNum++;
             }
@@ -416,15 +341,11 @@ public class BulkUploadService {
         List<BulkStoreRowDTO> result = new ArrayList<>();
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
-
             String headerLine = reader.readLine();
             if (headerLine == null) return result;
-
             String[] headers = splitCsvLine(headerLine);
             Map<String, Integer> idx = buildIndex(headers);
-
-            String line;
-            int rowNum = 2;
+            String line; int rowNum = 2;
             while ((line = reader.readLine()) != null) {
                 if (line.isBlank()) { rowNum++; continue; }
                 String[] cols = splitCsvLine(line);
@@ -432,8 +353,11 @@ public class BulkUploadService {
                 row.setRowNumber(rowNum);
                 row.setStoreName(get(cols, idx, "storeName"));
                 row.setSlug(get(cols, idx, "slug"));
-                row.setColorPalette(get(cols, idx, "colorPalette"));
                 row.setDescription(get(cols, idx, "description"));
+                row.setCategoryId(get(cols, idx, "categoryId"));
+                row.setPrimaryColor(get(cols, idx, "primaryColor"));
+                row.setSecondaryColor(get(cols, idx, "secondaryColor"));
+                row.setTertiaryColor(get(cols, idx, "tertiaryColor"));
                 row.setMerchantEmail(get(cols, idx, "merchantEmail"));
                 row.setLogoFileName(get(cols, idx, "logoFileName"));
                 result.add(row);
@@ -443,9 +367,7 @@ public class BulkUploadService {
         return result;
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    //  CONVERSORES DTO → MODELO
-    // ═══════════════════════════════════════════════════════════════
+    // ── Conversores ───────────────────────────────────────────────
 
     private CreateUserDTO toCreateUserDTO(BulkMerchantRowDTO row) {
         CreateUserDTO dto = new CreateUserDTO();
@@ -462,9 +384,6 @@ public class BulkUploadService {
         dto.setGender(Gender.valueOf(row.getGender().toUpperCase()));
         dto.setRuc(row.getRuc());
         dto.setRole(Role.MERCHANT);
-        if (row.getStoreId() != null && !row.getStoreId().isBlank()) {
-            try { dto.setStoreId(Integer.parseInt(row.getStoreId())); } catch (NumberFormatException ignored) {}
-        }
         return dto;
     }
 
@@ -473,28 +392,27 @@ public class BulkUploadService {
         dto.setStoreName(row.getStoreName());
         dto.setSlug(row.getSlug());
         dto.setDescription(row.getDescription());
-        dto.setColorPalette(ColorPalette.valueOf(row.getColorPalette().toUpperCase()));
+        dto.setCategoryId(Integer.parseInt(row.getCategoryId()));
+        dto.setPrimaryColor(PrimaryColor.valueOf(row.getPrimaryColor().toUpperCase()));
+        dto.setSecondaryColor(SecondaryColor.valueOf(row.getSecondaryColor().toUpperCase()));
+        dto.setTertiaryColor(TertiaryColor.valueOf(row.getTertiaryColor().toUpperCase()));
 
-        // Resolver merchantEmail → merchantId
+        // Resolver merchantId desde email
         if (row.getMerchantEmail() != null && !row.getMerchantEmail().isBlank()) {
-            merchantRepository
-                    .findByUserAccount_Email(row.getMerchantEmail().trim().toLowerCase())
-                    .ifPresent(merchant -> dto.setMerchantId(merchant.getId()));
+            userAccountRepository.findByEmail(row.getMerchantEmail().trim().toLowerCase())
+                    .flatMap(ua -> merchantRepository.findByUserAccountId(ua.getId()))
+                    .ifPresent(m -> dto.setMerchantId(m.getId()));
         }
-
         return dto;
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    //  UTILIDADES
-    // ═══════════════════════════════════════════════════════════════
+    // ── Utilidades ────────────────────────────────────────────────
 
     private BulkIncidenceDTO incidence(BulkIncidenceDTO.IncidenceBlock block, int row,
-                                        String code, BulkIncidenceDTO.IncidenceType type,
-                                        String detail, String origin) {
+                                       String code, BulkIncidenceDTO.IncidenceType type,
+                                       String detail, String origin) {
         return BulkIncidenceDTO.builder()
-                .block(block).row(row).code(code).type(type).detail(detail).origin(origin)
-                .build();
+                .block(block).row(row).code(code).type(type).detail(detail).origin(origin).build();
     }
 
     private <E extends Enum<E>> boolean isValidEnum(Class<E> clazz, String value) {
@@ -509,7 +427,6 @@ public class BulkUploadService {
     }
 
     private String[] splitCsvLine(String line) {
-        // Separación simple por coma respetando comillas
         List<String> tokens = new ArrayList<>();
         boolean inQuotes = false;
         StringBuilder current = new StringBuilder();
@@ -524,9 +441,7 @@ public class BulkUploadService {
 
     private Map<String, Integer> buildIndex(String[] headers) {
         Map<String, Integer> idx = new HashMap<>();
-        for (int i = 0; i < headers.length; i++) {
-            idx.put(headers[i].trim(), i);
-        }
+        for (int i = 0; i < headers.length; i++) idx.put(headers[i].trim(), i);
         return idx;
     }
 
