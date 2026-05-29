@@ -9,6 +9,7 @@ import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
 import pe.edu.pucp.kingstore.service.store.StoreCategoryService;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/admin/categories")
@@ -31,7 +32,7 @@ public class StoreCategoryController {
         try {
             return ResponseEntity.ok(categoryService.getById(id));
         } catch (ResourceNotFoundException e) {
-            return ResponseEntity.status(404).body(e.getMessage());
+            return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
         }
     }
 
@@ -40,7 +41,7 @@ public class StoreCategoryController {
         try {
             return ResponseEntity.status(201).body(categoryService.createFromDTO(dto));
         } catch (BusinessRuleException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 
@@ -49,9 +50,9 @@ public class StoreCategoryController {
         try {
             return ResponseEntity.ok(categoryService.updateFromDTO(id, dto));
         } catch (ResourceNotFoundException e) {
-            return ResponseEntity.status(404).body(e.getMessage());
+            return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
         } catch (BusinessRuleException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 
@@ -59,21 +60,22 @@ public class StoreCategoryController {
     public ResponseEntity<?> delete(@PathVariable Integer id) {
         try {
             categoryService.delete(id);
-            return ResponseEntity.ok("Category deleted successfully");
+            return ResponseEntity.ok(Map.of("message", "Category deleted successfully"));
         } catch (ResourceNotFoundException e) {
-            return ResponseEntity.status(404).body(e.getMessage());
+            return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
         } catch (BusinessRuleException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 
+    // Devuelve JSON en lugar de String plano para evitar parse errors en el frontend
     @PatchMapping("/{id}/deactivate")
     public ResponseEntity<?> deactivate(@PathVariable Integer id) {
         try {
             categoryService.deactivate(id);
-            return ResponseEntity.ok("Category deactivated");
+            return ResponseEntity.ok(Map.of("message", "Category deactivated"));
         } catch (ResourceNotFoundException e) {
-            return ResponseEntity.status(404).body(e.getMessage());
+            return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
         }
     }
 
@@ -81,9 +83,9 @@ public class StoreCategoryController {
     public ResponseEntity<?> reactivate(@PathVariable Integer id) {
         try {
             categoryService.reactivate(id);
-            return ResponseEntity.ok("Category reactivated");
+            return ResponseEntity.ok(Map.of("message", "Category reactivated"));
         } catch (ResourceNotFoundException e) {
-            return ResponseEntity.status(404).body(e.getMessage());
+            return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
         }
     }
 }

@@ -62,4 +62,5 @@ public class AuditInterceptor implements HandlerInterceptor {
 
         auditLogService.save(log);
     }
+    
 }
