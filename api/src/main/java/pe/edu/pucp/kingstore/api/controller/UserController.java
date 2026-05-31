@@ -10,7 +10,6 @@ import pe.edu.pucp.kingstore.domain.model.user.Customer;
 import pe.edu.pucp.kingstore.domain.model.user.Merchant;
 import pe.edu.pucp.kingstore.domain.model.user.SystemAdministrator;
 import pe.edu.pucp.kingstore.domain.model.user.UserAccount;
-import pe.edu.pucp.kingstore.domain.model.user.enums.Role;
 import pe.edu.pucp.kingstore.repository.store.StoreRepository;
 import pe.edu.pucp.kingstore.repository.user.CustomerRepository;
 import pe.edu.pucp.kingstore.repository.user.MerchantRepository;
@@ -20,20 +19,19 @@ import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
 import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
 import pe.edu.pucp.kingstore.service.user.UserAccountService;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/admin/users")
 public class UserController {
 
-    private final UserAccountService         userAccountService;
-    private final UserAccountRepository      userAccountRepository;
-    private final MerchantRepository         merchantRepository;
-    private final CustomerRepository         customerRepository;
+    private final UserAccountService            userAccountService;
+    private final UserAccountRepository         userAccountRepository;
+    private final MerchantRepository            merchantRepository;
+    private final CustomerRepository            customerRepository;
     private final SystemAdministratorRepository adminRepository;
-    private final StoreRepository            storeRepository;
+    private final StoreRepository               storeRepository;
 
     public UserController(
             UserAccountService userAccountService,
@@ -50,102 +48,138 @@ public class UserController {
         this.storeRepository       = storeRepository;
     }
 
-    // ── GET /admin/users  →  listado completo con rol y tienda ────
-
+    // ── GET /admin/users ─────────────────────────────────────────
+    // Carga todos los datos en memoria de una sola vez (bulk load)
+    // evitando N+1 queries por usuario
     @GetMapping
     public ResponseEntity<List<UserResponseDTO>> findAll(
             @RequestParam(required = false) String search) {
 
-        List<UserAccount> accounts = userAccountRepository.findAll();
+        // 1. Cargar todos en paralelo — 4 queries totales, no N*4
+        List<UserAccount>         accounts  = userAccountRepository.findAll();
+        List<Merchant>            merchants = merchantRepository.findAll();
+        List<Customer>            customers = customerRepository.findAll();
+        List<SystemAdministrator> admins    = adminRepository.findAll();
+        List<Store>               stores    = storeRepository.findAll();
 
+        // 2. Construir mapas para lookup O(1)
+        Map<Integer, Merchant>            merchantByUaId = merchants.stream()
+                .collect(Collectors.toMap(m -> m.getUserAccount().getId(), m -> m, (a, b) -> a));
+        Map<Integer, Customer>            customerByUaId = customers.stream()
+                .collect(Collectors.toMap(c -> c.getUserAccount().getId(), c -> c, (a, b) -> a));
+        Map<Integer, SystemAdministrator> adminByUaId    = admins.stream()
+                .collect(Collectors.toMap(a -> a.getUserAccount().getId(), a -> a, (a, b) -> a));
+        // Tienda por merchantId
+        Map<Integer, Store> storeByMerchantId = stores.stream()
+                .filter(s -> s.getMerchant() != null)
+                .collect(Collectors.toMap(s -> s.getMerchant().getId(), s -> s, (a, b) -> a));
+        // Tienda por customerId (person_id)
+        Map<Integer, Store> storeByCustomerId = customers.stream()
+                .filter(c -> c.getStore() != null)
+                .collect(Collectors.toMap(c -> c.getId(), c -> c.getStore(), (a, b) -> a));
+
+        // 3. Mapear
+        List<UserResponseDTO> result = new ArrayList<>();
+        for (UserAccount ua : accounts) {
+            UserResponseDTO dto = buildFromMaps(ua,
+                    merchantByUaId, customerByUaId, adminByUaId,
+                    storeByMerchantId, storeByCustomerId);
+            result.add(dto);
+        }
+
+        // 4. Filtrar si hay search
         if (search != null && !search.isBlank()) {
             String term = search.toLowerCase();
-            accounts = accounts.stream()
-                    .filter(u -> u.getEmail().toLowerCase().contains(term))
+            result = result.stream()
+                    .filter(d -> d.getEmail().toLowerCase().contains(term)
+                            || (d.getFirstName()       != null && d.getFirstName().toLowerCase().contains(term))
+                            || (d.getPaternalSurname() != null && d.getPaternalSurname().toLowerCase().contains(term)))
                     .toList();
         }
 
-        List<UserResponseDTO> result = new ArrayList<>();
-        for (UserAccount ua : accounts) {
-            result.add(buildUserResponse(ua));
-        }
         return ResponseEntity.ok(result);
     }
 
-    // ── GET /admin/users/{id}  →  usuario por id ──────────────────
-
+    // ── GET /admin/users/{id} ────────────────────────────────────
     @GetMapping("/{id}")
     public ResponseEntity<?> getById(@PathVariable Integer id) {
         try {
             UserAccount account = userAccountService.getById(id);
-            return ResponseEntity.ok(buildUserResponse(account));
+            // Cargar los datos del usuario específico
+            List<Merchant>            merchants = merchantRepository.findAll();
+            List<Customer>            customers = customerRepository.findAll();
+            List<SystemAdministrator> admins    = adminRepository.findAll();
+            List<Store>               stores    = storeRepository.findAll();
+
+            Map<Integer, Merchant>            mByUa = merchants.stream()
+                    .collect(Collectors.toMap(m -> m.getUserAccount().getId(), m -> m, (a, b) -> a));
+            Map<Integer, Customer>            cByUa = customers.stream()
+                    .collect(Collectors.toMap(c -> c.getUserAccount().getId(), c -> c, (a, b) -> a));
+            Map<Integer, SystemAdministrator> aByUa = admins.stream()
+                    .collect(Collectors.toMap(a -> a.getUserAccount().getId(), a -> a, (a, b) -> a));
+            Map<Integer, Store> storeByMerchantId = stores.stream()
+                    .filter(s -> s.getMerchant() != null)
+                    .collect(Collectors.toMap(s -> s.getMerchant().getId(), s -> s, (a, b) -> a));
+            Map<Integer, Store> storeByCustomerId = customers.stream()
+                    .filter(c -> c.getStore() != null)
+                    .collect(Collectors.toMap(c -> c.getId(), c -> c.getStore(), (a, b) -> a));
+
+            return ResponseEntity.ok(buildFromMaps(account, mByUa, cByUa, aByUa, storeByMerchantId, storeByCustomerId));
         } catch (ResourceNotFoundException e) {
-            return ResponseEntity.status(404).body(e.getMessage());
+            return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
         }
     }
 
-    // ── POST /admin/users  →  crear usuario con rol ───────────────
-
+    // ── POST /admin/users ────────────────────────────────────────
     @PostMapping
     public ResponseEntity<?> create(@RequestBody CreateUserDTO dto) {
         try {
             UserAccount created = userAccountService.createWithRole(dto);
-            return ResponseEntity.status(201).body(buildUserResponse(created));
+            return ResponseEntity.status(201).body(Map.of("id", created.getId(), "email", created.getEmail()));
         } catch (BusinessRuleException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 
-    // ── PUT /admin/users/{id}  →  actualizar usuario ──────────────
-
+    // ── PUT /admin/users/{id} ────────────────────────────────────
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@PathVariable Integer id, @RequestBody CreateUserDTO dto) {
         try {
             UserAccount updated = userAccountService.updateUser(id, dto);
-            return ResponseEntity.ok(buildUserResponse(updated));
+            return ResponseEntity.ok(Map.of("id", updated.getId(), "email", updated.getEmail()));
         } catch (ResourceNotFoundException e) {
-            return ResponseEntity.status(404).body(e.getMessage());
+            return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
         } catch (BusinessRuleException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 
-    // ── PATCH /admin/users/{id}/deactivate ────────────────────────
-
+    // ── PATCH deactivate/reactivate ──────────────────────────────
     @PatchMapping("/{id}/deactivate")
     public ResponseEntity<?> deactivate(@PathVariable Integer id) {
         try {
             userAccountService.deactivate(id);
-            return ResponseEntity.ok("User deactivated successfully");
+            return ResponseEntity.ok(Map.of("message", "User deactivated successfully"));
         } catch (ResourceNotFoundException e) {
-            return ResponseEntity.status(404).body(e.getMessage());
-        } catch (BusinessRuleException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
         }
     }
-
-    // ── PATCH /admin/users/{id}/reactivate ────────────────────────
 
     @PatchMapping("/{id}/reactivate")
     public ResponseEntity<?> reactivate(@PathVariable Integer id) {
         try {
             userAccountService.reactivate(id);
-            return ResponseEntity.ok("User reactivated successfully");
+            return ResponseEntity.ok(Map.of("message", "User reactivated successfully"));
         } catch (ResourceNotFoundException e) {
-            return ResponseEntity.status(404).body(e.getMessage());
-        } catch (BusinessRuleException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
         }
     }
 
-    // ── GET /admin/merchants  →  lista para selector de comerciantes
-
+    // ── GET /admin/users/merchants ───────────────────────────────
     @GetMapping("/merchants")
     public ResponseEntity<List<MerchantResponseDTO>> findMerchants(
             @RequestParam(required = false) String search) {
-
         List<Merchant> merchants = merchantRepository.findAll();
-
         if (search != null && !search.isBlank()) {
             String term = search.toLowerCase();
             merchants = merchants.stream()
@@ -154,7 +188,6 @@ public class UserController {
                             || m.getPaternalSurname().toLowerCase().contains(term))
                     .toList();
         }
-
         List<MerchantResponseDTO> result = merchants.stream().map(m -> {
             MerchantResponseDTO dto = new MerchantResponseDTO();
             dto.setId(m.getId());
@@ -164,64 +197,64 @@ public class UserController {
             dto.setRuc(m.getRuc());
             return dto;
         }).toList();
-
         return ResponseEntity.ok(result);
     }
 
-    // ── Helper: construir UserResponseDTO ────────────────────────
+    // ── Helper: construir DTO desde mapas pre-cargados ───────────
+    private UserResponseDTO buildFromMaps(
+            UserAccount ua,
+            Map<Integer, Merchant>            merchantByUaId,
+            Map<Integer, Customer>            customerByUaId,
+            Map<Integer, SystemAdministrator> adminByUaId,
+            Map<Integer, Store>               storeByMerchantId,
+            Map<Integer, Store>               storeByCustomerId) {
 
-    private UserResponseDTO buildUserResponse(UserAccount ua) {
         UserResponseDTO dto = new UserResponseDTO();
         dto.setId(ua.getId());
         dto.setEmail(ua.getEmail());
         dto.setActive(ua.getActive());
 
-        // Merchant
-        Optional<Merchant> merchant = merchantRepository.findByUserAccountId(ua.getId());
-        if (merchant.isPresent()) {
-            Merchant m = merchant.get();
+        Merchant merchant = merchantByUaId.get(ua.getId());
+        if (merchant != null) {
             dto.setRole("MERCHANT");
-            dto.setFirstName(m.getFirstName());
-            dto.setPaternalSurname(m.getPaternalSurname());
-            dto.setMaternalSurname(m.getMaternalSurname());
-            dto.setDocumentNumber(m.getDocumentNumber());
-            dto.setDocumentType(m.getDocumentType() != null ? m.getDocumentType().name() : null);
-            dto.setPhone(m.getPhone());
-            dto.setRuc(m.getRuc());
-            // Buscar tienda del comerciante
-            storeRepository.findAll().stream()
-                    .filter(s -> s.getMerchant() != null && s.getMerchant().getId().equals(m.getId()))
-                    .findFirst()
-                    .ifPresent(s -> { dto.setStoreName(s.getStoreName()); dto.setStoreId(s.getId()); });
+            dto.setFirstName(merchant.getFirstName());
+            dto.setPaternalSurname(merchant.getPaternalSurname());
+            dto.setMaternalSurname(merchant.getMaternalSurname());
+            dto.setDocumentNumber(merchant.getDocumentNumber());
+            dto.setDocumentType(merchant.getDocumentType() != null ? merchant.getDocumentType().name() : null);
+            dto.setPhone(merchant.getPhone());
+            dto.setRuc(merchant.getRuc());
+            Store store = storeByMerchantId.get(merchant.getId());
+            if (store != null) { dto.setStoreName(store.getStoreName()); dto.setStoreId(store.getId()); }
             return dto;
         }
 
-        // Customer
-        Optional<Customer> customer = customerRepository.findByUserAccountId(ua.getId());
-        if (customer.isPresent()) {
-            Customer c = customer.get();
+        Customer customer = customerByUaId.get(ua.getId());
+        if (customer != null) {
             dto.setRole("CUSTOMER");
-            dto.setFirstName(c.getFirstName());
-            dto.setPaternalSurname(c.getPaternalSurname());
-            dto.setMaternalSurname(c.getMaternalSurname());
-            dto.setDocumentNumber(c.getDocumentNumber());
-            dto.setPhone(c.getPhone());
-            // Buscar tienda del cliente
-            if (c.getStore() != null) {
-                dto.setStoreName(c.getStore().getStoreName());
-                dto.setStoreId(c.getStore().getId());
-            }
+            dto.setFirstName(customer.getFirstName());
+            dto.setPaternalSurname(customer.getPaternalSurname());
+            dto.setMaternalSurname(customer.getMaternalSurname());
+            dto.setDocumentNumber(customer.getDocumentNumber());
+            dto.setPhone(customer.getPhone());
+            Store store = storeByCustomerId.get(customer.getId());
+            if (store != null) { dto.setStoreName(store.getStoreName()); dto.setStoreId(store.getId()); }
             return dto;
         }
 
-        // Admin
-        adminRepository.findByUserAccountId(ua.getId()).ifPresent(a -> {
+        SystemAdministrator admin = adminByUaId.get(ua.getId());
+        if (admin != null) {
             dto.setRole("SYSTEM_ADMIN");
-            dto.setFirstName(a.getFirstName());
-            dto.setPaternalSurname(a.getPaternalSurname());
-        });
+            dto.setFirstName(admin.getFirstName());
+            dto.setPaternalSurname(admin.getPaternalSurname());
+            dto.setMaternalSurname(admin.getMaternalSurname());
+            dto.setPhone(admin.getPhone());
+            dto.setDocumentNumber(admin.getDocumentNumber());
+            dto.setDocumentType(admin.getDocumentType() != null ? admin.getDocumentType().name() : null);
+            return dto;
+        }
 
-        if (dto.getRole() == null) dto.setRole("UNKNOWN");
+        dto.setRole("UNKNOWN");
         return dto;
     }
 }

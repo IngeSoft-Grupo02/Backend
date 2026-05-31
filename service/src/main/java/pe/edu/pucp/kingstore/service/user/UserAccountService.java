@@ -195,20 +195,40 @@ public class UserAccountService extends AbstractCrudService<UserAccount> {
         response.setToken(null); // el token lo genera el controller
         return response;
     }
+
     @Transactional
     public UserAccount updateUser(Integer id, CreateUserDTO dto) {
         UserAccount account = getById(id);
 
+        // Actualizar email y contraseña en UserAccount
         if (dto.getEmail() != null && !dto.getEmail().isBlank()) {
             account.setEmail(normalizeEmail(dto.getEmail()));
         }
         if (dto.getPassword() != null && !dto.getPassword().isBlank()) {
             account.setPassword(dto.getPassword());
         }
-
         validateForSave(account);
+        userAccountRepository.save(account);
+
+        // Actualizar phone en la entidad Person correspondiente
+        if (dto.getPhone() != null) {
+            merchantRepository.findByUserAccountId(id).ifPresent(m -> {
+                m.setPhone(dto.getPhone());
+                merchantRepository.save(m);
+            });
+            customerRepository.findByUserAccountId(id).ifPresent(c -> {
+                c.setPhone(dto.getPhone());
+                customerRepository.save(c);
+            });
+            administratorRepository.findByUserAccountId(id).ifPresent(a -> {
+                a.setPhone(dto.getPhone());
+                administratorRepository.save(a);
+            });
+        }
+
         return userAccountRepository.save(account);
     }
+
     @Transactional
     public UserAccount createWithRole(CreateUserDTO dto, String slug){
         Store store = storeRepository.findBySlug(slug)
