@@ -12,7 +12,7 @@ import java.util.Date;
 
 @Component
 public class JwtUtil {
-    private static final String SECRET = "kingstore-secret-key-ingesoft-2026";
+    private static final String SECRET = System.getenv("JWT_SECRET");
     private static final long EXPIRATION_ADMIN_MS = 4 * 60 * 60 * 1000L;
     private static final long EXPIRATION_MERCHANT_MS = 2 * 60 * 60 * 1000L;
     private static final long EXPIRATION_CUSTOMER_MS = 60 * 60 * 1000L;
