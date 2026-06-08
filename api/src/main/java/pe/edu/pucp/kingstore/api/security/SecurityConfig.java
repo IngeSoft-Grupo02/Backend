@@ -37,9 +37,11 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/stores/*/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/stores/*/customers/register").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll()
 
                         // Solo administradores
                         .requestMatchers("/admin/**").hasRole("SYSTEM_ADMIN")
+                        .requestMatchers("/merchant/**").hasRole("MERCHANT")
 
                         // Todo lo demás requiere autenticación
                         .anyRequest().authenticated()
@@ -55,6 +57,8 @@ public class SecurityConfig {
         config.setAllowedOriginPatterns(List.of(
             "http://54.221.52.83:3000",           // ← IP actual del front
             "http://54.221.52.83",                // ← por si acaso sin puerto
+            "http://localhost:*",
+            "http://127.0.0.1:*",
             "http://localhost:3000",
             "http://localhost"
         ));

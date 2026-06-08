@@ -162,6 +162,8 @@ public class UserController {
             return ResponseEntity.ok(Map.of("message", "User deactivated successfully"));
         } catch (ResourceNotFoundException e) {
             return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
+        } catch (BusinessRuleException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 
@@ -172,6 +174,8 @@ public class UserController {
             return ResponseEntity.ok(Map.of("message", "User reactivated successfully"));
         } catch (ResourceNotFoundException e) {
             return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
+        } catch (BusinessRuleException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 

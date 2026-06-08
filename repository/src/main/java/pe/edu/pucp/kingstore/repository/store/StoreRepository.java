@@ -17,9 +17,11 @@ public interface StoreRepository
     Optional<Store> findBySlug(String slug);
     List<Store> findByActive(Boolean active);
     List<Store> findByStoreStatus(StoreStatus status);
+    List<Store> findAllByMerchant_UserAccount_Id(Integer userAccountId);
+    Optional<Store> findByIdAndMerchant_UserAccount_Id(Integer id, Integer userAccountId);
    // @Procedure(name = "find_active_slug_by_merchant")
     //Optional<String> findActiveSlugByMerchant(@Param("p_user_account_id")Integer userAccountId);
-   Optional<Store> findByMerchant_UserAccount_IdAndStoreStatus(
+   List<Store> findAllByMerchant_UserAccount_IdAndStoreStatusOrderByIdAsc(
            Integer userAccountId,
            StoreStatus storeStatus
    );

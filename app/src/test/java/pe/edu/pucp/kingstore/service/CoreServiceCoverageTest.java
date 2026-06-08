@@ -238,8 +238,8 @@ class CoreServiceCoverageTest {
         when(storeRepository.findBySlug("store")).thenReturn(Optional.of(store));
         when(storeRepository.findByActive(true)).thenReturn(List.of(store));
         when(storeRepository.findByStoreStatus(StoreStatus.ACTIVE)).thenReturn(List.of(store));
-        when(storeRepository.findByMerchant_UserAccount_IdAndStoreStatus(22, StoreStatus.ACTIVE))
-                .thenReturn(Optional.of(store));
+        when(storeRepository.findAllByMerchant_UserAccount_IdAndStoreStatusOrderByIdAsc(22, StoreStatus.ACTIVE))
+                .thenReturn(List.of(store));
         when(storeRepository.findAll()).thenReturn(List.of(store, suspended));
         when(categoryRepository.findById(1)).thenReturn(Optional.of(category));
         when(merchantRepository.findById(4)).thenReturn(Optional.of(merchant));

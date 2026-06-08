@@ -99,6 +99,9 @@ class ControllerCoverageTest {
         when(userAccountRepository.findAll()).thenReturn(
                 List.of(merchantAccount, customerAccount, adminAccount, unknownAccount)
         );
+        when(merchantRepository.findAll()).thenReturn(List.of(merchant));
+        when(customerRepository.findAll()).thenReturn(List.of(customer));
+        when(adminRepository.findAll()).thenReturn(List.of(admin));
         when(merchantRepository.findByUserAccountId(1)).thenReturn(Optional.of(merchant));
         when(merchantRepository.findByUserAccountId(2)).thenReturn(Optional.empty());
         when(merchantRepository.findByUserAccountId(3)).thenReturn(Optional.empty());

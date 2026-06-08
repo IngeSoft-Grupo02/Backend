@@ -62,8 +62,12 @@ public class StoreService extends AbstractCrudService<Store> {
     @Transactional(readOnly = true)
     public Optional<String> findActiveSlugByUserAccountId(Integer userAccountId) {
         return storeRepository
-                .findByMerchant_UserAccount_IdAndStoreStatus(userAccountId, StoreStatus.ACTIVE)
-                .map(Store::getSlug);
+                .findAllByMerchant_UserAccount_IdAndStoreStatusOrderByIdAsc(userAccountId, StoreStatus.ACTIVE)
+                .stream()
+                .filter(store -> Boolean.TRUE.equals(store.getActive()))
+                .map(Store::getSlug)
+                .filter(slug -> slug != null && !slug.isBlank())
+                .findFirst();
     }
 
     @Transactional(readOnly = true)

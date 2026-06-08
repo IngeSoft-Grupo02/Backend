@@ -54,9 +54,13 @@ public class UserAccountService extends AbstractCrudService<UserAccount> {
         requireText(request.getPassword(), "Password");
 
         UserAccount account = userAccountRepository.findByEmail(normalizeEmail(request.getEmail()))
-                .filter(user -> Boolean.TRUE.equals(user.getActive()))
-                .filter(user -> user.getPassword().equals(request.getPassword()))
-                .orElseThrow(() -> new BusinessRuleException("Invalid credentials"));
+                .orElseThrow(() -> new BusinessRuleException("ACCOUNT_NOT_FOUND"));
+        if (!Boolean.TRUE.equals(account.getActive())) {
+            throw new BusinessRuleException("ACCOUNT_INACTIVE");
+        }
+        if (!account.getPassword().equals(request.getPassword())) {
+            throw new BusinessRuleException("BAD_CREDENTIALS");
+        }
 
         LoginResponseDTO response = new LoginResponseDTO();
         response.setId(account.getId());
@@ -82,13 +86,17 @@ public class UserAccountService extends AbstractCrudService<UserAccount> {
         if (customerRepository.findByUserAccountId(userAccountId).isPresent()) {
             return Role.CUSTOMER;
         }
-        if (merchantRepository.findByUserAccountId(userAccountId).isPresent()) {
+        var merchant = merchantRepository.findByUserAccountId(userAccountId);
+        if (merchant.isPresent()) {
+            if (!Boolean.TRUE.equals(merchant.get().getActive())) {
+                throw new BusinessRuleException("ACCOUNT_INACTIVE");
+            }
             return Role.MERCHANT;
         }
         if (administratorRepository.findByUserAccountId(userAccountId).isPresent()) {
             return Role.SYSTEM_ADMIN;
         }
-        throw new BusinessRuleException("User account does not have a role assigned");
+        throw new BusinessRuleException("ROLE_NOT_ASSIGNED");
     }
 
     private String normalizeEmail(String email) {
