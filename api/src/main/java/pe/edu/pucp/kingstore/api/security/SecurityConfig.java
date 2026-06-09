@@ -55,13 +55,8 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOriginPatterns(List.of(
-            "http://54.221.52.83:3000",           // â† IP actual del front
-            "http://54.221.52.83",                // â† por si acaso sin puerto
-            "http://localhost:*",
-            "http://127.0.0.1:*",
-            "http://localhost:3000",
-            "http://localhost"
-        ));
+            "https://ec2-100-27-222-84.compute-1.amazonaws.com",
+            "http://localhost:3000"));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
