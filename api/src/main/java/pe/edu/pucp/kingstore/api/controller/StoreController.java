@@ -12,6 +12,7 @@ import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
 import pe.edu.pucp.kingstore.service.store.StoreService;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/admin/stores")
@@ -84,7 +85,7 @@ public class StoreController {
     public ResponseEntity<?> suspend(@PathVariable Integer id) {
         try {
             storeService.suspend(id);
-            return ResponseEntity.ok("Store suspended successfully");
+            return ResponseEntity.ok(Map.of("message","Store suspended successfully"));
         } catch (ResourceNotFoundException e) {
             return ResponseEntity.status(404).body(e.getMessage());
         } catch (BusinessRuleException e) {
@@ -96,7 +97,7 @@ public class StoreController {
     public ResponseEntity<?> deactivate(@PathVariable Integer id) {
         try {
             storeService.deactivate(id);
-            return ResponseEntity.ok("Store deactivated successfully");
+            return ResponseEntity.ok(Map.of("message","Store deactivated successfully"));
         } catch (ResourceNotFoundException e) {
             return ResponseEntity.status(404).body(e.getMessage());
         } catch (BusinessRuleException e) {
@@ -108,7 +109,7 @@ public class StoreController {
     public ResponseEntity<?> reactivate(@PathVariable Integer id) {
         try {
             storeService.reactivate(id);
-            return ResponseEntity.ok("Store reactivated successfully");
+            return ResponseEntity.ok(Map.of("message","Store reactivated successfully"));
         } catch (ResourceNotFoundException e) {
             return ResponseEntity.status(404).body(e.getMessage());
         } catch (BusinessRuleException e) {

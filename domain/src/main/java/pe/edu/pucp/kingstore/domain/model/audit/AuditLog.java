@@ -29,13 +29,12 @@ public class AuditLog {
     @Column(length = 50)
     private String tenantSlug;
 
-    @Column(nullable = false, length = 10)
+    @Column(length = 10)
     private String httpMethod;
 
-    @Column(nullable = false, length = 255)
+    @Column(length = 255)
     private String endpoint;
 
-    @Column(nullable = false)
     private Integer statusCode;
 
     @Enumerated(EnumType.STRING)

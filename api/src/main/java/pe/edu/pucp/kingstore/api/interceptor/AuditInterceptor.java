@@ -30,6 +30,8 @@ public class AuditInterceptor implements HandlerInterceptor {
 
         // No registrar el endpoint de auditorÃ­a mismo
         if (request.getRequestURI().contains("/admin/audit")) return;
+        // Solo registrar acciones del usuario, no cargas automáticas
+        if (request.getMethod().equals("GET")) return;
 
         AuditLog log = new AuditLog();
         log.setHttpMethod(request.getMethod());
