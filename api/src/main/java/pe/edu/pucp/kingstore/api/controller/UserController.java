@@ -48,14 +48,14 @@ public class UserController {
         this.storeRepository       = storeRepository;
     }
 
-    // ── GET /admin/users ─────────────────────────────────────────
+    // â”€â”€ GET /admin/users â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Carga todos los datos en memoria de una sola vez (bulk load)
     // evitando N+1 queries por usuario
     @GetMapping
     public ResponseEntity<List<UserResponseDTO>> findAll(
             @RequestParam(required = false) String search) {
 
-        // 1. Cargar todos en paralelo — 4 queries totales, no N*4
+        // 1. Cargar todos en paralelo â€” 4 queries totales, no N*4
         List<UserAccount>         accounts  = userAccountRepository.findAll();
         List<Merchant>            merchants = merchantRepository.findAll();
         List<Customer>            customers = customerRepository.findAll();
@@ -100,12 +100,12 @@ public class UserController {
         return ResponseEntity.ok(result);
     }
 
-    // ── GET /admin/users/{id} ────────────────────────────────────
+    // â”€â”€ GET /admin/users/{id} â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     @GetMapping("/{id}")
     public ResponseEntity<?> getById(@PathVariable Integer id) {
         try {
             UserAccount account = userAccountService.getById(id);
-            // Cargar los datos del usuario específico
+            // Cargar los datos del usuario especÃ­fico
             List<Merchant>            merchants = merchantRepository.findAll();
             List<Customer>            customers = customerRepository.findAll();
             List<SystemAdministrator> admins    = adminRepository.findAll();
@@ -130,7 +130,7 @@ public class UserController {
         }
     }
 
-    // ── POST /admin/users ────────────────────────────────────────
+    // â”€â”€ POST /admin/users â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     @PostMapping
     public ResponseEntity<?> create(@RequestBody CreateUserDTO dto) {
         try {
@@ -141,7 +141,7 @@ public class UserController {
         }
     }
 
-    // ── PUT /admin/users/{id} ────────────────────────────────────
+    // â”€â”€ PUT /admin/users/{id} â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@PathVariable Integer id, @RequestBody CreateUserDTO dto) {
         try {
@@ -154,7 +154,7 @@ public class UserController {
         }
     }
 
-    // ── PATCH deactivate/reactivate ──────────────────────────────
+    // â”€â”€ PATCH deactivate/reactivate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     @PatchMapping("/{id}/deactivate")
     public ResponseEntity<?> deactivate(@PathVariable Integer id) {
         try {
@@ -162,6 +162,8 @@ public class UserController {
             return ResponseEntity.ok(Map.of("message", "User deactivated successfully"));
         } catch (ResourceNotFoundException e) {
             return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
+        } catch (BusinessRuleException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 
@@ -172,10 +174,12 @@ public class UserController {
             return ResponseEntity.ok(Map.of("message", "User reactivated successfully"));
         } catch (ResourceNotFoundException e) {
             return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
+        } catch (BusinessRuleException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 
-    // ── GET /admin/users/merchants ───────────────────────────────
+    // â”€â”€ GET /admin/users/merchants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     @GetMapping("/merchants")
     public ResponseEntity<List<MerchantResponseDTO>> findMerchants(
             @RequestParam(required = false) String search) {
@@ -200,7 +204,7 @@ public class UserController {
         return ResponseEntity.ok(result);
     }
 
-    // ── Helper: construir DTO desde mapas pre-cargados ───────────
+    // â”€â”€ Helper: construir DTO desde mapas pre-cargados â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     private UserResponseDTO buildFromMaps(
             UserAccount ua,
             Map<Integer, Merchant>            merchantByUaId,

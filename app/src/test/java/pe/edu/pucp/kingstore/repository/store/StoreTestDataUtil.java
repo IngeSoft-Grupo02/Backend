@@ -17,8 +17,8 @@ public class StoreTestDataUtil {
         store.setLogoUrl("logo A");
         store.setCategory(category(1));
         store.setPrimaryColor(PrimaryColor.ONYX_BLACK);
-        store.setSecondaryColor(SecondaryColor.OLIVE_DRAB);
-        store.setTertiaryColor(TertiaryColor.RICH_CAMEL);
+        store.setSecondaryColor(SecondaryColor.SLATE);
+        store.setTertiaryColor(TertiaryColor.RAW_GOLD);
         store.setStoreStatus(StoreStatus.ACTIVE);
         return store;
     }
@@ -30,9 +30,9 @@ public class StoreTestDataUtil {
         store.setDescription("description B");
         store.setLogoUrl("logo B");
         store.setCategory(category(2));
-        store.setPrimaryColor(PrimaryColor.DEEP_ZINC);
+        store.setPrimaryColor(PrimaryColor.ALABASTER);
         store.setSecondaryColor(SecondaryColor.SAGE);
-        store.setTertiaryColor(TertiaryColor.SILVER_MIST);
+        store.setTertiaryColor(TertiaryColor.COPPER);
         store.setActive(false);
         store.setStoreStatus(StoreStatus.ACTIVE);
         return store;
@@ -47,7 +47,7 @@ public class StoreTestDataUtil {
         store.setCategory(category(3));
         store.setPrimaryColor(PrimaryColor.MIDNIGHT);
         store.setSecondaryColor(SecondaryColor.SLATE);
-        store.setTertiaryColor(TertiaryColor.STONE);
+        store.setTertiaryColor(TertiaryColor.COPPER);
         store.setStoreStatus(StoreStatus.ACTIVE);
         return store;
     }

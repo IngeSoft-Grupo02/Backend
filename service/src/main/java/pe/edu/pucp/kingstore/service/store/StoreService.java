@@ -62,8 +62,26 @@ public class StoreService extends AbstractCrudService<Store> {
     @Transactional(readOnly = true)
     public Optional<String> findActiveSlugByUserAccountId(Integer userAccountId) {
         return storeRepository
-                .findByMerchant_UserAccount_IdAndStoreStatus(userAccountId, StoreStatus.ACTIVE)
-                .map(Store::getSlug);
+                .findAllByMerchant_UserAccount_IdAndStoreStatusOrderByIdAsc(userAccountId, StoreStatus.ACTIVE)
+                .stream()
+                .filter(store -> Boolean.TRUE.equals(store.getActive()))
+                .map(Store::getSlug)
+                .filter(slug -> slug != null && !slug.isBlank())
+                .findFirst();
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<String> findLoginSlugByUserAccountId(Integer userAccountId) {
+        List<Store> stores = storeRepository.findAllByMerchant_UserAccount_Id(userAccountId).stream()
+                .filter(store -> Boolean.TRUE.equals(store.getActive()))
+                .toList();
+
+        return stores.stream()
+                .filter(store -> store.getStoreStatus() == StoreStatus.ACTIVE)
+                .findFirst()
+                .or(() -> stores.stream().findFirst())
+                .map(Store::getSlug)
+                .filter(slug -> slug != null && !slug.isBlank());
     }
 
     @Transactional(readOnly = true)
@@ -84,7 +102,7 @@ public class StoreService extends AbstractCrudService<Store> {
         if (dto.getSecondaryColor() != null) store.setSecondaryColor(dto.getSecondaryColor());
         if (dto.getTertiaryColor()  != null) store.setTertiaryColor(dto.getTertiaryColor());
 
-        // Categoría — obligatoria
+        // CategorÃ­a â€” obligatoria
         if (dto.getCategoryId() == null)
             throw new BusinessRuleException("Store category is required");
         categoryRepository.findById(dto.getCategoryId())

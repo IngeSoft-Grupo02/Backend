@@ -68,12 +68,17 @@ import pe.edu.pucp.kingstore.service.product.ProductVariantService;
 import pe.edu.pucp.kingstore.service.quotation.QuotationService;
 import pe.edu.pucp.kingstore.service.security.JwtUtil;
 import pe.edu.pucp.kingstore.service.storage.LocalStorageService;
+import pe.edu.pucp.kingstore.service.storage.S3StorageService;
 import pe.edu.pucp.kingstore.service.store.StoreCategoryService;
 import pe.edu.pucp.kingstore.service.store.StoreService;
 import pe.edu.pucp.kingstore.service.user.CustomerService;
 import pe.edu.pucp.kingstore.service.user.MerchantService;
 import pe.edu.pucp.kingstore.service.user.SystemAdministratorService;
 import pe.edu.pucp.kingstore.service.user.UserAccountService;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.PutObjectResponse;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -84,6 +89,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -238,8 +244,8 @@ class CoreServiceCoverageTest {
         when(storeRepository.findBySlug("store")).thenReturn(Optional.of(store));
         when(storeRepository.findByActive(true)).thenReturn(List.of(store));
         when(storeRepository.findByStoreStatus(StoreStatus.ACTIVE)).thenReturn(List.of(store));
-        when(storeRepository.findByMerchant_UserAccount_IdAndStoreStatus(22, StoreStatus.ACTIVE))
-                .thenReturn(Optional.of(store));
+        when(storeRepository.findAllByMerchant_UserAccount_IdAndStoreStatusOrderByIdAsc(22, StoreStatus.ACTIVE))
+                .thenReturn(List.of(store));
         when(storeRepository.findAll()).thenReturn(List.of(store, suspended));
         when(categoryRepository.findById(1)).thenReturn(Optional.of(category));
         when(merchantRepository.findById(4)).thenReturn(Optional.of(merchant));
@@ -251,7 +257,7 @@ class CoreServiceCoverageTest {
         dto.setMerchantId(4);
         dto.setPrimaryColor(PrimaryColor.MIDNIGHT);
         dto.setSecondaryColor(SecondaryColor.SLATE);
-        dto.setTertiaryColor(TertiaryColor.STONE);
+        dto.setTertiaryColor(TertiaryColor.COPPER);
         Store created = storeService.createFromDTO(dto);
         assertThat(created.getMerchant()).isSameAs(merchant);
         assertThat(created.getStoreStatus()).isEqualTo(StoreStatus.ACTIVE);
@@ -357,6 +363,185 @@ class CoreServiceCoverageTest {
         assertThat(Files.readString(tempDir.resolve("logos/store.png"))).isEqualTo("image");
     }
 
+    @Test
+    void s3StorageServiceBuildsPutObjectRequestAndPublicUrl() {
+        S3Client s3Client = org.mockito.Mockito.mock(S3Client.class);
+        when(s3Client.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
+                .thenReturn(PutObjectResponse.builder().build());
+        S3StorageService service = new S3StorageService(s3Client);
+        ReflectionTestUtils.setField(service, "bucketName", "kingstore-assets");
+        ReflectionTestUtils.setField(service, "region", "us-west-2");
+
+        String url = service.uploadBytes("logos/store.png", "image".getBytes(), "image/png");
+
+        assertThat(url).isEqualTo("https://kingstore-assets.s3.us-west-2.amazonaws.com/logos/store.png");
+        ArgumentCaptor<PutObjectRequest> captor = ArgumentCaptor.forClass(PutObjectRequest.class);
+        verify(s3Client).putObject(captor.capture(), any(RequestBody.class));
+        assertThat(captor.getValue().bucket()).isEqualTo("kingstore-assets");
+        assertThat(captor.getValue().key()).isEqualTo("logos/store.png");
+        assertThat(captor.getValue().contentType()).isEqualTo("image/png");
+    }
+
+    @Test
+    void userAccountServiceCoversAuthenticationRoleAndCreationFailures() {
+        UserAccountService service = new UserAccountService(
+                userAccountRepository, customerRepository, merchantRepository, administratorRepository, storeRepository);
+
+        LoginRequestDTO inactiveLogin = login("inactive@kingstore.pe", "secret");
+        UserAccount inactiveAccount = account(30, "inactive@kingstore.pe", "secret");
+        inactiveAccount.setActive(false);
+        when(userAccountRepository.findByEmail("inactive@kingstore.pe")).thenReturn(Optional.of(inactiveAccount));
+        assertThatThrownBy(() -> service.authenticate(inactiveLogin)).isInstanceOf(BusinessRuleException.class);
+
+        LoginRequestDTO badPassword = login("bad-password@kingstore.pe", "bad");
+        UserAccount badPasswordAccount = account(31, "bad-password@kingstore.pe", "secret");
+        when(userAccountRepository.findByEmail("bad-password@kingstore.pe")).thenReturn(Optional.of(badPasswordAccount));
+        assertThatThrownBy(() -> service.authenticate(badPassword)).isInstanceOf(BusinessRuleException.class);
+
+        LoginRequestDTO inactiveMerchantLogin = login("inactive-merchant@kingstore.pe", "secret");
+        UserAccount inactiveMerchantAccount = account(32, "inactive-merchant@kingstore.pe", "secret");
+        Merchant inactiveMerchant = merchantProfile();
+        inactiveMerchant.setActive(false);
+        when(userAccountRepository.findByEmail("inactive-merchant@kingstore.pe")).thenReturn(Optional.of(inactiveMerchantAccount));
+        when(customerRepository.findByUserAccountId(32)).thenReturn(Optional.empty());
+        when(merchantRepository.findByUserAccountId(32)).thenReturn(Optional.of(inactiveMerchant));
+        assertThatThrownBy(() -> service.authenticate(inactiveMerchantLogin)).isInstanceOf(BusinessRuleException.class);
+
+        LoginRequestDTO adminLogin = login("admin-login@kingstore.pe", "secret");
+        UserAccount adminAccount = account(33, "admin-login@kingstore.pe", "secret");
+        when(userAccountRepository.findByEmail("admin-login@kingstore.pe")).thenReturn(Optional.of(adminAccount));
+        when(customerRepository.findByUserAccountId(33)).thenReturn(Optional.empty());
+        when(merchantRepository.findByUserAccountId(33)).thenReturn(Optional.empty());
+        when(administratorRepository.findByUserAccountId(33)).thenReturn(Optional.of(adminProfile()));
+        assertThat(service.authenticate(adminLogin).getRole()).isEqualTo(Role.SYSTEM_ADMIN);
+
+        LoginRequestDTO noRoleLogin = login("norole@kingstore.pe", "secret");
+        UserAccount noRoleAccount = account(34, "norole@kingstore.pe", "secret");
+        when(userAccountRepository.findByEmail("norole@kingstore.pe")).thenReturn(Optional.of(noRoleAccount));
+        when(customerRepository.findByUserAccountId(34)).thenReturn(Optional.empty());
+        when(merchantRepository.findByUserAccountId(34)).thenReturn(Optional.empty());
+        when(administratorRepository.findByUserAccountId(34)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> service.authenticate(noRoleLogin)).isInstanceOf(BusinessRuleException.class);
+
+        when(userAccountRepository.findByEmail("person@kingstore.pe")).thenReturn(Optional.empty());
+        when(userAccountRepository.save(any(UserAccount.class))).thenAnswer(invocation -> {
+            UserAccount saved = invocation.getArgument(0);
+            if (saved.getId() == null) saved.setId(200);
+            return saved;
+        });
+        assertThatThrownBy(() -> service.createWithRole(createUserDTO(Role.CUSTOMER)))
+                .isInstanceOf(BusinessRuleException.class);
+
+        CreateUserDTO missingCustomerStore = createUserDTO(Role.CUSTOMER);
+        missingCustomerStore.setStoreId(404);
+        when(storeRepository.findById(404)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> service.createWithRole(missingCustomerStore))
+                .isInstanceOf(BusinessRuleException.class);
+
+        CreateUserDTO merchantWithoutRuc = createUserDTO(Role.MERCHANT);
+        assertThatThrownBy(() -> service.createWithRole(merchantWithoutRuc))
+                .isInstanceOf(BusinessRuleException.class);
+
+        CreateUserDTO merchantMissingStore = createUserDTO(Role.MERCHANT);
+        merchantMissingStore.setRuc("12345678901");
+        merchantMissingStore.setStoreId(405);
+        when(merchantRepository.save(any(Merchant.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(storeRepository.findById(405)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> service.createWithRole(merchantMissingStore))
+                .isInstanceOf(BusinessRuleException.class);
+
+        Store inactiveStore = store();
+        inactiveStore.setStoreStatus(StoreStatus.INACTIVE);
+        when(storeRepository.findBySlug("inactive-store")).thenReturn(Optional.of(inactiveStore));
+        CreateUserDTO customerBySlug = createUserDTO(Role.CUSTOMER);
+        assertThatThrownBy(() -> service.createWithRole(customerBySlug, "inactive-store"))
+                .isInstanceOf(BusinessRuleException.class);
+
+        LoginRequestDTO nonCustomerLogin = login("not-customer@kingstore.pe", "secret");
+        UserAccount nonCustomer = account(35, "not-customer@kingstore.pe", "secret");
+        when(userAccountRepository.findByEmail("not-customer@kingstore.pe")).thenReturn(Optional.of(nonCustomer));
+        when(customerRepository.findByUserAccountId(35)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> service.authenticateCustomer("store", nonCustomerLogin))
+                .isInstanceOf(BusinessRuleException.class);
+    }
+
+    @Test
+    void userAccountServiceCoversUpdateDuplicateEmailAndPhoneProfiles() {
+        UserAccountService service = new UserAccountService(
+                userAccountRepository, customerRepository, merchantRepository, administratorRepository, storeRepository);
+
+        UserAccount phoneAccount = account(40, "phone@kingstore.pe", "secret");
+        Merchant merchant = merchantProfile();
+        Customer customer = customerProfile();
+        SystemAdministrator admin = adminProfile();
+        when(userAccountRepository.findById(40)).thenReturn(Optional.of(phoneAccount));
+        when(userAccountRepository.findByEmail("phone@kingstore.pe")).thenReturn(Optional.of(phoneAccount));
+        when(userAccountRepository.save(any(UserAccount.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(merchantRepository.findByUserAccountId(40)).thenReturn(Optional.of(merchant));
+        when(customerRepository.findByUserAccountId(40)).thenReturn(Optional.of(customer));
+        when(administratorRepository.findByUserAccountId(40)).thenReturn(Optional.of(admin));
+        when(merchantRepository.save(any(Merchant.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(customerRepository.save(any(Customer.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(administratorRepository.save(any(SystemAdministrator.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        CreateUserDTO updatePhone = new CreateUserDTO();
+        updatePhone.setPhone("900111222");
+        assertThat(service.updateUser(40, updatePhone).getEmail()).isEqualTo("phone@kingstore.pe");
+        assertThat(merchant.getPhone()).isEqualTo("900111222");
+        assertThat(customer.getPhone()).isEqualTo("900111222");
+        assertThat(admin.getPhone()).isEqualTo("900111222");
+
+        UserAccount current = account(41, "current@kingstore.pe", "secret");
+        UserAccount duplicate = account(42, "duplicate@kingstore.pe", "secret");
+        when(userAccountRepository.findById(41)).thenReturn(Optional.of(current));
+        when(userAccountRepository.findByEmail("duplicate@kingstore.pe")).thenReturn(Optional.of(duplicate));
+        CreateUserDTO duplicateEmail = new CreateUserDTO();
+        duplicateEmail.setEmail(" duplicate@kingstore.pe ");
+        assertThatThrownBy(() -> service.updateUser(41, duplicateEmail))
+                .isInstanceOf(BusinessRuleException.class);
+    }
+
+    @Test
+    void storeServiceCoversLoginSlugValidationAndEmptyMetricsBranches() {
+        StoreService storeService = new StoreService(storeRepository, merchantRepository, categoryRepository);
+
+        Store suspended = store();
+        suspended.setId(50);
+        suspended.setSlug("paused");
+        suspended.setStoreStatus(StoreStatus.SUSPENDED);
+        Store blankSlug = store();
+        blankSlug.setId(51);
+        blankSlug.setSlug(" ");
+
+        when(storeRepository.findAllByMerchant_UserAccount_Id(22)).thenReturn(List.of(suspended));
+        assertThat(storeService.findLoginSlugByUserAccountId(22)).contains("paused");
+        when(storeRepository.findAllByMerchant_UserAccount_Id(23)).thenReturn(List.of(blankSlug));
+        assertThat(storeService.findLoginSlugByUserAccountId(23)).isEmpty();
+        when(storeRepository.findByStoreStatus(StoreStatus.SUSPENDED)).thenReturn(List.of(suspended));
+        assertThat(storeService.findStores(null, StoreStatus.SUSPENDED)).containsExactly(suspended);
+        when(storeRepository.findAll()).thenReturn(List.of());
+        assertThat(storeService.getMetrics()).containsEntry("message", "No stores registered in the platform");
+
+        when(storeRepository.findById(50)).thenReturn(Optional.of(suspended));
+        assertThatThrownBy(() -> storeService.suspend(50)).isInstanceOf(BusinessRuleException.class);
+
+        Store duplicateTarget = store();
+        duplicateTarget.setId(52);
+        duplicateTarget.setSlug("store");
+        Store duplicateExisting = store();
+        duplicateExisting.setId(53);
+        duplicateExisting.setSlug("store");
+        when(storeRepository.findBySlug("store")).thenReturn(Optional.of(duplicateExisting));
+        assertThatThrownBy(() -> storeService.create(duplicateTarget)).isInstanceOf(BusinessRuleException.class);
+
+        StoreDTO dto = new StoreDTO();
+        dto.setStoreName("Missing Category");
+        dto.setSlug("missing-category");
+        dto.setCategoryId(404);
+        when(categoryRepository.findById(404)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> storeService.createFromDTO(dto)).isInstanceOf(BusinessRuleException.class);
+    }
+
     private Product product() {
         Product product = new Product();
         product.setStore(store());
@@ -446,8 +631,8 @@ class CoreServiceCoverageTest {
         store.setSlug("store");
         store.setCategory(category(1, "Urban"));
         store.setPrimaryColor(PrimaryColor.ONYX_BLACK);
-        store.setSecondaryColor(SecondaryColor.OLIVE_DRAB);
-        store.setTertiaryColor(TertiaryColor.RICH_CAMEL);
+        store.setSecondaryColor(SecondaryColor.SLATE);
+        store.setTertiaryColor(TertiaryColor.RAW_GOLD);
         store.setStoreStatus(StoreStatus.ACTIVE);
         return store;
     }
@@ -517,6 +702,13 @@ class CoreServiceCoverageTest {
         dto.setGender(Gender.FEMALE);
         dto.setPhone("999999999");
         dto.setRole(role);
+        return dto;
+    }
+
+    private LoginRequestDTO login(String email, String password) {
+        LoginRequestDTO dto = new LoginRequestDTO();
+        dto.setEmail(email);
+        dto.setPassword(password);
         return dto;
     }
 }

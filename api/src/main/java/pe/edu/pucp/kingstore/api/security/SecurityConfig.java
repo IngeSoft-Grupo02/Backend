@@ -33,15 +33,17 @@ public class SecurityConfig {
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
                 .authorizeHttpRequests(auth -> auth
-                        // Endpoints públicos - no requieren token
+                        // Endpoints pÃºblicos - no requieren token
                         .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/stores/*/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/stores/*/customers/register").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll()
 
                         // Solo administradores
                         .requestMatchers("/admin/**").hasRole("SYSTEM_ADMIN")
+                        .requestMatchers("/merchant/**").hasRole("MERCHANT")
 
-                        // Todo lo demás requiere autenticación
+                        // Todo lo demÃ¡s requiere autenticaciÃ³n
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter,

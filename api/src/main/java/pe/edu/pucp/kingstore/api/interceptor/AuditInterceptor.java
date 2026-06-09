@@ -28,7 +28,7 @@ public class AuditInterceptor implements HandlerInterceptor {
                                 Object handler,
                                 Exception ex) {
 
-        // No registrar el endpoint de auditoría mismo
+        // No registrar el endpoint de auditorÃ­a mismo
         if (request.getRequestURI().contains("/admin/audit")) return;
 
         AuditLog log = new AuditLog();
@@ -47,7 +47,7 @@ public class AuditInterceptor implements HandlerInterceptor {
             }
         }
 
-        // Determinar nivel según status code
+        // Determinar nivel segÃºn status code
         if (response.getStatus() >= 500) {
             log.setLevel(AuditLevel.ERROR);
         } else if (response.getStatus() >= 400) {
@@ -56,9 +56,9 @@ public class AuditInterceptor implements HandlerInterceptor {
             log.setLevel(AuditLevel.INFO);
         }
 
-        // Descripción basada en método y endpoint
+        // DescripciÃ³n basada en mÃ©todo y endpoint
         log.setDescription(request.getMethod() + " " + request.getRequestURI()
-                + " → " + response.getStatus());
+                + " â†’ " + response.getStatus());
 
         auditLogService.save(log);
     }

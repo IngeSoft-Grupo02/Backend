@@ -30,7 +30,7 @@ public class BulkUploadController {
         this.storeRepository       = storeRepository;
     }
 
-    // ── Carga masiva ──────────────────────────────────────────────
+    // â”€â”€ Carga masiva â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> upload(
@@ -48,7 +48,7 @@ public class BulkUploadController {
         }
     }
 
-    // ── Datos existentes en BD para validación frontend ───────────
+    // â”€â”€ Datos existentes en BD para validaciÃ³n frontend â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     @GetMapping("/existing-emails")
     public ResponseEntity<List<String>> existingEmails() {
@@ -66,7 +66,7 @@ public class BulkUploadController {
         return ResponseEntity.ok(Map.of("storeNames", storeNames, "merchantEmails", merchantEmails));
     }
 
-    // ── Plantillas ────────────────────────────────────────────────
+    // â”€â”€ Plantillas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     @GetMapping("/template/merchants")
     public ResponseEntity<byte[]> templateMerchants() {
@@ -80,16 +80,16 @@ public class BulkUploadController {
 
     @GetMapping("/template/stores")
     public ResponseEntity<byte[]> templateStores() {
-        // Columnas actualizadas: se quitó colorPalette, se agregó categoryId + 3 colores individuales
+        // Columnas actualizadas: se quitÃ³ colorPalette, se agregÃ³ categoryId + 3 colores individuales
         String csv = """
                 storeName,slug,categoryId,primaryColor,secondaryColor,tertiaryColor,description,merchantEmail,logoFileName
-                Mi Tienda Urbana,mi-tienda-urbana,1,ONYX_BLACK,OLIVE_DRAB,RICH_CAMEL,Ropa urbana para jovenes,juan.perez@ejemplo.com,MiTiendaUrbana.png
+                Mi Tienda Urbana,mi-tienda-urbana,1,ONYX_BLACK,SLATE,RAW_GOLD,Ropa urbana para jovenes,juan.perez@ejemplo.com,MiTiendaUrbana.png
                 Luxe Moda,luxe-moda,2,MIDNIGHT,SAGE,RAW_GOLD,Alta costura accesible,maria.torres@ejemplo.com,
                 """;
         return csvResponse(csv, "plantilla_tiendas.csv");
     }
 
-    // ── Helpers ───────────────────────────────────────────────────
+    // â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     private boolean isEmpty(MultipartFile file) {
         return file == null || file.isEmpty();

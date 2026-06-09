@@ -7,8 +7,8 @@ import org.jasypt.encryption.pbe.StandardPBEStringEncryptor;
  * 
  * SEGURIDAD:
  * - Se utiliza para cifrar valores nuevos antes de ponerlos en application.properties
- * - Requiere la clave de encriptación como variable de entorno
- * - Nunca incluir claves en el código fuente
+ * - Requiere la clave de encriptaciÃ³n como variable de entorno
+ * - Nunca incluir claves en el cÃ³digo fuente
  * 
  * USO:
  * 1. Cargar la variable de entorno: export $(cat .env | xargs)
@@ -18,7 +18,7 @@ import org.jasypt.encryption.pbe.StandardPBEStringEncryptor;
  *      pe.edu.pucp.kingstore.util.JasyptEncryptorUtil "valor_a_cifrar"
  * 
  * EJEMPLO:
- *    java ... JasyptEncryptorUtil "mi_contraseña_nueva"
+ *    java ... JasyptEncryptorUtil "mi_contraseÃ±a_nueva"
  *    Output: Texto cifrado: ABC123DEF456...
  *    Usar en application.properties: spring.datasource.password=ENC(ABC123DEF456...)
  */
@@ -31,7 +31,7 @@ public class JasyptEncryptorUtil {
             System.out.println("\nVariable de entorno requerida: JASYPT_ENCRYPTOR_PASSWORD");
             System.out.println("\nEjemplo:");
             System.out.println("  export $(cat .env | xargs)");
-            System.out.println("  java JasyptEncryptorUtil 'mi_contraseña'");
+            System.out.println("  java JasyptEncryptorUtil 'mi_contraseÃ±a'");
             System.exit(1);
         }
 
@@ -39,7 +39,7 @@ public class JasyptEncryptorUtil {
         String encryptorPassword = System.getenv("JASYPT_ENCRYPTOR_PASSWORD");
 
         if (encryptorPassword == null || encryptorPassword.isEmpty()) {
-            System.err.println("❌ ERROR: La variable de entorno JASYPT_ENCRYPTOR_PASSWORD no está establecida");
+            System.err.println("âŒ ERROR: La variable de entorno JASYPT_ENCRYPTOR_PASSWORD no estÃ¡ establecida");
             System.err.println("\nSoluciones:");
             System.err.println("1. Crear archivo .env: cp .env.example .env");
             System.err.println("2. Cargar variables: export $(cat .env | xargs)");
@@ -52,10 +52,10 @@ public class JasyptEncryptorUtil {
         encryptor.setAlgorithm("PBEWithMD5AndTripleDES");
 
         String encryptedText = encryptor.encrypt(textToCipher);
-        System.out.println("\n✓ Encriptación exitosa");
+        System.out.println("\nâœ“ EncriptaciÃ³n exitosa");
         System.out.println("Texto original: " + textToCipher);
         System.out.println("Texto cifrado: " + encryptedText);
-        System.out.println("\n📝 Usar en application.properties:");
+        System.out.println("\nðŸ“ Usar en application.properties:");
         System.out.println("spring.datasource.password=ENC(" + encryptedText + ")");
     }
 }

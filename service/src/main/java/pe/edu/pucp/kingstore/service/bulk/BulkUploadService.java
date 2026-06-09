@@ -59,7 +59,7 @@ public class BulkUploadService {
         this.storageService        = storageService;
     }
 
-    // ── Punto de entrada ──────────────────────────────────────────
+    // Ã¢â€â‚¬Ã¢â€â‚¬ Punto de entrada Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
     @Transactional
     public BulkUploadResponseDTO process(
@@ -76,7 +76,7 @@ public class BulkUploadService {
         return response;
     }
 
-    // ── Comerciantes ──────────────────────────────────────────────
+    // Ã¢â€â‚¬Ã¢â€â‚¬ Comerciantes Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
     private void processMerchants(MultipartFile file, BulkUploadResponseDTO response) throws IOException {
         List<BulkMerchantRowDTO> rows = parseMerchantCsv(file);
@@ -110,7 +110,7 @@ public class BulkUploadService {
                     "VAL_EMAIL", BulkIncidenceDTO.IncidenceType.ERROR, "Email es obligatorio", filename));
         } else if (!row.getEmail().matches("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")) {
             resp.addIncidence(incidence(BulkIncidenceDTO.IncidenceBlock.MERCHANTS, row.getRowNumber(),
-                    "VAL_EMAIL", BulkIncidenceDTO.IncidenceType.ERROR, "Formato de email inválido: " + row.getEmail(), filename));
+                    "VAL_EMAIL", BulkIncidenceDTO.IncidenceType.ERROR, "Formato de email invÃƒÂ¡lido: " + row.getEmail(), filename));
         } else if (userAccountRepository.findByEmail(row.getEmail().trim().toLowerCase()).isPresent()) {
             resp.addIncidence(incidence(BulkIncidenceDTO.IncidenceBlock.MERCHANTS, row.getRowNumber(),
                     "DUPLICATE", BulkIncidenceDTO.IncidenceType.ERROR, "Email ya registrado: " + row.getEmail(), filename));
@@ -126,17 +126,17 @@ public class BulkUploadService {
 
         if (row.getRuc() == null || !row.getRuc().matches("\\d{11}"))
             resp.addIncidence(incidence(BulkIncidenceDTO.IncidenceBlock.MERCHANTS, row.getRowNumber(),
-                    "VAL_RUC", BulkIncidenceDTO.IncidenceType.ERROR, "RUC debe tener 11 dígitos numéricos", filename));
+                    "VAL_RUC", BulkIncidenceDTO.IncidenceType.ERROR, "RUC debe tener 11 dÃƒÂ­gitos numÃƒÂ©ricos", filename));
 
         if (!isValidEnum(DocumentType.class, row.getDocumentType()))
             resp.addIncidence(incidence(BulkIncidenceDTO.IncidenceBlock.MERCHANTS, row.getRowNumber(),
                     "VAL_DOCTYPE", BulkIncidenceDTO.IncidenceType.ERROR,
-                    "documentType inválido. Valores: DNI, PASSPORT, FOREIGN_ID_CARD", filename));
+                    "documentType invÃƒÂ¡lido. Valores: DNI, PASSPORT, FOREIGN_ID_CARD", filename));
 
         if (!isValidEnum(Gender.class, row.getGender()))
             resp.addIncidence(incidence(BulkIncidenceDTO.IncidenceBlock.MERCHANTS, row.getRowNumber(),
                     "VAL_GENDER", BulkIncidenceDTO.IncidenceType.ERROR,
-                    "gender inválido. Valores: MALE, FEMALE, NOT_SPECIFIED", filename));
+                    "gender invÃƒÂ¡lido. Valores: MALE, FEMALE, NOT_SPECIFIED", filename));
 
         try {
             if (row.getBirthDate() != null && !row.getBirthDate().isBlank())
@@ -147,7 +147,7 @@ public class BulkUploadService {
         }
     }
 
-    // ── Tiendas ───────────────────────────────────────────────────
+    // Ã¢â€â‚¬Ã¢â€â‚¬ Tiendas Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
     private void processStores(MultipartFile file, BulkUploadResponseDTO response) throws IOException {
         List<BulkStoreRowDTO> rows = parseStoreCsv(file);
@@ -194,7 +194,7 @@ public class BulkUploadService {
                     "DUPLICATE", BulkIncidenceDTO.IncidenceType.ERROR, "Slug ya registrado: " + row.getSlug(), filename));
         }
 
-        // categoryId — obligatorio y debe existir en BD
+        // categoryId Ã¢â‚¬â€ obligatorio y debe existir en BD
         if (row.getCategoryId() == null || row.getCategoryId().isBlank()) {
             resp.addIncidence(incidence(BulkIncidenceDTO.IncidenceBlock.STORES, row.getRowNumber(),
                     "VAL_CATEGORY", BulkIncidenceDTO.IncidenceType.ERROR, "categoryId es obligatorio", filename));
@@ -204,12 +204,12 @@ public class BulkUploadService {
                 if (categoryRepository.findById(catId).isEmpty()) {
                     resp.addIncidence(incidence(BulkIncidenceDTO.IncidenceBlock.STORES, row.getRowNumber(),
                             "REF_NOT_FOUND", BulkIncidenceDTO.IncidenceType.ERROR,
-                            "No existe categoría con ID: " + row.getCategoryId(), filename));
+                            "No existe categorÃƒÂ­a con ID: " + row.getCategoryId(), filename));
                 }
             } catch (NumberFormatException e) {
                 resp.addIncidence(incidence(BulkIncidenceDTO.IncidenceBlock.STORES, row.getRowNumber(),
                         "VAL_CATEGORY", BulkIncidenceDTO.IncidenceType.ERROR,
-                        "categoryId debe ser un número entero", filename));
+                        "categoryId debe ser un nÃƒÂºmero entero", filename));
             }
         }
 
@@ -217,21 +217,21 @@ public class BulkUploadService {
         if (!isValidEnum(PrimaryColor.class, row.getPrimaryColor()))
             resp.addIncidence(incidence(BulkIncidenceDTO.IncidenceBlock.STORES, row.getRowNumber(),
                     "VAL_PRIMARY_COLOR", BulkIncidenceDTO.IncidenceType.ERROR,
-                    "primaryColor inválido. Valores: ONYX_BLACK, DEEP_ZINC, MIDNIGHT, CHARCOAL, ESPRESSO", filename));
+                    "primaryColor invalido. Valores: " + enumValues(PrimaryColor.class), filename));
 
         // secondaryColor
         if (!isValidEnum(SecondaryColor.class, row.getSecondaryColor()))
             resp.addIncidence(incidence(BulkIncidenceDTO.IncidenceBlock.STORES, row.getRowNumber(),
                     "VAL_SECONDARY_COLOR", BulkIncidenceDTO.IncidenceType.ERROR,
-                    "secondaryColor inválido. Valores: OLIVE_DRAB, SAGE, SLATE, TERRA, DUSTY_RED", filename));
+                    "secondaryColor invalido. Valores: " + enumValues(SecondaryColor.class), filename));
 
         // tertiaryColor
         if (!isValidEnum(TertiaryColor.class, row.getTertiaryColor()))
             resp.addIncidence(incidence(BulkIncidenceDTO.IncidenceBlock.STORES, row.getRowNumber(),
                     "VAL_TERTIARY_COLOR", BulkIncidenceDTO.IncidenceType.ERROR,
-                    "tertiaryColor inválido. Valores: RICH_CAMEL, RAW_GOLD, SILVER_MIST, COPPER, STONE", filename));
+                    "tertiaryColor invalido. Valores: " + enumValues(TertiaryColor.class), filename));
 
-        // merchantEmail — obligatorio y debe existir en BD
+        // merchantEmail Ã¢â‚¬â€ obligatorio y debe existir en BD
         if (row.getMerchantEmail() == null || row.getMerchantEmail().isBlank()) {
             resp.addIncidence(incidence(BulkIncidenceDTO.IncidenceBlock.STORES, row.getRowNumber(),
                     "VAL_MERCHANT", BulkIncidenceDTO.IncidenceType.ERROR,
@@ -243,7 +243,7 @@ public class BulkUploadService {
         }
     }
 
-    // ── Logos ─────────────────────────────────────────────────────
+    // Ã¢â€â‚¬Ã¢â€â‚¬ Logos Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
     private void processLogos(MultipartFile zipFile, BulkUploadResponseDTO response) throws IOException {
         int uploaded = 0;
@@ -259,7 +259,7 @@ public class BulkUploadService {
                     response.addIncidence(BulkIncidenceDTO.builder()
                             .block(BulkIncidenceDTO.IncidenceBlock.IMAGES).row(0)
                             .code("INVALID_EXT").type(BulkIncidenceDTO.IncidenceType.WARNING)
-                            .detail("Extensión no permitida: " + entryName + ". Solo: jpg, jpeg, png, webp")
+                            .detail("ExtensiÃƒÂ³n no permitida: " + entryName + ". Solo: jpg, jpeg, png, webp")
                             .origin(zipFile.getOriginalFilename()).build());
                     zis.closeEntry(); continue;
                 }
@@ -303,7 +303,7 @@ public class BulkUploadService {
         response.setLogosUploaded(uploaded);
     }
 
-    // ── Parsers CSV ───────────────────────────────────────────────
+    // Ã¢â€â‚¬Ã¢â€â‚¬ Parsers CSV Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
     private List<BulkMerchantRowDTO> parseMerchantCsv(MultipartFile file) throws IOException {
         List<BulkMerchantRowDTO> result = new ArrayList<>();
@@ -367,7 +367,7 @@ public class BulkUploadService {
         return result;
     }
 
-    // ── Conversores ───────────────────────────────────────────────
+    // Ã¢â€â‚¬Ã¢â€â‚¬ Conversores Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
     private CreateUserDTO toCreateUserDTO(BulkMerchantRowDTO row) {
         CreateUserDTO dto = new CreateUserDTO();
@@ -406,7 +406,7 @@ public class BulkUploadService {
         return dto;
     }
 
-    // ── Utilidades ────────────────────────────────────────────────
+    // Ã¢â€â‚¬Ã¢â€â‚¬ Utilidades Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
     private BulkIncidenceDTO incidence(BulkIncidenceDTO.IncidenceBlock block, int row,
                                        String code, BulkIncidenceDTO.IncidenceType type,
@@ -417,8 +417,15 @@ public class BulkUploadService {
 
     private <E extends Enum<E>> boolean isValidEnum(Class<E> clazz, String value) {
         if (value == null || value.isBlank()) return false;
-        try { Enum.valueOf(clazz, value.toUpperCase()); return true; }
+        try { Enum.valueOf(clazz, value.trim().toUpperCase()); return true; }
         catch (IllegalArgumentException e) { return false; }
+    }
+
+    private String enumValues(Class<? extends Enum<?>> enumClass) {
+        return Arrays.stream(enumClass.getEnumConstants())
+                .map(Enum::name)
+                .toList()
+                .toString();
     }
 
     private String getExtension(String filename) {
@@ -452,3 +459,4 @@ public class BulkUploadService {
         return val.isEmpty() ? null : val;
     }
 }
+

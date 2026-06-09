@@ -5,7 +5,6 @@ import pe.edu.pucp.kingstore.domain.model.product.Discount;
 import pe.edu.pucp.kingstore.domain.model.product.Product;
 import pe.edu.pucp.kingstore.domain.model.product.ProductVariant;
 import pe.edu.pucp.kingstore.domain.model.product.enums.Color;
-import pe.edu.pucp.kingstore.domain.model.product.enums.Material;
 import pe.edu.pucp.kingstore.domain.model.product.enums.Size;
 import pe.edu.pucp.kingstore.domain.model.product.enums.VolumeType;
 import pe.edu.pucp.kingstore.domain.model.store.Store;
@@ -31,7 +30,6 @@ public class ProductTestDataUtil {
         ));
         product.setCostPrice(55.4);
         product.setBasePrice(70.4);
-        product.setMaterial(Material.SYNTHETIC);
         product.setDescription("test product A");
 
         //ProductVariant List
@@ -67,7 +65,6 @@ public class ProductTestDataUtil {
         ));
         product.setCostPrice(45.2);
         product.setBasePrice(60.8);
-        product.setMaterial(Material.COTTON);
         product.setDescription("test product B");
 
         //ProductVariant List
@@ -104,7 +101,6 @@ public class ProductTestDataUtil {
         ));
         product.setCostPrice(95.2);
         product.setBasePrice(100.8);
-        product.setMaterial(Material.COTTON);
         product.setDescription("test product C");
 
         //ProductVariant List
@@ -136,8 +132,8 @@ public class ProductTestDataUtil {
         store.setSlug("ripley");
         store.setCategory(category(1));
         store.setPrimaryColor(PrimaryColor.ONYX_BLACK);
-        store.setSecondaryColor(SecondaryColor.OLIVE_DRAB);
-        store.setTertiaryColor(TertiaryColor.RICH_CAMEL);
+        store.setSecondaryColor(SecondaryColor.SLATE);
+        store.setTertiaryColor(TertiaryColor.RAW_GOLD);
         store.setStoreStatus(StoreStatus.ACTIVE);
         return store;
     }
@@ -147,9 +143,9 @@ public class ProductTestDataUtil {
         store.setStoreName("Saga");
         store.setSlug("saga");
         store.setCategory(category(2));
-        store.setPrimaryColor(PrimaryColor.DEEP_ZINC);
+        store.setPrimaryColor(PrimaryColor.ALABASTER);
         store.setSecondaryColor(SecondaryColor.SAGE);
-        store.setTertiaryColor(TertiaryColor.SILVER_MIST);
+        store.setTertiaryColor(TertiaryColor.COPPER);
         store.setStoreStatus(StoreStatus.ACTIVE);
         return store;
     }

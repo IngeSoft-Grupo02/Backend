@@ -18,14 +18,19 @@ public class JwtUtil {
     private static final long EXPIRATION_CUSTOMER_MS = 60 * 60 * 1000L;
 
     private SecretKey getSigningKey(){
-        return Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8));
+        String secret = System.getenv("JWT_SECRET");
+        if (secret == null || secret.isBlank()) {
+            secret = SECRET;
+        }
+        return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
 
     }
 
     public String generateToken(Integer userId, String email, Role role, String storeslug){
         long expiration = switch (role){
             case CUSTOMER -> EXPIRATION_CUSTOMER_MS;
-            default -> EXPIRATION_ADMIN_MS;
+            case MERCHANT -> EXPIRATION_MERCHANT_MS;
+            case SYSTEM_ADMIN -> EXPIRATION_ADMIN_MS;
         };
 
         return Jwts.builder()

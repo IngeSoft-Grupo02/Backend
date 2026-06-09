@@ -5,11 +5,11 @@ import lombok.Data;
 /**
  * Representa una fila del CSV de carga masiva de comerciantes.
  *
- * Columnas esperadas (exactas, sensibles a mayúsculas):
+ * Columnas esperadas (exactas, sensibles a mayÃºsculas):
  *   email, password, firstName, paternalSurname, maternalSurname,
  *   documentType (DNI|PASSPORT|FOREIGN_ID_CARD),
  *   documentNumber, birthDate (yyyy-MM-dd), phone, gender (MALE|FEMALE|NOT_SPECIFIED),
- *   ruc, storeId (opcional – id numérico de tienda ya existente)
+ *   ruc, storeId (opcional â€“ id numÃ©rico de tienda ya existente)
  */
 @Data
 public class BulkMerchantRowDTO {

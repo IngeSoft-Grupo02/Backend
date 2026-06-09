@@ -12,7 +12,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 
 /**
- * Implementación LOCAL de StorageService.
+ * ImplementaciÃ³n LOCAL de StorageService.
  * Activa solo con el perfil Spring "local" (desarrollo sin AWS).
  *
  * Guarda el archivo en disco dentro de upload-local/ y devuelve
@@ -21,10 +21,10 @@ import java.nio.file.Paths;
  * Esto permite que BulkUploadService funcione exactamente igual
  * sin necesidad de credenciales AWS.
  *
- * ACTIVACIÓN:
- *   En application-local.properties ya está configurado:
+ * ACTIVACIÃ“N:
+ *   En application-local.properties ya estÃ¡ configurado:
  *     spring.profiles.active=local
- *   O al arrancar IntelliJ: Edit Configurations → Active profiles: local
+ *   O al arrancar IntelliJ: Edit Configurations â†’ Active profiles: local
  */
 @Service
 @Profile("local")
@@ -46,7 +46,7 @@ public class LocalStorageService implements StorageService {
             Files.write(target, bytes);
 
             String url = baseUrl + "/" + key;
-            log.info("[LOCAL-STORAGE] Archivo guardado: {} → {}", target.toAbsolutePath(), url);
+            log.info("[LOCAL-STORAGE] Archivo guardado: {} â†’ {}", target.toAbsolutePath(), url);
             return url;
 
         } catch (IOException e) {

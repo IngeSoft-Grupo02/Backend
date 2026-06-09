@@ -11,6 +11,8 @@ import pe.edu.pucp.kingstore.service.security.JwtUtil;
 import pe.edu.pucp.kingstore.service.store.StoreService;
 import pe.edu.pucp.kingstore.service.user.UserAccountService;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/auth")
 public class AuthController {
@@ -33,12 +35,12 @@ public class AuthController {
             // Clientes no pueden usar este endpoint
             if (result.getRole() == Role.CUSTOMER) {
                 return ResponseEntity.status(403)
-                        .body("Customers must login through their store endpoint");
+                        .body(authError("ROLE_NOT_ALLOWED", "Esta cuenta no pertenece al panel de comerciantes."));
             }
             String storeSlug = null;
             if (result.getRole() == Role.MERCHANT){
-                storeSlug = storeService.findActiveSlugByUserAccountId(result.getId())
-                        .orElseThrow(()-> new BusinessRuleException("Merchant has no active store assigned"));
+                storeSlug = storeService.findLoginSlugByUserAccountId(result.getId())
+                        .orElseThrow(()-> new BusinessRuleException("MERCHANT_NO_STORE"));
                 result.setStoreSlug(storeSlug);
             }
             String token = jwtUtil.generateToken(
@@ -52,7 +54,33 @@ public class AuthController {
             return ResponseEntity.ok(result);
 
         } catch (BusinessRuleException e) {
-            return ResponseEntity.status(401).body(e.getMessage());
+            return ResponseEntity.status(authStatus(e.getMessage())).body(authError(e.getMessage(), authMessage(e.getMessage())));
         }
     }
+
+    private int authStatus(String code) {
+        return switch (code) {
+            case "ACCOUNT_INACTIVE", "ROLE_NOT_ALLOWED", "ROLE_NOT_ASSIGNED", "MERCHANT_NO_STORE" -> 403;
+            default -> 401;
+        };
+    }
+
+    private String authMessage(String code) {
+        return switch (code) {
+            case "ACCOUNT_NOT_FOUND" -> "No existe una cuenta registrada con ese correo.";
+            case "ACCOUNT_INACTIVE" -> "Esta cuenta estÃƒÂ¡ inactiva. Contacta al administrador.";
+            case "BAD_CREDENTIALS" -> "La contraseÃƒÂ±a ingresada es incorrecta.";
+            case "ROLE_NOT_ALLOWED" -> "Esta cuenta no pertenece al panel de comerciantes.";
+            case "ROLE_NOT_ASSIGNED" -> "Esta cuenta no tiene un rol asignado.";
+            case "MERCHANT_NO_STORE" -> "Tu cuenta de comerciante no tiene una tienda asignada.";
+            case "Email is required" -> "Ingresa tu correo electrÃƒÂ³nico.";
+            case "Password is required" -> "Ingresa tu contraseÃƒÂ±a.";
+            default -> "No se pudo iniciar sesiÃƒÂ³n. Revisa tus credenciales.";
+        };
+    }
+
+    private Map<String, String> authError(String code, String message) {
+        return Map.of("code", code, "message", message);
+    }
 }
+

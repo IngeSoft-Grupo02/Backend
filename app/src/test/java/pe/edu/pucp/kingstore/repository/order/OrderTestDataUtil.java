@@ -10,7 +10,6 @@ import pe.edu.pucp.kingstore.domain.model.order.enums.OrderStatus;
 import pe.edu.pucp.kingstore.domain.model.product.Product;
 import pe.edu.pucp.kingstore.domain.model.product.ProductVariant;
 import pe.edu.pucp.kingstore.domain.model.product.enums.Color;
-import pe.edu.pucp.kingstore.domain.model.product.enums.Material;
 import pe.edu.pucp.kingstore.domain.model.product.enums.Size;
 import pe.edu.pucp.kingstore.domain.model.quotation.Quotation;
 import pe.edu.pucp.kingstore.domain.model.quotation.QuotationItem;
@@ -379,7 +378,6 @@ public class OrderTestDataUtil {
         ));
         product.setCostPrice(55.4);
         product.setBasePrice(70.4);
-        product.setMaterial(Material.SYNTHETIC);
 
         //ProductVariant List
         ProductVariant v1 = createTestProductVariantA();
@@ -401,8 +399,8 @@ public class OrderTestDataUtil {
         store.setSlug("ripley");
         store.setCategory(category(1));
         store.setPrimaryColor(PrimaryColor.ONYX_BLACK);
-        store.setSecondaryColor(SecondaryColor.OLIVE_DRAB);
-        store.setTertiaryColor(TertiaryColor.RICH_CAMEL);
+        store.setSecondaryColor(SecondaryColor.SLATE);
+        store.setTertiaryColor(TertiaryColor.RAW_GOLD);
         store.setStoreStatus(StoreStatus.ACTIVE);
         return store;
     }

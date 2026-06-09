@@ -3,15 +3,15 @@ package pe.edu.pucp.kingstore.service.storage;
 /**
  * Contrato de almacenamiento de archivos.
  * Dos implementaciones:
- *   - LocalStorageService  → perfil "local"  (guarda en disco, sin AWS)
- *   - S3StorageService     → perfil "prod"   (sube a S3)
+ *   - LocalStorageService  â†’ perfil "local"  (guarda en disco, sin AWS)
+ *   - S3StorageService     â†’ perfil "prod"   (sube a S3)
  *
- * BulkUploadService depende de esta interfaz, nunca de la implementación concreta.
+ * BulkUploadService depende de esta interfaz, nunca de la implementaciÃ³n concreta.
  */
 public interface StorageService {
 
     /**
-     * Sube bytes y devuelve la URL pública (o local) del archivo.
+     * Sube bytes y devuelve la URL pÃºblica (o local) del archivo.
      *
      * @param key         identificador del objeto, ej: "logos/ripley.png"
      * @param bytes       contenido del archivo

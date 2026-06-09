@@ -13,12 +13,12 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * Configuración de Jasypt para desencriptación automática de propiedades sensibles.
+ * ConfiguraciÃ³n de Jasypt para desencriptaciÃ³n automÃ¡tica de propiedades sensibles.
  * 
  * SEGURIDAD:
- * - La clave de encriptación se puede obtener de la variable de entorno JASYPT_ENCRYPTOR_PASSWORD
- * - En pruebas locales también puede cargarse desde el archivo .env
- * - Esta clave NUNCA debe estar en el código fuente ni en Git
+ * - La clave de encriptaciÃ³n se puede obtener de la variable de entorno JASYPT_ENCRYPTOR_PASSWORD
+ * - En pruebas locales tambiÃ©n puede cargarse desde el archivo .env
+ * - Esta clave NUNCA debe estar en el cÃ³digo fuente ni en Git
  * - Ver .env.example para estructura del archivo .env
  * 
  * USO:
@@ -37,10 +37,10 @@ public class JasyptConfig {
 
     /**
      * Configura el encryptor de Jasypt con la clave de la variable de entorno.
-     * La desencriptación ocurre automáticamente al inyectar propiedades con ENC(...).
+     * La desencriptaciÃ³n ocurre automÃ¡ticamente al inyectar propiedades con ENC(...).
      * 
      * @return PooledPBEStringEncryptor configurado
-     * @throws IllegalArgumentException si JASYPT_ENCRYPTOR_PASSWORD no está definida
+     * @throws IllegalArgumentException si JASYPT_ENCRYPTOR_PASSWORD no estÃ¡ definida
      */
     @Bean("jasyptStringEncryptor")
     public PooledPBEStringEncryptor jasyptStringEncryptor() {
@@ -54,7 +54,7 @@ public class JasyptConfig {
                     "Soluciones:\n" +
                     "1. Crear archivo .env con: JASYPT_ENCRYPTOR_PASSWORD=tu_clave\n" +
                     "2. Ejecutar: export $(cat .env | xargs)\n" +
-                    "3. O en línea de comandos: JASYPT_ENCRYPTOR_PASSWORD=tu_clave ./mvnw spring-boot:run"
+                    "3. O en lÃ­nea de comandos: JASYPT_ENCRYPTOR_PASSWORD=tu_clave ./mvnw spring-boot:run"
             );
         }
 
