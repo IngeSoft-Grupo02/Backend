@@ -284,7 +284,7 @@ class ControllerCoverageTest {
         LoginRequestDTO merchantRequest = new LoginRequestDTO();
         LoginResponseDTO merchantLogin = login(2, "merchant@test.com", Role.MERCHANT);
         when(userAccountService.authenticate(merchantRequest)).thenReturn(merchantLogin);
-        when(storeService.findActiveSlugByUserAccountId(2)).thenReturn(Optional.of("merchant-store"));
+        when(storeService.findLoginSlugByUserAccountId(2)).thenReturn(Optional.of("merchant-store"));
         when(jwtUtil.generateToken(2, "merchant@test.com", Role.MERCHANT, "merchant-store")).thenReturn("merchant-token");
         LoginResponseDTO merchantBody = (LoginResponseDTO) authController.login(merchantRequest).getBody();
         assertThat(merchantBody.getToken()).isEqualTo("merchant-token");
@@ -315,6 +315,50 @@ class ControllerCoverageTest {
         LoginRequestDTO badCustomerRequest = new LoginRequestDTO();
         when(userAccountService.authenticateCustomer("store", badCustomerRequest)).thenThrow(new BusinessRuleException("bad"));
         assertThat(customerController.login("store", badCustomerRequest).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    void adminControllersMapRemainingNotFoundAndBusinessRuleBranches() {
+        StoreCategoryService categoryService = mock(StoreCategoryService.class);
+        StoreCategoryController categoryController = new StoreCategoryController(categoryService);
+        StoreCategoryDTO categoryDTO = new StoreCategoryDTO();
+        categoryDTO.setStoreCategoryName("Calzado");
+
+        when(categoryService.createFromDTO(categoryDTO)).thenThrow(new BusinessRuleException("bad category"));
+        assertThat(categoryController.create(categoryDTO).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        when(categoryService.updateFromDTO(404, categoryDTO)).thenThrow(new ResourceNotFoundException("Category", 404));
+        assertThat(categoryController.update(404, categoryDTO).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        when(categoryService.updateFromDTO(2, categoryDTO)).thenThrow(new BusinessRuleException("bad update"));
+        assertThat(categoryController.update(2, categoryDTO).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        doThrow(new ResourceNotFoundException("Category", 404)).when(categoryService).delete(404);
+        assertThat(categoryController.delete(404).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        when(categoryService.deactivate(404)).thenThrow(new ResourceNotFoundException("Category", 404));
+        assertThat(categoryController.deactivate(404).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        when(categoryService.reactivate(404)).thenThrow(new ResourceNotFoundException("Category", 404));
+        assertThat(categoryController.reactivate(404).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+
+        StoreService storeService = mock(StoreService.class);
+        StoreCategoryRepository categoryRepository = mock(StoreCategoryRepository.class);
+        StoreController storeController = new StoreController(storeService, merchantRepository, categoryRepository);
+        StoreDTO storeDTO = new StoreDTO();
+        storeDTO.setStoreName("Updated");
+        Store store = store(7, "Store", merchant(7, account(7, "merchant7@test.com")));
+
+        when(storeService.getById(404)).thenThrow(new ResourceNotFoundException("Store", 404));
+        assertThat(storeController.getById(404).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        when(storeService.getById(7)).thenReturn(store);
+        when(storeService.update(eq(7), any(Store.class))).thenThrow(new BusinessRuleException("bad store"));
+        assertThat(storeController.update(7, storeDTO).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        when(storeService.suspend(404)).thenThrow(new ResourceNotFoundException("Store", 404));
+        assertThat(storeController.suspend(404).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        when(storeService.deactivate(404)).thenThrow(new ResourceNotFoundException("Store", 404));
+        assertThat(storeController.deactivate(404).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        when(storeService.deactivate(405)).thenThrow(new BusinessRuleException("bad deactivate"));
+        assertThat(storeController.deactivate(405).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        when(storeService.reactivate(404)).thenThrow(new ResourceNotFoundException("Store", 404));
+        assertThat(storeController.reactivate(404).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        when(storeService.reactivate(405)).thenThrow(new BusinessRuleException("bad reactivate"));
+        assertThat(storeController.reactivate(405).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 
     private static UserAccount account(Integer id, String email) {
@@ -381,8 +425,8 @@ class ControllerCoverageTest {
         store.setSlug(name.toLowerCase().replace(" ", "-"));
         store.setDescription("description");
         store.setPrimaryColor(PrimaryColor.ONYX_BLACK);
-        store.setSecondaryColor(SecondaryColor.OLIVE_DRAB);
-        store.setTertiaryColor(TertiaryColor.RICH_CAMEL);
+        store.setSecondaryColor(SecondaryColor.SLATE);
+        store.setTertiaryColor(TertiaryColor.RAW_GOLD);
         store.setStoreStatus(StoreStatus.ACTIVE);
         store.setMerchant(merchant);
         return store;

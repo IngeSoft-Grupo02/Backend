@@ -8,7 +8,7 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 /**
- * Implementación PRODUCCIÓN de StorageService.
+ * ImplementaciÃ³n PRODUCCIÃ“N de StorageService.
  * Activa solo con el perfil Spring "prod".
  * Sube archivos al bucket S3 configurado en application-prod.properties.
  */

@@ -3,8 +3,7 @@ package pe.edu.pucp.kingstore.domain.dto.product;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import pe.edu.pucp.kingstore.domain.dto.BaseEntityDTO;
-import pe.edu.pucp.kingstore.domain.dto.store.StoreDTO;
-import pe.edu.pucp.kingstore.domain.model.product.enums.Material;
+import pe.edu.pucp.kingstore.domain.model.product.enums.ProductStatus;
 
 import java.util.List;
 
@@ -16,7 +15,7 @@ public class ProductDTO extends BaseEntityDTO {
     private List<String> imageUrls;
     private double costPrice;
     private double basePrice;
-    private Material material;
+    private ProductStatus status;
     private List <ProductVariantDTO> variants;
     private String description;
 }

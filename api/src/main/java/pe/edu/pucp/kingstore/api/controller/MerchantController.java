@@ -1,6 +1,7 @@
 package pe.edu.pucp.kingstore.api.controller;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -12,7 +13,7 @@ import pe.edu.pucp.kingstore.domain.model.product.Discount;
 import pe.edu.pucp.kingstore.domain.model.product.Product;
 import pe.edu.pucp.kingstore.domain.model.product.ProductVariant;
 import pe.edu.pucp.kingstore.domain.model.product.enums.Color;
-import pe.edu.pucp.kingstore.domain.model.product.enums.Material;
+import pe.edu.pucp.kingstore.domain.model.product.enums.ProductStatus;
 import pe.edu.pucp.kingstore.domain.model.product.enums.VolumeType;
 import pe.edu.pucp.kingstore.domain.model.quotation.Quotation;
 import pe.edu.pucp.kingstore.domain.model.quotation.QuotationItem;
@@ -263,7 +264,7 @@ public class MerchantController {
             long pendingQuotes = quotations.stream()
                     .filter(quotation -> quotation.getStatus() == QuotationStatus.PENDING)
                     .count();
-            long drafts = products.stream().filter(product -> !Boolean.TRUE.equals(product.getActive())).count();
+            long drafts = products.stream().filter(product -> product.getStatus() == ProductStatus.DRAFT).count();
             List<RecentOrderResponse> recentOrders = orders.stream()
                     .sorted(Comparator.comparing(Order::getCreatedAt,
                             Comparator.nullsLast(Comparator.reverseOrder())))
@@ -338,7 +339,6 @@ public class MerchantController {
             Product product = new Product();
             product.setStore(store);
             applyProductRequest(product, request);
-            product.setActive(request.active() == null || request.active());
             return ResponseEntity.status(201).body(toProductResponse(productRepository.save(product)));
         });
     }
@@ -351,9 +351,6 @@ public class MerchantController {
         return handle(() -> {
             Product product = productInMerchantStore(authentication, id, storeId);
             applyProductRequest(product, request);
-            if (request.active() != null) {
-                product.setActive(request.active());
-            }
             return ResponseEntity.ok(toProductResponse(productRepository.save(product)));
         });
     }
@@ -369,6 +366,7 @@ public class MerchantController {
                 throw new BusinessRuleException("Active flag is required");
             }
             product.setActive(request.active());
+            product.setStatus(Boolean.TRUE.equals(request.active()) ? ProductStatus.ACTIVE : ProductStatus.INACTIVE);
             return ResponseEntity.ok(toProductResponse(productRepository.save(product)));
         });
     }
@@ -379,9 +377,8 @@ public class MerchantController {
                                            @RequestParam(required = false) Integer storeId) {
         return handle(() -> {
             Product product = productInMerchantStore(authentication, id, storeId);
-            product.setActive(false);
-            productRepository.save(product);
-            return ResponseEntity.ok(Map.of("message", "Product deactivated successfully"));
+            productRepository.delete(product);
+            return ResponseEntity.ok(Map.of("message", "Product deleted successfully"));
         });
     }
 
@@ -528,6 +525,10 @@ public class MerchantController {
             return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
         } catch (BusinessRuleException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (DataIntegrityViolationException e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "The product cannot be deleted because it is referenced by orders, quotations, carts or discounts"
+            ));
         } catch (IOException e) {
             return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
         }
@@ -669,19 +670,34 @@ public class MerchantController {
         if (request == null) {
             throw new BusinessRuleException("Product request is required");
         }
-        requireText(request.name(), "Product name");
-        if (request.price() == null || request.price() <= 0) {
+        ProductStatus status = resolveProductStatus(request);
+        boolean isDraft = status == ProductStatus.DRAFT;
+
+        if (!isDraft) {
+            requireText(request.name(), "Product name");
+        }
+        if (!isDraft && (request.price() == null || request.price() <= 0)) {
             throw new BusinessRuleException("Product price must be positive");
         }
 
-        product.setName(request.name().trim());
+        product.setName(blankToNull(request.name()) == null ? "Sin nombre" : request.name().trim());
         product.setDescription(blankToNull(request.description()));
-        product.setBasePrice(request.price());
+        product.setBasePrice(request.price() == null ? 0 : request.price());
         product.setCostPrice(request.costPrice() == null ? 0 : request.costPrice());
-        product.setMaterial(request.material() == null ? Material.COTTON : request.material());
-        product.setImageUrls(productImageUrls(request.imageUrls()));
-        product.setAttributes(new ArrayList<>());
-        product.setVariants(toVariants(request.variants()));
+        replaceCollection(product.getImageUrls(), productImageUrls(request.imageUrls()), product::setImageUrls);
+        replaceCollection(product.getAttributes(), List.of(), product::setAttributes);
+        replaceCollection(product.getVariants(), toVariants(request.variants()), product::setVariants);
+        product.setStatus(status);
+        product.setActive(status == ProductStatus.ACTIVE);
+    }
+
+    private <T> void replaceCollection(List<T> current, List<T> next, java.util.function.Consumer<List<T>> setter) {
+        if (current == null) {
+            setter.accept(new ArrayList<>(next));
+            return;
+        }
+        current.clear();
+        current.addAll(next);
     }
 
     private List<String> productImageUrls(List<String> imageUrls) {
@@ -692,6 +708,7 @@ public class MerchantController {
                 .filter(Objects::nonNull)
                 .map(String::trim)
                 .filter(url -> !url.isBlank())
+                .distinct()
                 .limit(MAX_PRODUCT_IMAGES)
                 .toList();
 
@@ -815,10 +832,12 @@ public class MerchantController {
             product.setDescription(first.description());
             product.setBasePrice(first.price() == null ? DEFAULT_BULK_PRODUCT_PRICE : first.price());
             product.setCostPrice(0);
-            product.setMaterial(Material.COTTON);
             product.setImageUrls(imageUrls);
             product.setAttributes(new ArrayList<>());
-            product.setActive(true);
+            product.setStatus(productRows.stream().map(BulkProductRow::stock).filter(Objects::nonNull).mapToInt(Integer::intValue).sum() == 0
+                    ? ProductStatus.OUT_OF_STOCK
+                    : ProductStatus.ACTIVE);
+            product.setActive(product.getStatus() == ProductStatus.ACTIVE);
             product.setVariants(productRows.stream().map(row -> {
                 ProductVariant variant = new ProductVariant();
                 variant.setSize(row.size());
@@ -979,7 +998,6 @@ public class MerchantController {
                 product.getDescription(),
                 product.getBasePrice(),
                 product.getCostPrice(),
-                product.getMaterial(),
                 product.getImageUrls() == null ? List.of() : product.getImageUrls(),
                 product.getActive(),
                 productStatusLabel(product, stock),
@@ -1087,13 +1105,45 @@ public class MerchantController {
     }
 
     private String productStatusLabel(Product product, int stock) {
-        if (!Boolean.TRUE.equals(product.getActive())) {
-            return "Inactivo";
+        ProductStatus status = product.getStatus();
+        if (status == null) {
+            status = !Boolean.TRUE.equals(product.getActive())
+                    ? ProductStatus.INACTIVE
+                    : stock == 0 ? ProductStatus.OUT_OF_STOCK : ProductStatus.ACTIVE;
         }
-        if (stock == 0) {
-            return "Sin stock";
+        return switch (status) {
+            case DRAFT -> "Borrador";
+            case OUT_OF_STOCK -> "Fuera de stock";
+            case ACTIVE -> "Activo";
+            case INACTIVE -> "Inactivo";
+        };
+    }
+
+    private ProductStatus resolveProductStatus(ProductRequest request) {
+        if (request.status() != null && !request.status().isBlank()) {
+            return parseProductStatus(request.status());
         }
-        return "Activo";
+        if (request.active() != null && !request.active()) {
+            return ProductStatus.INACTIVE;
+        }
+        int stock = request.variants() == null ? 0 : request.variants().stream()
+                .filter(Objects::nonNull)
+                .map(ProductVariantRequest::stock)
+                .filter(Objects::nonNull)
+                .mapToInt(Integer::intValue)
+                .sum();
+        return stock == 0 ? ProductStatus.OUT_OF_STOCK : ProductStatus.ACTIVE;
+    }
+
+    private ProductStatus parseProductStatus(String value) {
+        String normalized = normalizeText(value).replace(" ", "_");
+        return switch (normalized) {
+            case "draft", "borrador" -> ProductStatus.DRAFT;
+            case "out_of_stock", "sin_stock", "fuera_de_stock" -> ProductStatus.OUT_OF_STOCK;
+            case "active", "activo", "activa" -> ProductStatus.ACTIVE;
+            case "inactive", "inactivo", "inactiva" -> ProductStatus.INACTIVE;
+            default -> throw new BusinessRuleException("Invalid product status: " + value);
+        };
     }
 
     private String orderStatusLabel(OrderStatus status) {
@@ -1193,11 +1243,11 @@ public class MerchantController {
     }
 
     private SecondaryColor defaultSecondaryColor(SecondaryColor currentValue) {
-        return currentValue != null ? currentValue : SecondaryColor.OLIVE_DRAB;
+        return currentValue != null ? currentValue : SecondaryColor.SLATE;
     }
 
     private TertiaryColor defaultTertiaryColor(TertiaryColor currentValue) {
-        return currentValue != null ? currentValue : TertiaryColor.RICH_CAMEL;
+        return currentValue != null ? currentValue : TertiaryColor.RAW_GOLD;
     }
 
     private void requireText(String value, String fieldName) {
@@ -1327,11 +1377,17 @@ public class MerchantController {
                                       LocalDateTime createdAt, Integer storeId) {}
     public record ProductVariantRequest(String size, Color color, Integer stock) {}
     public record ProductRequest(String name, String description, Double price, Double costPrice,
-                                 Material material, List<String> imageUrls,
-                                 List<ProductVariantRequest> variants, Boolean active) {}
+                                 List<String> imageUrls,
+                                 List<ProductVariantRequest> variants, Boolean active, String status) {
+        public ProductRequest(String name, String description, Double price, Double costPrice,
+                              List<String> imageUrls,
+                              List<ProductVariantRequest> variants, Boolean active) {
+            this(name, description, price, costPrice, imageUrls, variants, active, null);
+        }
+    }
     public record ProductVariantResponse(Integer id, String size, Color color, int stock) {}
     public record ProductResponse(Integer id, String name, String description, double price,
-                                  double costPrice, Material material, List<String> imageUrls,
+                                  double costPrice, List<String> imageUrls,
                                   Boolean active, String status, int stock,
                                   List<ProductVariantResponse> variants, Integer storeId) {}
     public record ActiveRequest(Boolean active) {}

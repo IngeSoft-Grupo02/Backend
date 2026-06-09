@@ -3,6 +3,7 @@ package pe.edu.pucp.kingstore.service.product;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pe.edu.pucp.kingstore.domain.model.product.Product;
+import pe.edu.pucp.kingstore.domain.model.product.enums.ProductStatus;
 import pe.edu.pucp.kingstore.repository.product.ProductRepository;
 import pe.edu.pucp.kingstore.service.common.AbstractCrudService;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
@@ -50,6 +51,10 @@ public class ProductService extends AbstractCrudService<Product> {
         if (product.getBasePrice() < product.getCostPrice()) {
             throw new BusinessRuleException("Base price cannot be lower than cost price");
         }
+        if (product.getStatus() == null) {
+            product.setStatus(Boolean.FALSE.equals(product.getActive()) ? ProductStatus.INACTIVE : ProductStatus.ACTIVE);
+        }
+        product.setActive(product.getStatus() == ProductStatus.ACTIVE);
         if (product.getVariants() != null) {
             product.getVariants().forEach(variant -> {
                 if (variant.getStock() < 0) {

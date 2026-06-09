@@ -27,6 +27,7 @@ import pe.edu.pucp.kingstore.service.user.UserAccountService;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import java.util.Optional;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -34,6 +35,7 @@ import java.util.zip.ZipOutputStream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -111,7 +113,7 @@ class BulkUploadServiceCoverageTest {
         merchant.setId(9);
         MockMultipartFile stores = csv("stores.csv", """
                 storeName,slug,categoryId,primaryColor,secondaryColor,tertiaryColor,description,merchantEmail,logoFileName
-                King Store,king-store,1,ONYX_BLACK,OLIVE_DRAB,RICH_CAMEL,Main store,merchant@kingstore.pe,logo.png
+                King Store,king-store,1,ONYX_BLACK,SLATE,RAW_GOLD,Main store,merchant@kingstore.pe,logo.png
                 """);
         when(storeRepository.findBySlug("king-store")).thenReturn(Optional.empty());
         when(categoryRepository.findById(1)).thenReturn(Optional.of(category));
@@ -166,6 +168,80 @@ class BulkUploadServiceCoverageTest {
         verify(storeRepository).save(store);
     }
 
+    @Test
+    void processReportsDuplicateReferencesUnexpectedFailuresAndLogoEdgeWarnings() throws Exception {
+        UserAccount duplicate = new UserAccount();
+        duplicate.setId(1);
+        duplicate.setEmail("duplicate@kingstore.pe");
+        when(userAccountRepository.findByEmail("duplicate@kingstore.pe")).thenReturn(Optional.of(duplicate));
+        MockMultipartFile duplicateMerchants = csv("merchants.csv", """
+                email,password,firstName,paternalSurname,maternalSurname,documentType,documentNumber,birthDate,phone,gender,ruc
+                duplicate@kingstore.pe,secret,Ana,Perez,Rojas,DNI,12345678,1990-01-20,999999999,FEMALE,12345678901
+                """);
+
+        BulkUploadResponseDTO duplicateResponse = service.process(duplicateMerchants, null, null);
+
+        assertThat(duplicateResponse.getMerchantsCreated()).isZero();
+        assertThat(duplicateResponse.getIncidences()).extracting(BulkIncidenceDTO::getCode).contains("DUPLICATE");
+
+        when(userAccountRepository.findByEmail("unexpected@kingstore.pe")).thenReturn(Optional.empty());
+        doThrow(new RuntimeException("create failed")).when(userAccountService).createWithRole(any());
+        MockMultipartFile unexpectedMerchants = csv("merchants.csv", """
+                email,password,firstName,paternalSurname,maternalSurname,documentType,documentNumber,birthDate,phone,gender,ruc
+
+                unexpected@kingstore.pe,secret,Ana,Perez,Rojas,DNI,12345678,1990-01-20,999999999,FEMALE,12345678901
+                """);
+
+        BulkUploadResponseDTO unexpectedMerchantResponse = service.process(unexpectedMerchants, null, null);
+
+        assertThat(unexpectedMerchantResponse.getMerchantsCreated()).isZero();
+        assertThat(unexpectedMerchantResponse.getIncidences()).extracting(BulkIncidenceDTO::getCode).contains("UNEXPECTED");
+
+        Store existingStore = new Store();
+        existingStore.setId(2);
+        when(storeRepository.findBySlug("taken-store")).thenReturn(Optional.of(existingStore));
+        when(categoryRepository.findById(99)).thenReturn(Optional.empty());
+        String longName = "A".repeat(101);
+        MockMultipartFile invalidStores = csv("stores.csv", """
+                storeName,slug,categoryId,primaryColor,secondaryColor,tertiaryColor,description,merchantEmail,logoFileName
+                %s,taken-store,99,ONYX_BLACK,SLATE,RAW_GOLD,Desc,,logo.png
+                """.formatted(longName));
+
+        BulkUploadResponseDTO invalidStoreResponse = service.process(null, invalidStores, null);
+
+        assertThat(invalidStoreResponse.getStoresCreated()).isZero();
+        assertThat(invalidStoreResponse.getIncidences()).extracting(BulkIncidenceDTO::getCode)
+                .contains("VAL_NAME", "DUPLICATE", "REF_NOT_FOUND", "VAL_MERCHANT");
+
+        StoreCategory category = new StoreCategory();
+        category.setId(1);
+        UserAccount account = new UserAccount();
+        account.setId(8);
+        Merchant merchant = new Merchant();
+        merchant.setId(9);
+        when(storeRepository.findBySlug("boom-store")).thenReturn(Optional.empty());
+        when(categoryRepository.findById(1)).thenReturn(Optional.of(category));
+        when(userAccountRepository.findByEmail("owner@kingstore.pe")).thenReturn(Optional.of(account));
+        when(merchantRepository.findByUserAccountId(8)).thenReturn(Optional.of(merchant));
+        doThrow(new RuntimeException("store failed")).when(storeService).createFromDTO(any());
+        MockMultipartFile unexpectedStores = csv("stores.csv", """
+                storeName,slug,categoryId,primaryColor,secondaryColor,tertiaryColor,description,merchantEmail,logoFileName
+                Boom Store,boom-store,1,ONYX_BLACK,SLATE,RAW_GOLD,Desc,owner@kingstore.pe,logo.png
+                """);
+
+        BulkUploadResponseDTO unexpectedStoreResponse = service.process(null, unexpectedStores, null);
+
+        assertThat(unexpectedStoreResponse.getStoresCreated()).isZero();
+        assertThat(unexpectedStoreResponse.getIncidences()).extracting(BulkIncidenceDTO::getCode).contains("UNEXPECTED");
+
+        when(storeRepository.findBySlug("missing-store")).thenReturn(Optional.empty());
+        BulkUploadResponseDTO logoResponse = service.process(null, null, logoEdgeZip());
+
+        assertThat(logoResponse.getLogosUploaded()).isZero();
+        assertThat(logoResponse.getIncidences()).extracting(BulkIncidenceDTO::getCode)
+                .contains("SIZE_EXCEEDED", "REF_NOT_FOUND");
+    }
+
     private MockMultipartFile csv(String name, String content) {
         return new MockMultipartFile(name, name, "text/csv", content.getBytes(StandardCharsets.UTF_8));
     }
@@ -178,5 +254,22 @@ class BulkUploadServiceCoverageTest {
             zip.closeEntry();
         }
         return new MockMultipartFile(name, name, "application/zip", output.toByteArray());
+    }
+
+    private MockMultipartFile logoEdgeZip() throws Exception {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        try (ZipOutputStream zip = new ZipOutputStream(output)) {
+            zip.putNextEntry(new ZipEntry("folder/"));
+            zip.closeEntry();
+
+            zip.putNextEntry(new ZipEntry("huge.png"));
+            zip.write(new byte[(2 * 1024 * 1024) + 1]);
+            zip.closeEntry();
+
+            zip.putNextEntry(new ZipEntry("missing-store.jpg"));
+            zip.write("image".getBytes(StandardCharsets.UTF_8));
+            zip.closeEntry();
+        }
+        return new MockMultipartFile("logos", "logos.zip", "application/zip", output.toByteArray());
     }
 }

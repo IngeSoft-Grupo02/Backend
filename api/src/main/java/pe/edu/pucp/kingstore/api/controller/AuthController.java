@@ -39,8 +39,8 @@ public class AuthController {
             }
             String storeSlug = null;
             if (result.getRole() == Role.MERCHANT){
-                storeSlug = storeService.findActiveSlugByUserAccountId(result.getId())
-                        .orElseThrow(()-> new BusinessRuleException("MERCHANT_NO_ACTIVE_STORE"));
+                storeSlug = storeService.findLoginSlugByUserAccountId(result.getId())
+                        .orElseThrow(()-> new BusinessRuleException("MERCHANT_NO_STORE"));
                 result.setStoreSlug(storeSlug);
             }
             String token = jwtUtil.generateToken(
@@ -60,7 +60,7 @@ public class AuthController {
 
     private int authStatus(String code) {
         return switch (code) {
-            case "ACCOUNT_INACTIVE", "ROLE_NOT_ALLOWED", "ROLE_NOT_ASSIGNED", "MERCHANT_NO_ACTIVE_STORE" -> 403;
+            case "ACCOUNT_INACTIVE", "ROLE_NOT_ALLOWED", "ROLE_NOT_ASSIGNED", "MERCHANT_NO_STORE" -> 403;
             default -> 401;
         };
     }
@@ -68,14 +68,14 @@ public class AuthController {
     private String authMessage(String code) {
         return switch (code) {
             case "ACCOUNT_NOT_FOUND" -> "No existe una cuenta registrada con ese correo.";
-            case "ACCOUNT_INACTIVE" -> "Esta cuenta está inactiva. Contacta al administrador.";
-            case "BAD_CREDENTIALS" -> "La contraseña ingresada es incorrecta.";
+            case "ACCOUNT_INACTIVE" -> "Esta cuenta estÃƒÂ¡ inactiva. Contacta al administrador.";
+            case "BAD_CREDENTIALS" -> "La contraseÃƒÂ±a ingresada es incorrecta.";
             case "ROLE_NOT_ALLOWED" -> "Esta cuenta no pertenece al panel de comerciantes.";
             case "ROLE_NOT_ASSIGNED" -> "Esta cuenta no tiene un rol asignado.";
-            case "MERCHANT_NO_ACTIVE_STORE" -> "Tu cuenta de comerciante no tiene una tienda activa asignada.";
-            case "Email is required" -> "Ingresa tu correo electrónico.";
-            case "Password is required" -> "Ingresa tu contraseña.";
-            default -> "No se pudo iniciar sesión. Revisa tus credenciales.";
+            case "MERCHANT_NO_STORE" -> "Tu cuenta de comerciante no tiene una tienda asignada.";
+            case "Email is required" -> "Ingresa tu correo electrÃƒÂ³nico.";
+            case "Password is required" -> "Ingresa tu contraseÃƒÂ±a.";
+            default -> "No se pudo iniciar sesiÃƒÂ³n. Revisa tus credenciales.";
         };
     }
 
@@ -83,3 +83,4 @@ public class AuthController {
         return Map.of("code", code, "message", message);
     }
 }
+

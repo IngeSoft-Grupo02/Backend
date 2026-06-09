@@ -29,7 +29,7 @@ public class AuditLogService {
         LocalDateTime start = resolveStartDate(range);
         LocalDateTime end = LocalDateTime.now();
 
-        // Filtrar por combinación de parámetros
+        // Filtrar por combinaciÃ³n de parÃ¡metros
         if (level != null && start != null) {
             return auditLogRepository.findByLevelAndTimestampBetween(level, start, end);
         }

@@ -4,7 +4,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 import pe.edu.pucp.kingstore.domain.model.BaseEntity;
-import pe.edu.pucp.kingstore.domain.model.product.enums.Material;
+import pe.edu.pucp.kingstore.domain.model.product.enums.ProductStatus;
 import pe.edu.pucp.kingstore.domain.model.store.Store;
 
 import java.util.List;
@@ -35,8 +35,7 @@ public class Product extends BaseEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private Material material;
-    //private ProductStatus status;  // check this attribute
+    private ProductStatus status = ProductStatus.ACTIVE;
 
     @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
     @JoinColumn(name = "product_id", nullable = false)

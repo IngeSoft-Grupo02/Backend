@@ -11,6 +11,6 @@ public interface MerchantRepository extends JpaRepository<Merchant, Integer> {
 
     Optional<Merchant> findByUserAccountId(Integer userAccountId);
 
-    // Busca comerciante por el email de su UserAccount — usado en carga masiva
+    // Busca comerciante por el email de su UserAccount â€” usado en carga masiva
     Optional<Merchant> findByUserAccount_Email(String email);
 }

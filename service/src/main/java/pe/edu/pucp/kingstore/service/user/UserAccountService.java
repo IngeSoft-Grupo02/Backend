@@ -116,7 +116,7 @@ public class UserAccountService extends AbstractCrudService<UserAccount> {
         account.setPassword(dto.getPassword());
         UserAccount created = create(account);
 
-        // Crear perfil según rol
+        // Crear perfil segÃºn rol
         switch (dto.getRole()) {
             case CUSTOMER -> {
                 if(dto.getStoreId() == null)
@@ -208,7 +208,7 @@ public class UserAccountService extends AbstractCrudService<UserAccount> {
     public UserAccount updateUser(Integer id, CreateUserDTO dto) {
         UserAccount account = getById(id);
 
-        // Actualizar email y contraseña en UserAccount
+        // Actualizar email y contraseÃ±a en UserAccount
         if (dto.getEmail() != null && !dto.getEmail().isBlank()) {
             account.setEmail(normalizeEmail(dto.getEmail()));
         }

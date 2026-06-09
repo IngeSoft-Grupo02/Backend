@@ -28,7 +28,7 @@ public class CustomerAuthController {
     public ResponseEntity<?> register(@PathVariable String slug,
                                       @RequestBody CreateUserDTO dto) {
         try {
-            // Verificar que la tienda existe y está activa
+            // Verificar que la tienda existe y estÃ¡ activa
             dto.setRole(Role.CUSTOMER);
             userAccountService.createWithRole(dto,slug);
             return ResponseEntity.status(201).body("Customer registered successfully");
@@ -42,7 +42,7 @@ public class CustomerAuthController {
     public ResponseEntity<?> login(@PathVariable String slug,
                                    @RequestBody LoginRequestDTO request) {
         try {
-            // Verificar que la tienda existe y está activa
+            // Verificar que la tienda existe y estÃ¡ activa
             LoginResponseDTO result = userAccountService.authenticateCustomer(slug, request);
             String token = jwtUtil.generateToken(
                     result.getId(),

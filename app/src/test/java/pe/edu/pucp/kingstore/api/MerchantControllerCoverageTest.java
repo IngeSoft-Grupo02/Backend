@@ -14,7 +14,7 @@ import pe.edu.pucp.kingstore.domain.model.product.Discount;
 import pe.edu.pucp.kingstore.domain.model.product.Product;
 import pe.edu.pucp.kingstore.domain.model.product.ProductVariant;
 import pe.edu.pucp.kingstore.domain.model.product.enums.Color;
-import pe.edu.pucp.kingstore.domain.model.product.enums.Material;
+import pe.edu.pucp.kingstore.domain.model.product.enums.ProductStatus;
 import pe.edu.pucp.kingstore.domain.model.product.enums.VolumeType;
 import pe.edu.pucp.kingstore.domain.model.quotation.Quotation;
 import pe.edu.pucp.kingstore.domain.model.quotation.QuotationItem;
@@ -50,7 +50,9 @@ import java.util.zip.ZipOutputStream;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class MerchantControllerCoverageTest {
@@ -152,7 +154,7 @@ class MerchantControllerCoverageTest {
 
         ResponseEntity<?> createdStore = controller.createStore(auth, new MerchantController.MerchantStoreRequest(
                 "Nueva Tienda", null, "Nueva descripcion",
-                PrimaryColor.ONYX_BLACK, SecondaryColor.OLIVE_DRAB, TertiaryColor.RICH_CAMEL,
+                PrimaryColor.ONYX_BLACK, SecondaryColor.SLATE, TertiaryColor.RAW_GOLD,
                 1, "logo.png", "ACTIVA"
         ));
         assertThat(createdStore.getStatusCode()).isEqualTo(HttpStatus.CREATED);
@@ -170,7 +172,7 @@ class MerchantControllerCoverageTest {
         assertThat(controller.products(auth, "negro", true, 10).getStatusCode()).isEqualTo(HttpStatus.OK);
 
         ResponseEntity<?> createdProduct = controller.createProduct(auth, 10, new MerchantController.ProductRequest(
-                "Camisa", "Camisa manga larga", 45.0, 20.0, Material.COTTON, List.of("img.png"),
+                "Camisa", "Camisa manga larga", 45.0, 20.0, List.of("img.png"),
                 List.of(new MerchantController.ProductVariantRequest("M", Color.BLUE, 8)), true
         ));
         assertThat(createdProduct.getStatusCode()).isEqualTo(HttpStatus.CREATED);
@@ -178,9 +180,31 @@ class MerchantControllerCoverageTest {
         assertThat(controller.createProduct(auth, 10, new MerchantController.ProductRequest(
                 "", "bad", 0.0, null, null, null, null, null
         )).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+
+        List<ProductVariant> originalVariants = product.getVariants();
+        List<pe.edu.pucp.kingstore.domain.model.product.Attribute> originalAttributes = product.getAttributes();
+        ResponseEntity<?> updatedProduct = controller.updateProduct(auth, 20, 10, new MerchantController.ProductRequest(
+                "Polo Editado", "Producto actualizado", 55.0, 25.0, List.of("img-2.png"),
+                List.of(new MerchantController.ProductVariantRequest("L", Color.RED, 4)), true
+        ));
+        assertThat(updatedProduct.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(product.getVariants()).isSameAs(originalVariants);
+        assertThat(product.getAttributes()).isSameAs(originalAttributes);
+        assertThat(product.getVariants()).singleElement().satisfies(variant -> {
+            assertThat(variant.getSize()).isEqualTo("L");
+            assertThat(variant.getColor()).isEqualTo(Color.RED);
+            assertThat(variant.getStock()).isEqualTo(4);
+        });
+        assertThat(controller.updateProduct(auth, 20, 10, new MerchantController.ProductRequest(
+                "Polo Editado", "Producto actualizado", 55.0, 25.0, List.of("img-2.png", "img-2.png"),
+                List.of(new MerchantController.ProductVariantRequest("L", Color.RED, 4)), true
+        )).getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(product.getImageUrls()).containsExactly("img-2.png");
+
         assertThat(controller.updateProductActive(auth, 20, 10, new MerchantController.ActiveRequest(false)).getStatusCode())
                 .isEqualTo(HttpStatus.OK);
         assertThat(controller.deleteProduct(auth, 20, 10).getStatusCode()).isEqualTo(HttpStatus.OK);
+        verify(productRepository).delete(product);
         assertThat(controller.product(auth("invalid"), 20, 10).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 
@@ -290,6 +314,119 @@ class MerchantControllerCoverageTest {
         assertThat(invalidResult.errors()).hasSizeGreaterThanOrEqualTo(4);
     }
 
+    @Test
+    void coversUploadsCategoriesStoreDeletionProductStatusesAndDiscountErrors() throws Exception {
+        Authentication auth = auth("7");
+        Merchant merchant = merchant();
+        StoreCategory category = category();
+        category.setActive(true);
+        StoreCategory inactiveCategory = category();
+        inactiveCategory.setId(2);
+        inactiveCategory.setStoreCategoryName("Zapatos");
+        inactiveCategory.setActive(false);
+        Store store = store(10, merchant, category, "Merchant Store");
+        Product product = product(20, store, "Polo", true);
+
+        when(merchantRepository.findByUserAccountId(7)).thenReturn(Optional.of(merchant));
+        when(storeRepository.findAllByMerchant_UserAccount_Id(7)).thenReturn(List.of(store));
+        when(storeRepository.findByIdAndMerchant_UserAccount_Id(10, 7)).thenReturn(Optional.of(store));
+        when(storeCategoryRepository.findAll()).thenReturn(List.of(category, inactiveCategory));
+        when(storageService.uploadBytes(anyString(), any(byte[].class), anyString()))
+                .thenReturn("https://cdn.test/upload.png");
+        when(productRepository.findById(20)).thenReturn(Optional.of(product));
+        when(productRepository.save(any(Product.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(storeRepository.save(any(Store.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ResponseEntity<?> categories = controller.categories("mod");
+        assertThat(categories.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat((List<?>) categories.getBody()).hasSize(1);
+
+        MockMultipartFile logo = new MockMultipartFile("logo", "logo.jpg", "image/jpeg",
+                "logo".getBytes(StandardCharsets.UTF_8));
+        MerchantController.StoreLogoResponse logoResponse =
+                (MerchantController.StoreLogoResponse) controller.uploadStoreLogo(auth, logo).getBody();
+        assertThat(logoResponse.logoUrl()).isEqualTo("https://cdn.test/upload.png");
+        MockMultipartFile badLogo = new MockMultipartFile("logo", "logo.gif", "image/gif",
+                "logo".getBytes(StandardCharsets.UTF_8));
+        assertThat(controller.uploadStoreLogo(auth, badLogo).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        MockMultipartFile hugeLogo = new MockMultipartFile("logo", "logo.png", "image/png",
+                new byte[(2 * 1024 * 1024) + 1]);
+        assertThat(controller.uploadStoreLogo(auth, hugeLogo).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+
+        MockMultipartFile productImage = new MockMultipartFile("image", "foto producto.webp", "image/webp",
+                "image".getBytes(StandardCharsets.UTF_8));
+        MerchantController.ProductImageResponse imageResponse =
+                (MerchantController.ProductImageResponse) controller.uploadProductImage(auth, 10, productImage).getBody();
+        assertThat(imageResponse.imageUrl()).isEqualTo("https://cdn.test/upload.png");
+        assertThat(controller.uploadProductImage(auth, 10, null).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+
+        assertThat(controller.deleteStore(auth, 10).getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(store.getStoreStatus()).isEqualTo(StoreStatus.INACTIVE);
+
+        ResponseEntity<?> draft = controller.createProduct(auth, 10, new MerchantController.ProductRequest(
+                null, null, null, null, null, null, null, "borrador"
+        ));
+        assertThat(draft.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        MerchantController.ProductResponse draftBody = (MerchantController.ProductResponse) draft.getBody();
+        assertThat(draftBody.status()).isEqualTo("Borrador");
+        assertThat(draftBody.active()).isFalse();
+        assertThat(draftBody.name()).isEqualTo("Sin nombre");
+
+        ResponseEntity<?> outOfStock = controller.createProduct(auth, 10, new MerchantController.ProductRequest(
+                "Polo sin stock", "Desc", 40.0, 10.0, null,
+                List.of(new MerchantController.ProductVariantRequest("S", Color.GREEN, 0)), null, null
+        ));
+        assertThat(((MerchantController.ProductResponse) outOfStock.getBody()).status()).isEqualTo("Fuera de stock");
+        assertThat(((MerchantController.ProductResponse) outOfStock.getBody()).active()).isFalse();
+
+        ResponseEntity<?> inactive = controller.createProduct(auth, 10, new MerchantController.ProductRequest(
+                "Polo inactivo", "Desc", 40.0, 10.0, null,
+                List.of(new MerchantController.ProductVariantRequest("S", Color.GREEN, 5)), false, null
+        ));
+        assertThat(((MerchantController.ProductResponse) inactive.getBody()).status()).isEqualTo("Inactivo");
+
+        assertThat(controller.createProduct(auth, 10, new MerchantController.ProductRequest(
+                "Polo", "Desc", 40.0, 10.0, List.of("data:image/png;base64,abc"), null, true, null
+        )).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(controller.createProduct(auth, 10, new MerchantController.ProductRequest(
+                "Polo", "Desc", 40.0, 10.0, null, null, true, "estado-raro"
+        )).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(controller.createProduct(auth, 10, new MerchantController.ProductRequest(
+                "Polo", "Desc", 40.0, 10.0, null,
+                List.of(new MerchantController.ProductVariantRequest("S", Color.GREEN, -1)), true, null
+        )).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+
+        List<Discount> fiveDiscounts = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            Discount existing = discount(100 + i, product);
+            existing.setStore(store);
+            fiveDiscounts.add(existing);
+        }
+        when(discountRepository.findByStoreId(10)).thenReturn(fiveDiscounts);
+        assertThat(controller.createDiscount(auth, 10, new MerchantController.DiscountRequest(
+                null, VolumeType.UNIT, 1, 2, 10.0, true,
+                null, "Limitado", "Porcentaje", "Todo el catalogo", 0
+        )).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+
+        when(discountRepository.findByStoreId(10)).thenReturn(List.of());
+        assertThat(controller.createDiscount(auth, 10, new MerchantController.DiscountRequest(
+                null, VolumeType.UNIT, 1, 2, 10.0, true,
+                null, "Categoria", "Porcentaje", "Categoria", 0
+        )).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(controller.createDiscount(auth, 10, new MerchantController.DiscountRequest(
+                null, VolumeType.UNIT, 1, 2, 10.0, true,
+                null, "Producto", "Porcentaje", "Producto especifico", 0
+        )).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(controller.createDiscount(auth, 10, new MerchantController.DiscountRequest(
+                null, VolumeType.UNIT, 1, 2, 150.0, true,
+                null, "Mayor a cien", "Porcentaje", "Todo el catalogo", 0
+        )).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+
+        doThrow(new org.springframework.dao.DataIntegrityViolationException("fk"))
+                .when(productRepository).delete(product);
+        assertThat(controller.deleteProduct(auth, 20, 10).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
     private static Authentication auth(String name) {
         Authentication authentication = mock(Authentication.class);
         when(authentication.getName()).thenReturn(name);
@@ -329,8 +466,8 @@ class MerchantControllerCoverageTest {
         store.setDescription("Tienda");
         store.setLogoUrl("logo.png");
         store.setPrimaryColor(PrimaryColor.ONYX_BLACK);
-        store.setSecondaryColor(SecondaryColor.OLIVE_DRAB);
-        store.setTertiaryColor(TertiaryColor.RICH_CAMEL);
+        store.setSecondaryColor(SecondaryColor.SLATE);
+        store.setTertiaryColor(TertiaryColor.RAW_GOLD);
         store.setStoreStatus(StoreStatus.ACTIVE);
         store.setCategory(category);
         store.setMerchant(merchant);
@@ -355,11 +492,11 @@ class MerchantControllerCoverageTest {
         product.setDescription("Producto");
         product.setBasePrice(30.0);
         product.setCostPrice(15.0);
-        product.setMaterial(Material.COTTON);
         product.setImageUrls(new ArrayList<>(List.of("img.png")));
         product.setAttributes(new ArrayList<>());
         product.setVariants(new ArrayList<>(List.of(productVariant(id + 1))));
         product.setActive(active);
+        product.setStatus(active ? ProductStatus.ACTIVE : ProductStatus.DRAFT);
         return product;
     }
 

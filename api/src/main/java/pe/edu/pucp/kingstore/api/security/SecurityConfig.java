@@ -33,7 +33,7 @@ public class SecurityConfig {
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
                 .authorizeHttpRequests(auth -> auth
-                        // Endpoints públicos - no requieren token
+                        // Endpoints pÃºblicos - no requieren token
                         .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/stores/*/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/stores/*/customers/register").permitAll()
@@ -43,7 +43,7 @@ public class SecurityConfig {
                         .requestMatchers("/admin/**").hasRole("SYSTEM_ADMIN")
                         .requestMatchers("/merchant/**").hasRole("MERCHANT")
 
-                        // Todo lo demás requiere autenticación
+                        // Todo lo demÃ¡s requiere autenticaciÃ³n
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter,
@@ -55,8 +55,8 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOriginPatterns(List.of(
-            "http://54.221.52.83:3000",           // ← IP actual del front
-            "http://54.221.52.83",                // ← por si acaso sin puerto
+            "http://54.221.52.83:3000",           // â† IP actual del front
+            "http://54.221.52.83",                // â† por si acaso sin puerto
             "http://localhost:*",
             "http://127.0.0.1:*",
             "http://localhost:3000",
