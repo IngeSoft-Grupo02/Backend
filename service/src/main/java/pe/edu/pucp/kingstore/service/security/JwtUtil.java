@@ -12,8 +12,12 @@ import java.util.Date;
 
 @Component
 public class JwtUtil {
-    //private static final String SECRET = System.getenv("JWT_SECRET"); //revisar
-    private static final String SECRET = "kingstore-local-test-secret-32-bytes-minimum";
+    private static final String SECRET;
+
+    static {
+        String env = System.getenv("JWT_SECRET");
+        SECRET = (env != null && !env.isBlank()) ? env : "kingstore-default-secret-key-for-tests-only-32chars";
+    }
     private static final long EXPIRATION_ADMIN_MS = 4 * 60 * 60 * 1000L;
     private static final long EXPIRATION_MERCHANT_MS = 2 * 60 * 60 * 1000L;
     private static final long EXPIRATION_CUSTOMER_MS = 60 * 60 * 1000L;
