@@ -102,15 +102,6 @@ class ControllerCoverageTest {
         when(merchantRepository.findAll()).thenReturn(List.of(merchant));
         when(customerRepository.findAll()).thenReturn(List.of(customer));
         when(adminRepository.findAll()).thenReturn(List.of(admin));
-        when(merchantRepository.findByUserAccountId(1)).thenReturn(Optional.of(merchant));
-        when(merchantRepository.findByUserAccountId(2)).thenReturn(Optional.empty());
-        when(merchantRepository.findByUserAccountId(3)).thenReturn(Optional.empty());
-        when(merchantRepository.findByUserAccountId(4)).thenReturn(Optional.empty());
-        when(customerRepository.findByUserAccountId(2)).thenReturn(Optional.of(customer));
-        when(customerRepository.findByUserAccountId(3)).thenReturn(Optional.empty());
-        when(customerRepository.findByUserAccountId(4)).thenReturn(Optional.empty());
-        when(adminRepository.findByUserAccountId(3)).thenReturn(Optional.of(admin));
-        when(adminRepository.findByUserAccountId(4)).thenReturn(Optional.empty());
         when(storeRepository.findAll()).thenReturn(List.of(merchantStore));
 
         ResponseEntity<List<UserResponseDTO>> all = controller.findAll(null);
