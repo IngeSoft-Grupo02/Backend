@@ -11,6 +11,7 @@ import pe.edu.pucp.kingstore.domain.model.store.StoreCategory;
 import pe.edu.pucp.kingstore.domain.model.store.enums.StoreStatus;
 import pe.edu.pucp.kingstore.domain.model.user.Merchant;
 import pe.edu.pucp.kingstore.repository.store.StoreCategoryRepository;
+import pe.edu.pucp.kingstore.repository.quotation.QuotationRepository;
 import pe.edu.pucp.kingstore.repository.store.StoreRepository;
 import pe.edu.pucp.kingstore.repository.user.MerchantRepository;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
@@ -40,12 +41,13 @@ class StoreServiceTest {
     @Mock private StoreRepository storeRepository;
     @Mock private MerchantRepository merchantRepository;
     @Mock private StoreCategoryRepository categoryRepository;
+    @Mock private QuotationRepository quotationRepository;
 
     private StoreService service;
 
     @BeforeEach
     void setUp() {
-        service = new StoreService(storeRepository, merchantRepository, categoryRepository);
+        service = new StoreService(storeRepository, merchantRepository, categoryRepository, quotationRepository);
     }
 
     // -------------------------------------------------------------------------
