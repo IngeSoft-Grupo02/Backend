@@ -1,4 +1,4 @@
-package pe.edu.pucp.kingstore.api.controller;
+package pe.edu.pucp.kingstore.api.controller.admin;
 
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;

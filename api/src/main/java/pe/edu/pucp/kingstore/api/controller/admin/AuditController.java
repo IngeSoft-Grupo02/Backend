@@ -1,5 +1,5 @@
 
-package pe.edu.pucp.kingstore.api.controller;
+package pe.edu.pucp.kingstore.api.controller.admin;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;

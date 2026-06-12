@@ -2,9 +2,15 @@ package pe.edu.pucp.kingstore.service.store;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import pe.edu.pucp.kingstore.domain.dto.store.MerchantStoreRequestDTO;
 import pe.edu.pucp.kingstore.domain.dto.store.StoreDTO;
+import pe.edu.pucp.kingstore.domain.dto.store.StoreResponseDTO;
+import pe.edu.pucp.kingstore.domain.model.quotation.enums.QuotationStatus;
 import pe.edu.pucp.kingstore.domain.model.store.Store;
+import pe.edu.pucp.kingstore.domain.model.store.StoreCategory;
 import pe.edu.pucp.kingstore.domain.model.store.enums.StoreStatus;
+import pe.edu.pucp.kingstore.domain.model.user.Merchant;
+import pe.edu.pucp.kingstore.repository.quotation.QuotationRepository;
 import pe.edu.pucp.kingstore.repository.store.StoreCategoryRepository;
 import pe.edu.pucp.kingstore.repository.store.StoreRepository;
 import pe.edu.pucp.kingstore.repository.user.MerchantRepository;
@@ -21,14 +27,17 @@ public class StoreService extends AbstractCrudService<Store> {
     private final StoreRepository          storeRepository;
     private final MerchantRepository       merchantRepository;
     private final StoreCategoryRepository  categoryRepository;
+    private final QuotationRepository quotationRepository;
 
     public StoreService(StoreRepository storeRepository,
                         MerchantRepository merchantRepository,
-                        StoreCategoryRepository categoryRepository) {
+                        StoreCategoryRepository categoryRepository,
+                        QuotationRepository quotationRepository) {
         super(storeRepository, "Store");
         this.storeRepository    = storeRepository;
         this.merchantRepository = merchantRepository;
         this.categoryRepository = categoryRepository;
+        this.quotationRepository = quotationRepository;
     }
 
     @Transactional(readOnly = true)
@@ -169,6 +178,111 @@ public class StoreService extends AbstractCrudService<Store> {
         long inactive  = all.stream().filter(s -> s.getStoreStatus() == StoreStatus.INACTIVE).count();
 
         return Map.of("total", all.size(), "active", active, "suspended", suspended, "inactive", inactive);
+    }
+
+    /**
+     * Crea una tienda para un comerciante desde su panel.
+     * Aplica valores por defecto de colores y categoría si no se proveen.
+     */
+    @Transactional
+    public Store createForMerchant(Merchant merchant, MerchantStoreRequestDTO request) {
+        Store store = new Store();
+        store.setMerchant(merchant);
+        store.setStoreStatus(StoreStatus.ACTIVE);
+        applyMerchantRequest(store, request, true);
+        return create(store);
+    }
+
+    /**
+     * Actualiza una tienda desde el panel del comerciante.
+     */
+    @Transactional
+    public Store updateForMerchant(Store store, MerchantStoreRequestDTO request) {
+        applyMerchantRequest(store, request, false);
+        if (request.getStatus() != null && !request.getStatus().isBlank()) {
+            store.setStoreStatus(parseStoreStatus(request.getStatus()));
+        }
+        return storeRepository.save(store);
+    }
+    /**
+     * Construye el DTO de respuesta de una tienda incluyendo el conteo
+     * de cotizaciones pendientes.
+     */
+    @Transactional(readOnly = true)
+    public StoreResponseDTO toResponseDTO(Store store) {
+        long pendingQuotes = quotationRepository
+                .findByStoreIdAndStatus(store.getId(), QuotationStatus.PENDING)
+                .size();
+        return new StoreResponseDTO(
+                store.getId(),
+                store.getStoreName(),
+                store.getSlug(),
+                store.getDescription(),
+                store.getLogoUrl(),
+                store.getStoreStatus() != null ? store.getStoreStatus().name() : null,
+                store.getPrimaryColor() != null ? store.getPrimaryColor().name() : null,
+                store.getSecondaryColor() != null ? store.getSecondaryColor().name() : null,
+                store.getTertiaryColor() != null ? store.getTertiaryColor().name() : null,
+                store.getCategory() != null ? store.getCategory().getId() : null,
+                store.getCategory() != null ? store.getCategory().getStoreCategoryName() : null,
+                pendingQuotes
+        );
+    }
+
+    private void applyMerchantRequest(Store store, MerchantStoreRequestDTO request, boolean creating) {
+        if (request == null) throw new BusinessRuleException("Store request is required");
+        requireText(request.getName(), "Store name");
+
+        String slug = normalizeSlug(
+                request.getSlug() == null || request.getSlug().isBlank()
+                        ? request.getName()
+                        : request.getSlug()
+        );
+        storeRepository.findBySlug(slug)
+                .filter(existing -> !existing.getId().equals(store.getId()))
+                .ifPresent(existing -> {
+                    throw new BusinessRuleException("Store slug is already registered");
+                });
+
+        store.setStoreName(request.getName().trim());
+        store.setSlug(slug);
+        store.setDescription(blankToNull(request.getDescription()));
+        store.setLogoUrl(blankToNull(request.getLogoUrl()));
+        store.setPrimaryColor(request.getPrimaryColor() != null
+                ? request.getPrimaryColor()
+                : (store.getPrimaryColor() != null ? store.getPrimaryColor()
+                   : pe.edu.pucp.kingstore.domain.model.store.enums.PrimaryColor.ONYX_BLACK));
+        store.setSecondaryColor(request.getSecondaryColor() != null
+                ? request.getSecondaryColor()
+                : (store.getSecondaryColor() != null ? store.getSecondaryColor()
+                   : pe.edu.pucp.kingstore.domain.model.store.enums.SecondaryColor.SLATE));
+        store.setTertiaryColor(request.getTertiaryColor() != null
+                ? request.getTertiaryColor()
+                : (store.getTertiaryColor() != null ? store.getTertiaryColor()
+                   : pe.edu.pucp.kingstore.domain.model.store.enums.TertiaryColor.RAW_GOLD));
+
+        if (request.getCategoryId() != null) {
+            StoreCategory category = categoryRepository.findById(request.getCategoryId())
+                    .orElseThrow(() -> new BusinessRuleException("Store category not found"));
+            store.setCategory(category);
+        } else if (creating || store.getCategory() == null) {
+            StoreCategory defaultCategory = categoryRepository.findAll().stream().findFirst()
+                    .orElseThrow(() -> new BusinessRuleException("Store category is required"));
+            store.setCategory(defaultCategory);
+        }
+    }
+
+    private StoreStatus parseStoreStatus(String value) {
+        return switch (value.trim().toUpperCase().replace('-', '_').replace(' ', '_')) {
+            case "ACTIVE", "ACTIVA"       -> StoreStatus.ACTIVE;
+            case "INACTIVE", "INACTIVA"   -> StoreStatus.INACTIVE;
+            case "SUSPENDED", "SUSPENDIDA" -> StoreStatus.SUSPENDED;
+            default -> throw new BusinessRuleException("Invalid store status: " + value);
+        };
+    }
+
+    private String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private String normalizeSlug(String slug) {

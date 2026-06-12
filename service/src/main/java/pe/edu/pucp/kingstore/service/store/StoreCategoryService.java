@@ -1,8 +1,10 @@
 package pe.edu.pucp.kingstore.service.store;
 
+import jakarta.transaction.TransactionScoped;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pe.edu.pucp.kingstore.domain.dto.store.StoreCategoryDTO;
+import pe.edu.pucp.kingstore.domain.model.store.Store;
 import pe.edu.pucp.kingstore.domain.model.store.StoreCategory;
 import pe.edu.pucp.kingstore.repository.store.StoreCategoryRepository;
 import pe.edu.pucp.kingstore.service.common.AbstractCrudService;
@@ -54,5 +56,12 @@ public class StoreCategoryService extends AbstractCrudService<StoreCategory> {
         StoreCategory cat = getById(id);
         cat.setStoreCategoryName(dto.getStoreCategoryName().trim());
         return update(id, cat);
+    }
+    @Override
+    @TransactionScoped
+    public List<StoreCategory> findActive(){
+        return super.findActive().stream()
+                .map(StoreCategory.class::cast)
+                .toList();
     }
 }

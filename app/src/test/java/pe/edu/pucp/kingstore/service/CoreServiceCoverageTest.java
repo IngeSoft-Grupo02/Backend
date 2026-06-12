@@ -231,7 +231,7 @@ class CoreServiceCoverageTest {
         assertThatThrownBy(() -> categoryService.updateFromDTO(1, categoryDTO))
                 .isInstanceOf(BusinessRuleException.class);
 
-        StoreService storeService = new StoreService(storeRepository, merchantRepository, categoryRepository);
+        StoreService storeService = new StoreService(storeRepository, merchantRepository, categoryRepository, quotationRepository);
         Store store = store();
         Store suspended = store();
         suspended.setId(3);
@@ -503,7 +503,7 @@ class CoreServiceCoverageTest {
 
     @Test
     void storeServiceCoversLoginSlugValidationAndEmptyMetricsBranches() {
-        StoreService storeService = new StoreService(storeRepository, merchantRepository, categoryRepository);
+        StoreService storeService = new StoreService(storeRepository, merchantRepository, categoryRepository, quotationRepository);
 
         Store suspended = store();
         suspended.setId(50);

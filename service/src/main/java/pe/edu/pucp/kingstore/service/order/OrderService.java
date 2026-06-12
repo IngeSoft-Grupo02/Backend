@@ -8,8 +8,12 @@ import pe.edu.pucp.kingstore.domain.model.order.enums.OrderStatus;
 import pe.edu.pucp.kingstore.repository.order.OrderRepository;
 import pe.edu.pucp.kingstore.service.common.AbstractCrudService;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
+import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
+import pe.edu.pucp.kingstore.domain.dto.order.OrderResponseDTO;
+import pe.edu.pucp.kingstore.service.user.util.MerchantCustomerUtil;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 @Service
@@ -45,7 +49,53 @@ public class OrderService extends AbstractCrudService<Order> {
         order.setStatus(status);
         return orderRepository.save(order);
     }
+    @Transactional(readOnly = true)
+    public List<Order> findByStoreId(Integer storeId) {
+        requireId(storeId);
+        return orderRepository.findByStoreId(storeId);
+    }
 
+    @Transactional(readOnly = true)
+    public List<Order> findByStoreIdAndStatus(Integer storeId, OrderStatus status) {
+        requireId(storeId);
+        if (status == null) {
+            throw new BusinessRuleException("Order status is required");
+        }
+        return orderRepository.findByStoreIdAndStatus(storeId, status);
+    }
+
+    @Transactional(readOnly = true)
+    public Order findInStore(Integer orderId, Integer storeId) {
+        requireId(orderId);
+        requireId(storeId);
+        return findByStoreId(storeId).stream()
+                .filter(o -> Objects.equals(o.getId(), orderId))
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException("Order", orderId));
+    }
+    public OrderResponseDTO toResponseDTO(Order order, Integer storeId) {
+        var customer = order.getQuotation() != null
+                && order.getQuotation().getShoppingCart() != null
+                ? order.getQuotation().getShoppingCart().getCustomer()
+                : null;
+
+        return new OrderResponseDTO(
+                order.getId(),
+                MerchantCustomerUtil.customerName(customer),
+                order.getStatus(),
+                switch (order.getStatus()) {
+                    case PAYMENT_CONFIRMED -> "Pagado";
+                    case IN_PREPARATION    -> "En proceso";
+                    case IN_TRANSIT        -> "Enviado";
+                    case DELIVERED         -> "Entregado";
+                    case CANCELLED         -> "Cancelado";
+                },
+                order.getItems() == null ? 0 : order.getItems().size(),
+                order.getFinalTotal(),
+                order.getCreatedAt(),
+                storeId
+        );
+    }
     @Override
     protected void validateForSave(Order order) {
         if (order.getQuotation() == null || order.getQuotation().getId() == null) {
@@ -80,4 +130,5 @@ public class OrderService extends AbstractCrudService<Order> {
         order.setTotalDiscount(totalDiscount);
         order.setFinalTotal(partialTotal - totalDiscount);
     }
+
 }

@@ -11,7 +11,20 @@ import pe.edu.pucp.kingstore.domain.model.store.enums.StoreStatus;
 import pe.edu.pucp.kingstore.domain.model.user.Merchant;
 
 import java.time.LocalDateTime;
-
+/* */
+@NamedEntityGraph(
+        name = "Store.withMerchantAndCategory",
+        attributeNodes = {
+                @NamedAttributeNode(value = "merchant", subgraph = "merchant-subgraph"),
+                @NamedAttributeNode("category")
+        },
+        subgraphs = {
+                @NamedSubgraph(
+                name = "merchant-subgraph",
+                attributeNodes =  @NamedAttributeNode("userAccount")
+                )
+        }
+)
 @Getter
 @Setter
 @Entity

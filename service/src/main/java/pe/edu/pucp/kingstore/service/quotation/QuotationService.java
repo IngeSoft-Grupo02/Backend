@@ -8,9 +8,14 @@ import pe.edu.pucp.kingstore.domain.model.quotation.enums.QuotationStatus;
 import pe.edu.pucp.kingstore.repository.quotation.QuotationRepository;
 import pe.edu.pucp.kingstore.service.common.AbstractCrudService;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
+import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
 
-import java.time.LocalDateTime;
+import pe.edu.pucp.kingstore.domain.dto.quotation.QuotationItemResponseDTO;
+import pe.edu.pucp.kingstore.domain.dto.quotation.QuotationResponseDTO;
+import pe.edu.pucp.kingstore.service.user.util.MerchantCustomerUtil;
 import java.util.List;
+import java.time.LocalDateTime;
+import java.util.Objects;
 import java.util.Optional;
 
 @Service
@@ -48,7 +53,30 @@ public class QuotationService extends AbstractCrudService<Quotation> {
         quotation.setResponseAt(LocalDateTime.now());
         return quotationRepository.save(quotation);
     }
+    @Transactional(readOnly = true)
+    public List<Quotation> findByStoreId(Integer storeId) {
+        requireId(storeId);
+        return quotationRepository.findByStoreId(storeId);
+    }
 
+    @Transactional(readOnly = true)
+    public List<Quotation> findByStoreIdAndStatus(Integer storeId, QuotationStatus status) {
+        requireId(storeId);
+        if (status == null) {
+            throw new BusinessRuleException("Quotation status is required");
+        }
+        return quotationRepository.findByStoreIdAndStatus(storeId, status);
+    }
+
+    @Transactional(readOnly = true)
+    public Quotation findInStore(Integer quotationId, Integer storeId) {
+        requireId(quotationId);
+        requireId(storeId);
+        return findByStoreId(storeId).stream()
+                .filter(q -> Objects.equals(q.getId(), quotationId))
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException("Quotation", quotationId));
+    }
     @Override
     protected void validateForSave(Quotation quotation) {
         if (quotation.getShoppingCart() == null || quotation.getShoppingCart().getId() == null) {
@@ -80,5 +108,46 @@ public class QuotationService extends AbstractCrudService<Quotation> {
         }
         quotation.setSubTotal(subTotal);
         quotation.setTotalAmount(subTotal - quotation.getDiscount());
+    }
+
+    @Transactional(readOnly = true)
+    public QuotationResponseDTO toResponseDTO(Quotation quotation, Integer storeId) {
+        var customer = quotation.getShoppingCart() != null
+                ? quotation.getShoppingCart().getCustomer()
+                : null;
+
+        List<QuotationItemResponseDTO> items = quotation.getItems() == null
+                ? List.of()
+                : quotation.getItems().stream()
+                  .map(item -> new QuotationItemResponseDTO(
+                          "Producto",
+                          item.getProductVariant() != null
+                          ? item.getProductVariant().getSize() + " / "
+                            + item.getProductVariant().getColor().name()
+                          : null,
+                          item.getQuantity(),
+                          item.getPrice(),
+                          item.getSubTotal()
+                  ))
+                  .toList();
+
+        return new QuotationResponseDTO(
+                quotation.getId(),
+                MerchantCustomerUtil.customerName(customer),
+                quotation.getStatus(),
+                switch (quotation.getStatus()) {
+                    case PENDING  -> "Pendiente";
+                    case APPROVED -> "Aprobada";
+                    case REJECTED -> "Rechazada";
+                },
+                quotation.getSubTotal(),
+                quotation.getDiscount(),
+                quotation.getTotalAmount(),
+                quotation.getRequestedAt(),
+                quotation.getDescription(),
+                quotation.getObservations(),
+                storeId,
+                items
+        );
     }
 }
