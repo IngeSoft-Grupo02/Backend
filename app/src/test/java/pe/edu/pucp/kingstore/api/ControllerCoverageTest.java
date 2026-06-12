@@ -24,6 +24,7 @@ import pe.edu.pucp.kingstore.domain.dto.user.CustomerProfileDTO;
 import pe.edu.pucp.kingstore.domain.dto.user.LoginRequestDTO;
 import pe.edu.pucp.kingstore.domain.dto.user.LoginResponseDTO;
 import pe.edu.pucp.kingstore.domain.dto.user.MerchantResponseDTO;
+import pe.edu.pucp.kingstore.domain.dto.user.RegisterCustomerDTO;
 import pe.edu.pucp.kingstore.domain.dto.user.*;
 import pe.edu.pucp.kingstore.domain.model.audit.AuditLog;
 import pe.edu.pucp.kingstore.domain.model.audit.enums.AuditLevel;

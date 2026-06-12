@@ -13,6 +13,7 @@ import pe.edu.pucp.kingstore.domain.dto.user.CreateUserDTO;
 import pe.edu.pucp.kingstore.domain.dto.user.CustomerProfileDTO;
 import pe.edu.pucp.kingstore.domain.dto.user.LoginRequestDTO;
 import pe.edu.pucp.kingstore.domain.dto.user.LoginResponseDTO;
+import pe.edu.pucp.kingstore.domain.dto.user.RegisterCustomerDTO;
 import pe.edu.pucp.kingstore.domain.model.audit.AuditLog;
 import pe.edu.pucp.kingstore.domain.model.audit.enums.AuditLevel;
 import pe.edu.pucp.kingstore.domain.model.cart.CartItem;
@@ -344,6 +345,72 @@ class CoreServiceCoverageTest {
         auditLogService.findAll(null, "user", null, "LAST_7_DAYS");
         auditLogService.findAll(null, null, "store", "LAST_30_DAYS");
         auditLogService.findAll(null, null, null, "TODAY");
+    }
+
+    @Test
+    void customerRegistrationValidatesFieldsBeforeCreatingAccount() {
+        UserAccountService service = new UserAccountService(
+                userAccountRepository, customerRepository, merchantRepository, administratorRepository, storeRepository);
+
+        when(storeRepository.findBySlug("store")).thenReturn(Optional.of(store()));
+        when(storeRepository.findById(2)).thenReturn(Optional.of(store()));
+        when(userAccountRepository.save(any(UserAccount.class))).thenAnswer(invocation -> {
+            UserAccount saved = invocation.getArgument(0);
+            if (saved.getId() == null) saved.setId(200);
+            return saved;
+        });
+        when(customerRepository.save(any(Customer.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        RegisterCustomerDTO validDni = registerCustomerDTO();
+        assertThat(service.registerCustomer(validDni, "store").getId()).isEqualTo(200);
+
+        RegisterCustomerDTO validCe = registerCustomerDTO();
+        validCe.setEmail("ce-customer@kingstore.pe");
+        validCe.setDocumentType(DocumentType.FOREIGN_ID_CARD);
+        validCe.setDocumentNumber("123456789");
+        assertThat(service.registerCustomer(validCe, "store").getId()).isEqualTo(200);
+
+        RegisterCustomerDTO validPassport = registerCustomerDTO();
+        validPassport.setEmail("passport-customer@kingstore.pe");
+        validPassport.setDocumentType(DocumentType.PASSPORT);
+        validPassport.setDocumentNumber("123456789");
+        assertThat(service.registerCustomer(validPassport, "store").getId()).isEqualTo(200);
+
+        RegisterCustomerDTO dniTooLong = registerCustomerDTO();
+        dniTooLong.setDocumentNumber("123456789");
+        assertThatThrownBy(() -> service.registerCustomer(dniTooLong, "store"))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessage("El DNI debe tener 8 dígitos");
+
+        RegisterCustomerDTO dniWithLetters = registerCustomerDTO();
+        dniWithLetters.setDocumentNumber("1234567A");
+        assertThatThrownBy(() -> service.registerCustomer(dniWithLetters, "store"))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessage("El número de documento solo debe contener dígitos");
+
+        RegisterCustomerDTO phoneTooLong = registerCustomerDTO();
+        phoneTooLong.setPhone("1234567890");
+        assertThatThrownBy(() -> service.registerCustomer(phoneTooLong, "store"))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessage("El celular debe tener 9 dígitos");
+
+        RegisterCustomerDTO phoneWithLetters = registerCustomerDTO();
+        phoneWithLetters.setPhone("99999999A");
+        assertThatThrownBy(() -> service.registerCustomer(phoneWithLetters, "store"))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessage("El celular debe tener 9 dígitos");
+
+        RegisterCustomerDTO invalidEmail = registerCustomerDTO();
+        invalidEmail.setEmail("not-an-email");
+        assertThatThrownBy(() -> service.registerCustomer(invalidEmail, "store"))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessage("Ingresa un correo electrónico válido");
+
+        RegisterCustomerDTO futureBirthDate = registerCustomerDTO();
+        futureBirthDate.setBirthDate(LocalDate.now().plusDays(1));
+        assertThatThrownBy(() -> service.registerCustomer(futureBirthDate, "store"))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessage("La fecha de nacimiento no puede ser una fecha futura");
     }
 
     @Test
@@ -762,6 +829,21 @@ class CoreServiceCoverageTest {
         dto.setGender(Gender.FEMALE);
         dto.setPhone("999999999");
         dto.setRole(role);
+        return dto;
+    }
+
+    private RegisterCustomerDTO registerCustomerDTO() {
+        RegisterCustomerDTO dto = new RegisterCustomerDTO();
+        dto.setEmail("new-customer@kingstore.pe");
+        dto.setPassword("Password123!");
+        dto.setFirstName("Ana");
+        dto.setPaternalSurname("Perez");
+        dto.setMaternalSurname("Rojas");
+        dto.setDocumentType(DocumentType.DNI);
+        dto.setDocumentNumber("12345678");
+        dto.setBirthDate(LocalDate.of(1990, 1, 1));
+        dto.setGender(Gender.FEMALE);
+        dto.setPhone("999999999");
         return dto;
     }
 
