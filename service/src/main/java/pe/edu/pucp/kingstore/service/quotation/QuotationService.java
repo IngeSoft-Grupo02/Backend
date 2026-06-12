@@ -47,6 +47,9 @@ public class QuotationService extends AbstractCrudService<Quotation> {
         if (status == null || status == QuotationStatus.PENDING) {
             throw new BusinessRuleException("Quotation response must approve or reject the quotation");
         }
+        if (status == QuotationStatus.REJECTED && (observations == null || observations.isBlank())) {
+            throw new BusinessRuleException("Observations are required when rejecting a quotation");
+        }
         Quotation quotation = getById(id);
         quotation.setStatus(status);
         quotation.setObservations(observations);
