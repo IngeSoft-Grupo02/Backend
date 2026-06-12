@@ -571,7 +571,7 @@ class CoreServiceCoverageTest {
 
     @Test
     void storeServiceCoversPublicCatalogFiltering() {
-        StoreService storeService = new StoreService(storeRepository, merchantRepository, categoryRepository);
+        StoreService storeService = new StoreService(storeRepository, merchantRepository, categoryRepository, quotationRepository);
 
         Store activeStore = store();
         Store hiddenStore = store();
