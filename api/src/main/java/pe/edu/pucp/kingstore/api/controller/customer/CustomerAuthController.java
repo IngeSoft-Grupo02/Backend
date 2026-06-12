@@ -2,7 +2,10 @@ package pe.edu.pucp.kingstore.api.controller.customer;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+        import pe.edu.pucp.kingstore.domain.dto.user.CreateUserDTO;
+import pe.edu.pucp.kingstore.domain.dto.user.CustomerProfileDTO;
 import pe.edu.pucp.kingstore.domain.dto.user.LoginRequestDTO;
 import pe.edu.pucp.kingstore.domain.dto.user.LoginResponseDTO;
 import pe.edu.pucp.kingstore.domain.dto.user.RegisterCustomerDTO;
@@ -41,6 +44,7 @@ public class CustomerAuthController {
     public ResponseEntity<?> login(@PathVariable String slug,
                                    @RequestBody LoginRequestDTO request) {
         try {
+            // Verificar que la tienda existe, estÃ¡ activa y el cliente pertenece a ella
             LoginResponseDTO result = userAccountService.authenticateCustomer(slug, request);
             String token = jwtUtil.generateToken(
                     result.getId(),
@@ -57,18 +61,17 @@ public class CustomerAuthController {
 
     // Cliente-06: Perfil del cliente autenticado
     @GetMapping("/customers/me")
-    public ResponseEntity<?> me(@PathVariable String slug,
-                                Authentication authentication) {
+    public ResponseEntity<?> me(@PathVariable String slug, Authentication authentication) {
         try {
-            Integer userAccountId = resolveUserAccountId(authentication);
-            return ResponseEntity.ok(
-                    userAccountService.getCustomerProfile(userAccountId, slug));
+            Integer userAccountId = currentUserAccountId(authentication);
+            CustomerProfileDTO profile = userAccountService.getCustomerProfile(userAccountId, slug);
+            return ResponseEntity.ok(profile);
         } catch (BusinessRuleException e) {
             return ResponseEntity.status(403).body(e.getMessage());
         }
     }
 
-    private Integer resolveUserAccountId(Authentication authentication) {
+    private Integer currentUserAccountId(Authentication authentication) {
         if (authentication == null || authentication.getName() == null) {
             throw new BusinessRuleException("Authenticated customer is required");
         }

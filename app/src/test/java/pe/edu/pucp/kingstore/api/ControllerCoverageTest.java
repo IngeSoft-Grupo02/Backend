@@ -4,7 +4,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.multipart.MultipartFile;
+import pe.edu.pucp.kingstore.api.controller.PublicStoreController;
 import pe.edu.pucp.kingstore.api.controller.admin.AuditController;
 import pe.edu.pucp.kingstore.api.controller.customer.AuthController;
 import pe.edu.pucp.kingstore.api.controller.admin.BulkUploadController;
@@ -15,6 +18,12 @@ import pe.edu.pucp.kingstore.api.controller.admin.UserController;
 import pe.edu.pucp.kingstore.domain.dto.bulk.BulkUploadResponseDTO;
 import pe.edu.pucp.kingstore.domain.dto.store.StoreCategoryDTO;
 import pe.edu.pucp.kingstore.domain.dto.store.StoreDTO;
+import pe.edu.pucp.kingstore.domain.dto.store.StorePublicDTO;
+import pe.edu.pucp.kingstore.domain.dto.user.CreateUserDTO;
+import pe.edu.pucp.kingstore.domain.dto.user.CustomerProfileDTO;
+import pe.edu.pucp.kingstore.domain.dto.user.LoginRequestDTO;
+import pe.edu.pucp.kingstore.domain.dto.user.LoginResponseDTO;
+import pe.edu.pucp.kingstore.domain.dto.user.MerchantResponseDTO;
 import pe.edu.pucp.kingstore.domain.dto.user.*;
 import pe.edu.pucp.kingstore.domain.model.audit.AuditLog;
 import pe.edu.pucp.kingstore.domain.model.audit.enums.AuditLevel;
@@ -194,6 +203,34 @@ class ControllerCoverageTest {
     }
 
     @Test
+    void publicStoreControllerExposesActiveStoresOnly() {
+        StoreService storeService = mock(StoreService.class);
+        PublicStoreController controller = new PublicStoreController(storeService);
+
+        Store activeStore = store(1, "Ripley", null);
+        StoreCategory category = new StoreCategory();
+        category.setId(1);
+        category.setStoreCategoryName("Moda");
+        activeStore.setCategory(category);
+
+        when(storeService.findPublicStores()).thenReturn(List.of(activeStore));
+        List<StorePublicDTO> result = controller.findPublicStores().getBody();
+        assertThat(result).singleElement().satisfies(item -> {
+            assertThat(item.getSlug()).isEqualTo("ripley");
+            assertThat(item.getCategory()).isEqualTo("Moda");
+            assertThat(item.getStoreName()).isEqualTo("Ripley");
+        });
+
+        when(storeService.findPublicBySlug("ripley")).thenReturn(Optional.of(activeStore));
+        ResponseEntity<?> found = controller.getPublicStore("ripley");
+        assertThat(found.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(((StorePublicDTO) found.getBody()).getSlug()).isEqualTo("ripley");
+
+        when(storeService.findPublicBySlug("missing")).thenReturn(Optional.empty());
+        assertThat(controller.getPublicStore("missing").getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
     void categoryAuditAndBulkControllersReturnExpectedBodies() throws IOException {
         StoreCategoryService categoryService = mock(StoreCategoryService.class);
         StoreCategoryController categoryController = new StoreCategoryController(categoryService);
@@ -324,6 +361,36 @@ class ControllerCoverageTest {
         LoginRequestDTO badCustomerRequest = new LoginRequestDTO();
         when(userAccountService.authenticateCustomer("store", badCustomerRequest)).thenThrow(new BusinessRuleException("bad"));
         assertThat(customerController.login("store", badCustomerRequest).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+
+        // Login con el slug de otra tienda: la validacion cliente-tienda debe rechazarlo
+        LoginRequestDTO mismatchRequest = new LoginRequestDTO();
+        when(userAccountService.authenticateCustomer("other-store", mismatchRequest))
+                .thenThrow(new BusinessRuleException("Customer does not belong to this store"));
+        assertThat(customerController.login("other-store", mismatchRequest).getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+
+        // GET /stores/{slug}/customers/me
+        CustomerProfileDTO profile = new CustomerProfileDTO();
+        profile.setId(4);
+        profile.setFirstName("Ana");
+        profile.setLastName("Lopez Perez");
+        profile.setEmail("store-customer@test.com");
+        profile.setRole(Role.CUSTOMER);
+        profile.setStoreSlug("store");
+        when(userAccountService.getCustomerProfile(4, "store")).thenReturn(profile);
+        Authentication customerAuth = new UsernamePasswordAuthenticationToken("4", null, List.of());
+        ResponseEntity<?> meResponse = customerController.me("store", customerAuth);
+        assertThat(meResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(((CustomerProfileDTO) meResponse.getBody()).getStoreSlug()).isEqualTo("store");
+
+        // /customers/me con token de otra tienda (validacion delegada al service)
+        when(userAccountService.getCustomerProfile(4, "other-store"))
+                .thenThrow(new BusinessRuleException("Customer does not belong to this store"));
+        assertThat(customerController.me("other-store", customerAuth).getStatusCode())
+                .isEqualTo(HttpStatus.FORBIDDEN);
+
+        // /customers/me sin autenticacion valida
+        assertThat(customerController.me("store", null).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
     }
 
     @Test

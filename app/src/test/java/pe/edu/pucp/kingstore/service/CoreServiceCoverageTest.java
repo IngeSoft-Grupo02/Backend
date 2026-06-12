@@ -10,6 +10,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import pe.edu.pucp.kingstore.domain.dto.store.StoreCategoryDTO;
 import pe.edu.pucp.kingstore.domain.dto.store.StoreDTO;
 import pe.edu.pucp.kingstore.domain.dto.user.CreateUserDTO;
+import pe.edu.pucp.kingstore.domain.dto.user.CustomerProfileDTO;
 import pe.edu.pucp.kingstore.domain.dto.user.LoginRequestDTO;
 import pe.edu.pucp.kingstore.domain.dto.user.LoginResponseDTO;
 import pe.edu.pucp.kingstore.domain.model.audit.AuditLog;
@@ -498,6 +499,65 @@ class CoreServiceCoverageTest {
         CreateUserDTO duplicateEmail = new CreateUserDTO();
         duplicateEmail.setEmail(" duplicate@kingstore.pe ");
         assertThatThrownBy(() -> service.updateUser(41, duplicateEmail))
+                .isInstanceOf(BusinessRuleException.class);
+    }
+
+    @Test
+    void storeServiceCoversPublicCatalogFiltering() {
+        StoreService storeService = new StoreService(storeRepository, merchantRepository, categoryRepository);
+
+        Store activeStore = store();
+        Store hiddenStore = store();
+        hiddenStore.setId(6);
+        hiddenStore.setSlug("hidden");
+        hiddenStore.setActive(false);
+
+        when(storeRepository.findByStoreStatus(StoreStatus.ACTIVE)).thenReturn(List.of(activeStore, hiddenStore));
+        assertThat(storeService.findPublicStores()).containsExactly(activeStore);
+
+        when(storeRepository.findBySlug("store")).thenReturn(Optional.of(activeStore));
+        assertThat(storeService.findPublicBySlug("Store")).contains(activeStore);
+
+        when(storeRepository.findBySlug("hidden")).thenReturn(Optional.of(hiddenStore));
+        assertThat(storeService.findPublicBySlug("hidden")).isEmpty();
+
+        Store suspendedStore = store();
+        suspendedStore.setId(7);
+        suspendedStore.setSlug("suspended-store");
+        suspendedStore.setStoreStatus(StoreStatus.SUSPENDED);
+        when(storeRepository.findBySlug("suspended-store")).thenReturn(Optional.of(suspendedStore));
+        assertThat(storeService.findPublicBySlug("suspended-store")).isEmpty();
+
+        when(storeRepository.findBySlug("missing")).thenReturn(Optional.empty());
+        assertThat(storeService.findPublicBySlug("missing")).isEmpty();
+    }
+
+    @Test
+    void userAccountServiceValidatesCustomerStoreSlugForLoginAndProfile() {
+        UserAccountService service = new UserAccountService(
+                userAccountRepository, customerRepository, merchantRepository, administratorRepository, storeRepository);
+
+        UserAccount account = account(50, "customer-store@kingstore.pe", "secret");
+        Customer customer = customerProfile();
+        customer.setId(99);
+        when(userAccountRepository.findByEmail("customer-store@kingstore.pe")).thenReturn(Optional.of(account));
+        when(customerRepository.findByUserAccountId(50)).thenReturn(Optional.of(customer));
+
+        LoginRequestDTO request = login("customer-store@kingstore.pe", "secret");
+
+        LoginResponseDTO response = service.authenticateCustomer("store", request);
+        assertThat(response.getStoreSlug()).isEqualTo("store");
+        assertThat(response.getRole()).isEqualTo(Role.CUSTOMER);
+
+        assertThatThrownBy(() -> service.authenticateCustomer("other-store", request))
+                .isInstanceOf(BusinessRuleException.class);
+
+        CustomerProfileDTO profile = service.getCustomerProfile(50, "store");
+        assertThat(profile.getStoreSlug()).isEqualTo("store");
+        assertThat(profile.getLastName()).isEqualTo("Perez Rojas");
+        assertThat(profile.getEmail()).isEqualTo("customer@kingstore.pe");
+
+        assertThatThrownBy(() -> service.getCustomerProfile(50, "other-store"))
                 .isInstanceOf(BusinessRuleException.class);
     }
 
