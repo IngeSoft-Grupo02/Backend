@@ -4,6 +4,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pe.edu.pucp.kingstore.domain.dto.store.MerchantStoreRequestDTO;
 import pe.edu.pucp.kingstore.domain.dto.store.StoreDTO;
+import pe.edu.pucp.kingstore.domain.dto.store.StorePublicDTO;
 import pe.edu.pucp.kingstore.domain.dto.store.StoreResponseDTO;
 import pe.edu.pucp.kingstore.domain.model.quotation.enums.QuotationStatus;
 import pe.edu.pucp.kingstore.domain.model.store.Store;
@@ -96,6 +97,21 @@ public class StoreService extends AbstractCrudService<Store> {
     @Transactional(readOnly = true)
     public List<Store> findByStatus(StoreStatus status) {
         return storeRepository.findByStoreStatus(status);
+    }
+
+    @Transactional(readOnly = true)
+    public List<Store> findPublicStores() {
+        return storeRepository.findByStoreStatus(StoreStatus.ACTIVE).stream()
+                .filter(store -> Boolean.TRUE.equals(store.getActive()))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<Store> findPublicBySlug(String slug) {
+        requireText(slug, "Store slug");
+        return storeRepository.findBySlug(normalizeSlug(slug))
+                .filter(store -> Boolean.TRUE.equals(store.getActive()))
+                .filter(store -> store.getStoreStatus() == StoreStatus.ACTIVE);
     }
 
     @Transactional
@@ -228,7 +244,20 @@ public class StoreService extends AbstractCrudService<Store> {
                 pendingQuotes
         );
     }
-
+    public StorePublicDTO toPublicDTO(Store store) {
+        StorePublicDTO dto = new StorePublicDTO();
+        dto.setId(store.getId());
+        dto.setStoreName(store.getStoreName());
+        dto.setSlug(store.getSlug());
+        dto.setDescription(store.getDescription());
+        dto.setLogoUrl(store.getLogoUrl());
+        dto.setCategory(store.getCategory() != null
+                ? store.getCategory().getStoreCategoryName() : null);
+        dto.setPrimaryColor(store.getPrimaryColor());
+        dto.setSecondaryColor(store.getSecondaryColor());
+        dto.setTertiaryColor(store.getTertiaryColor());
+        return dto;
+    }
     private void applyMerchantRequest(Store store, MerchantStoreRequestDTO request, boolean creating) {
         if (request == null) throw new BusinessRuleException("Store request is required");
         requireText(request.getName(), "Store name");

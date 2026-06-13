@@ -15,11 +15,7 @@ import pe.edu.pucp.kingstore.api.controller.admin.UserController;
 import pe.edu.pucp.kingstore.domain.dto.bulk.BulkUploadResponseDTO;
 import pe.edu.pucp.kingstore.domain.dto.store.StoreCategoryDTO;
 import pe.edu.pucp.kingstore.domain.dto.store.StoreDTO;
-import pe.edu.pucp.kingstore.domain.dto.user.CreateUserDTO;
-import pe.edu.pucp.kingstore.domain.dto.user.LoginRequestDTO;
-import pe.edu.pucp.kingstore.domain.dto.user.LoginResponseDTO;
-import pe.edu.pucp.kingstore.domain.dto.user.MerchantResponseDTO;
-import pe.edu.pucp.kingstore.domain.dto.user.UserResponseDTO;
+import pe.edu.pucp.kingstore.domain.dto.user.*;
 import pe.edu.pucp.kingstore.domain.model.audit.AuditLog;
 import pe.edu.pucp.kingstore.domain.model.audit.enums.AuditLevel;
 import pe.edu.pucp.kingstore.domain.model.store.Store;
@@ -290,19 +286,41 @@ class ControllerCoverageTest {
         assertThat(authController.login(failingRequest).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
 
         CustomerAuthController customerController = new CustomerAuthController(userAccountService, jwtUtil);
-        CreateUserDTO createUserDTO = new CreateUserDTO();
+
+//        RegisterCustomerDTO createUserDTO = new RegisterCustomerDTO();
+//        RegisterCustomerDTO badCreate = new RegisterCustomerDTO();
+//
+//        assertThat(customerController.register("store", createUserDTO).getStatusCode()).isEqualTo(HttpStatus.CREATED);
+//        assertThat(createUserDTO.getRole()).isEqualTo(Role.CUSTOMER);
+//
+//        doThrow(new BusinessRuleException("bad")).when(userAccountService).createWithRole(badCreate, "store");
+//        assertThat(customerController.register("store", badCreate).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+
+       // CustomerAuthController customerController = new CustomerAuthController(userAccountService, jwtUtil);
+        RegisterCustomerDTO createUserDTO = new RegisterCustomerDTO();
+
+        when(userAccountService.registerCustomer(createUserDTO, "store")).thenReturn(account(5, "new@test.com"));
         assertThat(customerController.register("store", createUserDTO).getStatusCode()).isEqualTo(HttpStatus.CREATED);
-        assertThat(createUserDTO.getRole()).isEqualTo(Role.CUSTOMER);
-        CreateUserDTO badCreate = new CreateUserDTO();
-        doThrow(new BusinessRuleException("bad")).when(userAccountService).createWithRole(badCreate, "store");
+
+        RegisterCustomerDTO badCreate = new RegisterCustomerDTO();
+        doThrow(new BusinessRuleException("bad")).when(userAccountService).registerCustomer(badCreate, "store");
         assertThat(customerController.register("store", badCreate).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
 
+
+//        LoginRequestDTO customerStoreRequest = new LoginRequestDTO();
+//        LoginResponseDTO customerLogin = login(4, "store-customer@test.com", Role.CUSTOMER);
+//        when(userAccountService.authenticateCustomer("store", customerStoreRequest)).thenReturn(customerLogin);
+//        when(jwtUtil.generateToken(4, "store-customer@test.com", Role.CUSTOMER, "store")).thenReturn("customer-token");
+//        assertThat(((LoginResponseDTO) customerController.login("store", customerStoreRequest).getBody()).getToken())
+//                .isEqualTo("customer-token");
         LoginRequestDTO customerStoreRequest = new LoginRequestDTO();
         LoginResponseDTO customerLogin = login(4, "store-customer@test.com", Role.CUSTOMER);
+        customerLogin.setStoreSlug("store"); // ← agregar esto
         when(userAccountService.authenticateCustomer("store", customerStoreRequest)).thenReturn(customerLogin);
         when(jwtUtil.generateToken(4, "store-customer@test.com", Role.CUSTOMER, "store")).thenReturn("customer-token");
         assertThat(((LoginResponseDTO) customerController.login("store", customerStoreRequest).getBody()).getToken())
                 .isEqualTo("customer-token");
+
         LoginRequestDTO badCustomerRequest = new LoginRequestDTO();
         when(userAccountService.authenticateCustomer("store", badCustomerRequest)).thenThrow(new BusinessRuleException("bad"));
         assertThat(customerController.login("store", badCustomerRequest).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);

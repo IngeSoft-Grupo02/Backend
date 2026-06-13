@@ -2,11 +2,14 @@ package pe.edu.pucp.kingstore.service.user;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import pe.edu.pucp.kingstore.domain.dto.user.CustomerProfileDTO;
 import pe.edu.pucp.kingstore.domain.dto.user.LoginRequestDTO;
 import pe.edu.pucp.kingstore.domain.dto.user.LoginResponseDTO;
+import pe.edu.pucp.kingstore.domain.dto.user.RegisterCustomerDTO;
 import pe.edu.pucp.kingstore.domain.model.store.Store;
 import pe.edu.pucp.kingstore.domain.model.store.enums.StoreStatus;
 import pe.edu.pucp.kingstore.domain.model.user.UserAccount;
+import pe.edu.pucp.kingstore.domain.model.user.enums.DocumentType;
 import pe.edu.pucp.kingstore.domain.model.user.enums.Role;
 import pe.edu.pucp.kingstore.repository.store.StoreRepository;
 import pe.edu.pucp.kingstore.repository.user.CustomerRepository;
@@ -21,8 +24,16 @@ import pe.edu.pucp.kingstore.domain.model.user.Customer;
 import pe.edu.pucp.kingstore.domain.model.user.Merchant;
 import pe.edu.pucp.kingstore.domain.model.user.SystemAdministrator;
 
+import java.time.LocalDate;
+import java.util.regex.Pattern;
+
 @Service
 public class UserAccountService extends AbstractCrudService<UserAccount> {
+
+    private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
+    private static final Pattern NAME_PATTERN = Pattern.compile("^[A-Za-zÁÉÍÓÚÑÜáéíóúñü'\\-\\s]+$");
+    private static final Pattern DIGITS_PATTERN = Pattern.compile("^\\d+$");
+    private static final Pattern PHONE_PATTERN = Pattern.compile("^\\d{9}$");
 
     private final UserAccountRepository userAccountRepository;
     private final CustomerRepository customerRepository;
@@ -126,6 +137,7 @@ public class UserAccountService extends AbstractCrudService<UserAccount> {
 
                 Customer customer = new Customer();
                 customer.setUserAccount(created);
+                customer.setStore(store);
                 customer.setDocumentNumber(dto.getDocumentNumber());
                 customer.setDocumentType(dto.getDocumentType());
                 customer.setFirstName(dto.getFirstName());
@@ -196,12 +208,47 @@ public class UserAccountService extends AbstractCrudService<UserAccount> {
         Customer customer = customerRepository.findByUserAccountId(account.getId())
                 .orElseThrow(() -> new BusinessRuleException("User is not a customer"));
 
+        // Verificar que el cliente pertenece a la tienda solicitada
+        String customerStoreSlug = customer.getStore() != null ? customer.getStore().getSlug() : null;
+        if (customerStoreSlug == null || !customerStoreSlug.equalsIgnoreCase(storeSlug.trim())) {
+            throw new BusinessRuleException("Customer does not belong to this store");
+        }
+
         LoginResponseDTO response = new LoginResponseDTO();
         response.setId(account.getId());
         response.setEmail(account.getEmail());
         response.setRole(Role.CUSTOMER);
+        response.setStoreSlug(customerStoreSlug);
         response.setToken(null); // el token lo genera el controller
         return response;
+    }
+
+    //Obtener perfil del cliente autenticado, validando que pertenezca a la tienda del slug
+    @Transactional(readOnly = true)
+    public CustomerProfileDTO getCustomerProfile(Integer userAccountId, String storeSlug) {
+        requireText(storeSlug, "Store slug");
+
+        Customer customer = customerRepository.findByUserAccountId(userAccountId)
+                .orElseThrow(() -> new BusinessRuleException("User is not a customer"));
+
+        String customerStoreSlug = customer.getStore() != null ? customer.getStore().getSlug() : null;
+        if (customerStoreSlug == null || !customerStoreSlug.equalsIgnoreCase(storeSlug.trim())) {
+            throw new BusinessRuleException("Customer does not belong to this store");
+        }
+
+        UserAccount account = customer.getUserAccount();
+
+        CustomerProfileDTO dto = new CustomerProfileDTO();
+        dto.setId(customer.getId());
+        dto.setFirstName(customer.getFirstName());
+        dto.setLastName((customer.getPaternalSurname() + " " + customer.getMaternalSurname()).trim());
+        dto.setEmail(account != null ? account.getEmail() : null);
+        dto.setPhone(customer.getPhone());
+        dto.setDocumentType(customer.getDocumentType());
+        dto.setDocumentNumber(customer.getDocumentNumber());
+        dto.setRole(Role.CUSTOMER);
+        dto.setStoreSlug(customerStoreSlug);
+        return dto;
     }
 
     @Transactional
@@ -244,5 +291,110 @@ public class UserAccountService extends AbstractCrudService<UserAccount> {
                 .orElseThrow(() -> new BusinessRuleException("Store not found or inactive"));
         dto.setStoreId(store.getId());
         return createWithRole(dto);
+    }
+
+    // Cliente-04: Registro publico de clientes, con validacion dedicada (no afecta CreateUserDTO)
+    @Transactional
+    public UserAccount registerCustomer(RegisterCustomerDTO dto, String slug) {
+        validateCustomerRegistration(dto);
+
+        CreateUserDTO createDto = new CreateUserDTO();
+        createDto.setEmail(dto.getEmail());
+        createDto.setPassword(dto.getPassword());
+        createDto.setDocumentNumber(dto.getDocumentNumber());
+        createDto.setDocumentType(dto.getDocumentType());
+        createDto.setFirstName(dto.getFirstName());
+        createDto.setPaternalSurname(dto.getPaternalSurname());
+        createDto.setMaternalSurname(dto.getMaternalSurname());
+        createDto.setBirthDate(dto.getBirthDate());
+        createDto.setPhone(dto.getPhone());
+        createDto.setGender(dto.getGender());
+        createDto.setRole(Role.CUSTOMER);
+
+        return createWithRole(createDto, slug);
+    }
+
+    private void validateCustomerRegistration(RegisterCustomerDTO dto) {
+        if (dto == null) {
+            throw new BusinessRuleException("Registration data is required");
+        }
+
+        requireText(dto.getEmail(), "Email");
+        String email = dto.getEmail().trim();
+        if (!EMAIL_PATTERN.matcher(email).matches()) {
+            throw new BusinessRuleException("Ingresa un correo electrónico válido");
+        }
+        dto.setEmail(email);
+
+        if (dto.getPassword() == null || dto.getPassword().length() < 8) {
+            throw new BusinessRuleException("La contraseña debe tener al menos 8 caracteres");
+        }
+
+        validatePersonName(dto.getFirstName(), "El nombre");
+        validatePersonName(dto.getPaternalSurname(), "El apellido paterno");
+        validatePersonName(dto.getMaternalSurname(), "El apellido materno");
+
+        if (dto.getDocumentType() == null) {
+            throw new BusinessRuleException("El tipo de documento es obligatorio");
+        }
+        requireText(dto.getDocumentNumber(), "El número de documento");
+        String documentNumber = dto.getDocumentNumber().trim();
+        if (!DIGITS_PATTERN.matcher(documentNumber).matches()) {
+            throw new BusinessRuleException("El número de documento solo debe contener dígitos");
+        }
+        validateDocumentNumberLength(dto.getDocumentType(), documentNumber);
+        dto.setDocumentNumber(documentNumber);
+
+        requireText(dto.getPhone(), "El teléfono");
+        String phone = dto.getPhone().trim();
+        if (!PHONE_PATTERN.matcher(phone).matches()) {
+            throw new BusinessRuleException("El celular debe tener 9 dígitos");
+        }
+        dto.setPhone(phone);
+
+        if (dto.getBirthDate() == null) {
+            throw new BusinessRuleException("La fecha de nacimiento es obligatoria");
+        }
+        if (dto.getBirthDate().isAfter(LocalDate.now())) {
+            throw new BusinessRuleException("La fecha de nacimiento no puede ser una fecha futura");
+        }
+
+        if (dto.getGender() == null) {
+            throw new BusinessRuleException("El género es obligatorio");
+        }
+    }
+
+    private void validatePersonName(String value, String label) {
+        if (value == null || value.trim().isEmpty()) {
+            throw new BusinessRuleException(label + " es obligatorio");
+        }
+        String trimmed = value.trim();
+        if (trimmed.length() < 2 || trimmed.length() > 50) {
+            throw new BusinessRuleException(label + " debe tener entre 2 y 50 caracteres");
+        }
+        if (!NAME_PATTERN.matcher(trimmed).matches()) {
+            throw new BusinessRuleException(label + " solo puede contener letras, espacios, guiones y apóstrofes");
+        }
+    }
+
+    private void validateDocumentNumberLength(DocumentType documentType, String documentNumber) {
+        int len = documentNumber.length();
+        switch (documentType) {
+            case DNI -> {
+                if (len != 8) {
+                    throw new BusinessRuleException("El DNI debe tener 8 dígitos");
+                }
+            }
+            case FOREIGN_ID_CARD -> {
+                if (len < 9 || len > 15) {
+                    throw new BusinessRuleException("El carné de extranjería debe tener entre 9 y 15 dígitos");
+                }
+            }
+            case PASSPORT -> {
+                if (len < 6 || len > 20) {
+                    throw new BusinessRuleException("El pasaporte debe tener entre 6 y 20 dígitos");
+                }
+            }
+        }
     }
 }
