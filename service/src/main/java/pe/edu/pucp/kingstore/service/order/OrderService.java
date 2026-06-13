@@ -138,6 +138,7 @@ public class OrderService extends AbstractCrudService<Order> {
         dto.setProductVariantId(variant != null ? variant.getId() : null);
         dto.setSize(variant != null ? variant.getSize() : null);
         dto.setColor(variant != null && variant.getColor() != null ? variant.getColor().name() : null);
+        dto.setStockAvailable(variant != null ? variant.getStock() : null);
         dto.setQuantity(item.getQuantity());
         dto.setUnitPrice(item.getUnitPrice());
         dto.setSubTotal(item.getSubTotal());

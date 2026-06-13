@@ -138,6 +138,8 @@ public class QuotationService extends AbstractCrudService<Quotation> {
         dto.setDiscount(quotation.getDiscount());
         dto.setTotalAmount(quotation.getTotalAmount());
         dto.setRequestedAt(quotation.getRequestedAt());
+        // responseAt es null mientras la cotización está pendiente (se setea al aprobar/rechazar).
+        dto.setResponseAt(quotation.getResponseAt());
         dto.setDescription(quotation.getDescription());
         dto.setObservations(quotation.getObservations());
         dto.setStoreId(storeId);

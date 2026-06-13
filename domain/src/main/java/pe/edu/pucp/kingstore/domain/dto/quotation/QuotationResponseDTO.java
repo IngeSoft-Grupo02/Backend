@@ -25,6 +25,7 @@ public class QuotationResponseDTO {
     private double discount;
     private double totalAmount;
     private LocalDateTime requestedAt;
+    private LocalDateTime responseAt;
     private String description;
     private String observations;
     private Integer storeId;

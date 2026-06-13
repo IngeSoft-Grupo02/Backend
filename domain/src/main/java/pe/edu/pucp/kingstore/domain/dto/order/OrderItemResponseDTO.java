@@ -17,6 +17,7 @@ public class OrderItemResponseDTO {
     private Integer productVariantId;
     private String size;
     private String color;
+    private Integer stockAvailable;
     private Integer quantity;
     private Double unitPrice;
     private Double subTotal;

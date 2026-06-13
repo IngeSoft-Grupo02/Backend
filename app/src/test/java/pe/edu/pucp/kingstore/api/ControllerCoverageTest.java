@@ -7,7 +7,7 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.multipart.MultipartFile;
-import pe.edu.pucp.kingstore.api.controller.PublicStoreController;
+import pe.edu.pucp.kingstore.api.controller.public_.PublicStoreController;
 import pe.edu.pucp.kingstore.api.controller.admin.AuditController;
 import pe.edu.pucp.kingstore.api.controller.customer.AuthController;
 import pe.edu.pucp.kingstore.api.controller.admin.BulkUploadController;
@@ -214,8 +214,13 @@ class ControllerCoverageTest {
         category.setStoreCategoryName("Moda");
         activeStore.setCategory(category);
 
+        StorePublicDTO publicDTO = new StorePublicDTO();
+        publicDTO.setSlug("ripley");
+        publicDTO.setStoreName("Ripley");
+        publicDTO.setCategory("Moda");
         when(storeService.findPublicStores()).thenReturn(List.of(activeStore));
-        List<StorePublicDTO> result = controller.findPublicStores().getBody();
+        when(storeService.toPublicDTO(activeStore)).thenReturn(publicDTO);
+        @SuppressWarnings("unchecked") List<StorePublicDTO> result = (List<StorePublicDTO>) controller.findPublicStores().getBody();
         assertThat(result).singleElement().satisfies(item -> {
             assertThat(item.getSlug()).isEqualTo("ripley");
             assertThat(item.getCategory()).isEqualTo("Moda");
