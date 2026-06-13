@@ -33,16 +33,18 @@ public class SecurityConfig {
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
                 .authorizeHttpRequests(auth -> auth
-                        // Endpoints pÃºblicos - no requieren token
+                        // Endpoints publicos - no requieren token
                         .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/stores/*/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/stores/*/customers/register").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/stores/public", "/stores/public/**").permitAll() //nuevo
                         .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll()
 
                         // Solo administradores
                         .requestMatchers("/admin/**").hasRole("SYSTEM_ADMIN")
                         .requestMatchers("/merchant/**").hasRole("MERCHANT")
-
+                        // Perfil del cliente autenticado, restringido a su propia tienda *****NUEVO
+                        .requestMatchers(HttpMethod.GET, "/stores/*/customers/me").hasRole("CUSTOMER")
                         // Todo lo demÃ¡s requiere autenticaciÃ³n
                         .anyRequest().authenticated()
                 )
@@ -55,8 +57,13 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOriginPatterns(List.of(
-            "http://52.205.138.95:3000",
-            "http://localhost:3000"));
+                "https://ec2-100-27-222-84.compute-1.amazonaws.com",
+                "http://localhost:3000",
+                "http://localhost:3001",
+                "http://localhost:3002")); //NUEVO
+//        config.setAllowedOriginPatterns(List.of(
+//            "http://52.205.138.95:3000",
+//            "http://localhost:3000"));//ANTIGUO
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);

@@ -1,10 +1,11 @@
 package pe.edu.pucp.kingstore.api.controller.customer;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
-        import pe.edu.pucp.kingstore.domain.dto.user.CreateUserDTO;
 import pe.edu.pucp.kingstore.domain.dto.user.LoginRequestDTO;
 import pe.edu.pucp.kingstore.domain.dto.user.LoginResponseDTO;
+import pe.edu.pucp.kingstore.domain.dto.user.RegisterCustomerDTO;
 import pe.edu.pucp.kingstore.domain.model.user.enums.Role;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
 import pe.edu.pucp.kingstore.service.security.JwtUtil;
@@ -26,11 +27,9 @@ public class CustomerAuthController {
     // Cliente-04: Registro en tienda
     @PostMapping("/customers/register")
     public ResponseEntity<?> register(@PathVariable String slug,
-                                      @RequestBody CreateUserDTO dto) {
+                                      @RequestBody RegisterCustomerDTO dto) {
         try {
-            // Verificar que la tienda existe y estÃ¡ activa
-            dto.setRole(Role.CUSTOMER);
-            userAccountService.createWithRole(dto,slug);
+            userAccountService.registerCustomer(dto, slug);
             return ResponseEntity.status(201).body("Customer registered successfully");
         } catch (BusinessRuleException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
@@ -42,19 +41,41 @@ public class CustomerAuthController {
     public ResponseEntity<?> login(@PathVariable String slug,
                                    @RequestBody LoginRequestDTO request) {
         try {
-            // Verificar que la tienda existe y estÃ¡ activa
             LoginResponseDTO result = userAccountService.authenticateCustomer(slug, request);
             String token = jwtUtil.generateToken(
                     result.getId(),
                     result.getEmail(),
                     Role.CUSTOMER,
-                    slug
+                    result.getStoreSlug()
             );
-
             result.setToken(token);
             return ResponseEntity.ok(result);
         } catch (BusinessRuleException e) {
             return ResponseEntity.status(401).body(e.getMessage());
+        }
+    }
+
+    // Cliente-06: Perfil del cliente autenticado
+    @GetMapping("/customers/me")
+    public ResponseEntity<?> me(@PathVariable String slug,
+                                Authentication authentication) {
+        try {
+            Integer userAccountId = resolveUserAccountId(authentication);
+            return ResponseEntity.ok(
+                    userAccountService.getCustomerProfile(userAccountId, slug));
+        } catch (BusinessRuleException e) {
+            return ResponseEntity.status(403).body(e.getMessage());
+        }
+    }
+
+    private Integer resolveUserAccountId(Authentication authentication) {
+        if (authentication == null || authentication.getName() == null) {
+            throw new BusinessRuleException("Authenticated customer is required");
+        }
+        try {
+            return Integer.parseInt(authentication.getName());
+        } catch (NumberFormatException e) {
+            throw new BusinessRuleException("Authenticated customer id is invalid");
         }
     }
 }
