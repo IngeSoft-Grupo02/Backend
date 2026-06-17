@@ -47,6 +47,9 @@ public class QuotationService extends AbstractCrudService<Quotation> {
         if (status == null || status == QuotationStatus.PENDING) {
             throw new BusinessRuleException("Quotation response must approve or reject the quotation");
         }
+        if (status == QuotationStatus.REJECTED && (observations == null || observations.isBlank())) {
+            throw new BusinessRuleException("Observations are required when rejecting a quotation");
+        }
         Quotation quotation = getById(id);
         quotation.setStatus(status);
         quotation.setObservations(observations);
@@ -119,35 +122,64 @@ public class QuotationService extends AbstractCrudService<Quotation> {
         List<QuotationItemResponseDTO> items = quotation.getItems() == null
                 ? List.of()
                 : quotation.getItems().stream()
-                  .map(item -> new QuotationItemResponseDTO(
-                          "Producto",
-                          item.getProductVariant() != null
-                          ? item.getProductVariant().getSize() + " / "
-                            + item.getProductVariant().getColor().name()
-                          : null,
-                          item.getQuantity(),
-                          item.getPrice(),
-                          item.getSubTotal()
-                  ))
+                  .map(this::toItemResponseDTO)
                   .toList();
 
-        return new QuotationResponseDTO(
-                quotation.getId(),
-                MerchantCustomerUtil.customerName(customer),
-                quotation.getStatus(),
-                switch (quotation.getStatus()) {
-                    case PENDING  -> "Pendiente";
-                    case APPROVED -> "Aprobada";
-                    case REJECTED -> "Rechazada";
-                },
-                quotation.getSubTotal(),
-                quotation.getDiscount(),
-                quotation.getTotalAmount(),
-                quotation.getRequestedAt(),
-                quotation.getDescription(),
-                quotation.getObservations(),
-                storeId,
-                items
-        );
+        QuotationResponseDTO dto = new QuotationResponseDTO();
+        dto.setId(quotation.getId());
+        dto.setCustomer(MerchantCustomerUtil.customerName(customer));
+        dto.setStatus(quotation.getStatus());
+        dto.setStatusLabel(switch (quotation.getStatus()) {
+            case PENDING  -> "Pendiente";
+            case APPROVED -> "Aprobada";
+            case REJECTED -> "Rechazada";
+        });
+        dto.setSubTotal(quotation.getSubTotal());
+        dto.setDiscount(quotation.getDiscount());
+        dto.setTotalAmount(quotation.getTotalAmount());
+        dto.setRequestedAt(quotation.getRequestedAt());
+        // responseAt es null mientras la cotización está pendiente (se setea al aprobar/rechazar).
+        dto.setResponseAt(quotation.getResponseAt());
+        dto.setDescription(quotation.getDescription());
+        dto.setObservations(quotation.getObservations());
+        dto.setStoreId(storeId);
+        dto.setItems(items);
+
+        // Datos reales del cliente.
+        dto.setCustomerName(MerchantCustomerUtil.customerName(customer));
+        dto.setCustomerEmail(MerchantCustomerUtil.customerEmail(customer));
+        dto.setCustomerPhone(MerchantCustomerUtil.customerPhone(customer));
+        dto.setDocumentType(MerchantCustomerUtil.documentType(customer));
+        dto.setDocumentNumber(MerchantCustomerUtil.documentNumber(customer));
+        return dto;
+    }
+
+    private QuotationItemResponseDTO toItemResponseDTO(QuotationItem item) {
+        var variant = item.getProductVariant();
+        var product = variant != null ? variant.getProduct() : null;
+
+        String productName = product != null ? product.getName() : null;
+        String size = variant != null ? variant.getSize() : null;
+        String color = variant != null && variant.getColor() != null ? variant.getColor().name() : null;
+        String variantLabel = variant != null
+                ? size + " / " + (color != null ? color : "")
+                : null;
+
+        QuotationItemResponseDTO dto = new QuotationItemResponseDTO();
+        dto.setProductId(product != null ? product.getId() : null);
+        dto.setProductName(productName);
+        dto.setProductVariantId(variant != null ? variant.getId() : null);
+        dto.setSize(size);
+        dto.setColor(color);
+        dto.setStockAvailable(variant != null ? variant.getStock() : null);
+        dto.setQuantity(item.getQuantity());
+        dto.setUnitPrice(item.getPrice());
+        dto.setSubTotal(item.getSubTotal());
+
+        // Legacy: el frontend actual usa product/variant/price.
+        dto.setProduct(productName);
+        dto.setVariant(variantLabel);
+        dto.setPrice(item.getPrice());
+        return dto;
     }
 }

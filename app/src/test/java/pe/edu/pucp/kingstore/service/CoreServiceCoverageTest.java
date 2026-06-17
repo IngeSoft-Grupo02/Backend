@@ -10,8 +10,10 @@ import org.springframework.test.util.ReflectionTestUtils;
 import pe.edu.pucp.kingstore.domain.dto.store.StoreCategoryDTO;
 import pe.edu.pucp.kingstore.domain.dto.store.StoreDTO;
 import pe.edu.pucp.kingstore.domain.dto.user.CreateUserDTO;
+import pe.edu.pucp.kingstore.domain.dto.user.CustomerProfileDTO;
 import pe.edu.pucp.kingstore.domain.dto.user.LoginRequestDTO;
 import pe.edu.pucp.kingstore.domain.dto.user.LoginResponseDTO;
+import pe.edu.pucp.kingstore.domain.dto.user.RegisterCustomerDTO;
 import pe.edu.pucp.kingstore.domain.model.audit.AuditLog;
 import pe.edu.pucp.kingstore.domain.model.audit.enums.AuditLevel;
 import pe.edu.pucp.kingstore.domain.model.cart.CartItem;
@@ -346,6 +348,72 @@ class CoreServiceCoverageTest {
     }
 
     @Test
+    void customerRegistrationValidatesFieldsBeforeCreatingAccount() {
+        UserAccountService service = new UserAccountService(
+                userAccountRepository, customerRepository, merchantRepository, administratorRepository, storeRepository);
+
+        when(storeRepository.findBySlug("store")).thenReturn(Optional.of(store()));
+        when(storeRepository.findById(2)).thenReturn(Optional.of(store()));
+        when(userAccountRepository.save(any(UserAccount.class))).thenAnswer(invocation -> {
+            UserAccount saved = invocation.getArgument(0);
+            if (saved.getId() == null) saved.setId(200);
+            return saved;
+        });
+        when(customerRepository.save(any(Customer.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        RegisterCustomerDTO validDni = registerCustomerDTO();
+        assertThat(service.registerCustomer(validDni, "store").getId()).isEqualTo(200);
+
+        RegisterCustomerDTO validCe = registerCustomerDTO();
+        validCe.setEmail("ce-customer@kingstore.pe");
+        validCe.setDocumentType(DocumentType.FOREIGN_ID_CARD);
+        validCe.setDocumentNumber("123456789");
+        assertThat(service.registerCustomer(validCe, "store").getId()).isEqualTo(200);
+
+        RegisterCustomerDTO validPassport = registerCustomerDTO();
+        validPassport.setEmail("passport-customer@kingstore.pe");
+        validPassport.setDocumentType(DocumentType.PASSPORT);
+        validPassport.setDocumentNumber("123456789");
+        assertThat(service.registerCustomer(validPassport, "store").getId()).isEqualTo(200);
+
+        RegisterCustomerDTO dniTooLong = registerCustomerDTO();
+        dniTooLong.setDocumentNumber("123456789");
+        assertThatThrownBy(() -> service.registerCustomer(dniTooLong, "store"))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessage("El DNI debe tener 8 dígitos");
+
+        RegisterCustomerDTO dniWithLetters = registerCustomerDTO();
+        dniWithLetters.setDocumentNumber("1234567A");
+        assertThatThrownBy(() -> service.registerCustomer(dniWithLetters, "store"))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessage("El número de documento solo debe contener dígitos");
+
+        RegisterCustomerDTO phoneTooLong = registerCustomerDTO();
+        phoneTooLong.setPhone("1234567890");
+        assertThatThrownBy(() -> service.registerCustomer(phoneTooLong, "store"))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessage("El celular debe tener 9 dígitos");
+
+        RegisterCustomerDTO phoneWithLetters = registerCustomerDTO();
+        phoneWithLetters.setPhone("99999999A");
+        assertThatThrownBy(() -> service.registerCustomer(phoneWithLetters, "store"))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessage("El celular debe tener 9 dígitos");
+
+        RegisterCustomerDTO invalidEmail = registerCustomerDTO();
+        invalidEmail.setEmail("not-an-email");
+        assertThatThrownBy(() -> service.registerCustomer(invalidEmail, "store"))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessage("Ingresa un correo electrónico válido");
+
+        RegisterCustomerDTO futureBirthDate = registerCustomerDTO();
+        futureBirthDate.setBirthDate(LocalDate.now().plusDays(1));
+        assertThatThrownBy(() -> service.registerCustomer(futureBirthDate, "store"))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessage("La fecha de nacimiento no puede ser una fecha futura");
+    }
+
+    @Test
     void jwtAndLocalStorageServicesWork(@TempDir Path tempDir) throws Exception {
         JwtUtil jwtUtil = new JwtUtil();
         String token = jwtUtil.generateToken(7, "user@kingstore.pe", Role.MERCHANT, "store");
@@ -498,6 +566,65 @@ class CoreServiceCoverageTest {
         CreateUserDTO duplicateEmail = new CreateUserDTO();
         duplicateEmail.setEmail(" duplicate@kingstore.pe ");
         assertThatThrownBy(() -> service.updateUser(41, duplicateEmail))
+                .isInstanceOf(BusinessRuleException.class);
+    }
+
+    @Test
+    void storeServiceCoversPublicCatalogFiltering() {
+        StoreService storeService = new StoreService(storeRepository, merchantRepository, categoryRepository, quotationRepository);
+
+        Store activeStore = store();
+        Store hiddenStore = store();
+        hiddenStore.setId(6);
+        hiddenStore.setSlug("hidden");
+        hiddenStore.setActive(false);
+
+        when(storeRepository.findByStoreStatus(StoreStatus.ACTIVE)).thenReturn(List.of(activeStore, hiddenStore));
+        assertThat(storeService.findPublicStores()).containsExactly(activeStore);
+
+        when(storeRepository.findBySlug("store")).thenReturn(Optional.of(activeStore));
+        assertThat(storeService.findPublicBySlug("Store")).contains(activeStore);
+
+        when(storeRepository.findBySlug("hidden")).thenReturn(Optional.of(hiddenStore));
+        assertThat(storeService.findPublicBySlug("hidden")).isEmpty();
+
+        Store suspendedStore = store();
+        suspendedStore.setId(7);
+        suspendedStore.setSlug("suspended-store");
+        suspendedStore.setStoreStatus(StoreStatus.SUSPENDED);
+        when(storeRepository.findBySlug("suspended-store")).thenReturn(Optional.of(suspendedStore));
+        assertThat(storeService.findPublicBySlug("suspended-store")).isEmpty();
+
+        when(storeRepository.findBySlug("missing")).thenReturn(Optional.empty());
+        assertThat(storeService.findPublicBySlug("missing")).isEmpty();
+    }
+
+    @Test
+    void userAccountServiceValidatesCustomerStoreSlugForLoginAndProfile() {
+        UserAccountService service = new UserAccountService(
+                userAccountRepository, customerRepository, merchantRepository, administratorRepository, storeRepository);
+
+        UserAccount account = account(50, "customer-store@kingstore.pe", "secret");
+        Customer customer = customerProfile();
+        customer.setId(99);
+        when(userAccountRepository.findByEmail("customer-store@kingstore.pe")).thenReturn(Optional.of(account));
+        when(customerRepository.findByUserAccountId(50)).thenReturn(Optional.of(customer));
+
+        LoginRequestDTO request = login("customer-store@kingstore.pe", "secret");
+
+        LoginResponseDTO response = service.authenticateCustomer("store", request);
+        assertThat(response.getStoreSlug()).isEqualTo("store");
+        assertThat(response.getRole()).isEqualTo(Role.CUSTOMER);
+
+        assertThatThrownBy(() -> service.authenticateCustomer("other-store", request))
+                .isInstanceOf(BusinessRuleException.class);
+
+        CustomerProfileDTO profile = service.getCustomerProfile(50, "store");
+        assertThat(profile.getStoreSlug()).isEqualTo("store");
+        assertThat(profile.getLastName()).isEqualTo("Perez Rojas");
+        assertThat(profile.getEmail()).isEqualTo("customer@kingstore.pe");
+
+        assertThatThrownBy(() -> service.getCustomerProfile(50, "other-store"))
                 .isInstanceOf(BusinessRuleException.class);
     }
 
@@ -702,6 +829,21 @@ class CoreServiceCoverageTest {
         dto.setGender(Gender.FEMALE);
         dto.setPhone("999999999");
         dto.setRole(role);
+        return dto;
+    }
+
+    private RegisterCustomerDTO registerCustomerDTO() {
+        RegisterCustomerDTO dto = new RegisterCustomerDTO();
+        dto.setEmail("new-customer@kingstore.pe");
+        dto.setPassword("Password123!");
+        dto.setFirstName("Ana");
+        dto.setPaternalSurname("Perez");
+        dto.setMaternalSurname("Rojas");
+        dto.setDocumentType(DocumentType.DNI);
+        dto.setDocumentNumber("12345678");
+        dto.setBirthDate(LocalDate.of(1990, 1, 1));
+        dto.setGender(Gender.FEMALE);
+        dto.setPhone("999999999");
         return dto;
     }
 

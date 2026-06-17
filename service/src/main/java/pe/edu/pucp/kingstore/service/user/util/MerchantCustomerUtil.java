@@ -26,4 +26,24 @@ public final class MerchantCustomerUtil {
                 .replaceAll("\\s+", " ")
                 .trim();
     }
+
+    public static String customerEmail(Customer customer) {
+        return customer != null && customer.getUserAccount() != null
+                ? customer.getUserAccount().getEmail()
+                : null;
+    }
+
+    public static String customerPhone(Customer customer) {
+        return customer != null ? customer.getPhone() : null;
+    }
+
+    public static String documentNumber(Customer customer) {
+        return customer != null ? customer.getDocumentNumber() : null;
+    }
+
+    public static String documentType(Customer customer) {
+        return customer != null && customer.getDocumentType() != null
+                ? customer.getDocumentType().name()
+                : null;
+    }
 }
