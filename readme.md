@@ -50,6 +50,112 @@ git push origin feature/JIRA-123-feature-description
 
 ---
 
+## Desarrollo Local
+
+### Requisitos previos
+
+- Java 21 ([descargar](https://adoptium.net/))
+- Maven (o usar el wrapper `./mvnw` incluido — no requiere instalación)
+- IDE recomendado: IntelliJ IDEA
+
+### Configuración inicial (solo una vez)
+
+**1. Crear el archivo `.env`:**
+```bash
+cp .env.example .env
+```
+El `.env` ya viene con los valores correctos para local. No es necesario modificarlo.
+
+> `.env` está en `.gitignore` — nunca se sube al repositorio.
+
+**2. Cargar las variables de entorno:**
+```bash
+export $(cat .env | xargs)
+```
+
+**3. Levantar el proyecto:**
+```bash
+./mvnw spring-boot:run
+```
+
+El backend queda disponible en `http://localhost:8080`.
+
+---
+
+### Perfiles de Spring Boot
+
+| Perfil | Cuándo se usa | Base de datos |
+|--------|--------------|---------------|
+| `local` | Desarrollo en tu máquina | RDS compartida (dev) |
+| `prod`  | Servidor EC2 | RDS compartida (prod) |
+
+> **Importante:** el perfil `local` conecta a la misma RDS. Ten cuidado con operaciones destructivas sobre datos que otros devs estén usando.
+
+El perfil activo se controla desde `.env`:
+```
+SPRING_PROFILES_ACTIVE=local
+```
+
+---
+
+### Correr los tests
+
+Los tests usan **H2 en memoria** — no requieren conexión a RDS ni variables de entorno configuradas.
+
+```bash
+# Correr todos los tests
+./mvnw test
+
+# Correr tests + reporte de cobertura (mínimo 90%)
+./mvnw verify
+```
+
+El reporte de cobertura queda en `app/target/site/jacoco-aggregate/index.html`.
+
+---
+
+### Levantar desde IntelliJ IDEA
+
+1. Abrir el proyecto desde la raíz (`/Backend`)
+2. IntelliJ detecta automáticamente el proyecto Maven multi-módulo
+3. Configurar las variables de entorno en **Run/Debug Configurations**:
+   - `JASYPT_ENCRYPTOR_PASSWORD=kingstore-secret-key-2024`
+   - `SPRING_PROFILES_ACTIVE=local`
+   - `JWT_SECRET=kingstore-secret-key-ingesoft-2026`
+4. Correr la clase `KingstoreBackendApplication`
+
+---
+
+### Estructura del proyecto
+
+```
+Backend/
+├── domain/       # Entidades JPA y DTOs
+├── repository/   # Repositorios Spring Data
+├── service/      # Lógica de negocio
+├── api/          # Controllers REST y configuración de seguridad
+└── app/          # Módulo principal: arranca Spring Boot
+    └── src/main/resources/
+        ├── application.properties          # Config base (conecta a RDS)
+        ├── application-local.properties    # Overrides para local (logs verbose)
+        └── application-prod.properties     # Overrides para producción
+```
+
+---
+
+### Variables de entorno locales
+
+| Variable | Valor por defecto (local) | Descripción |
+|----------|--------------------------|-------------|
+| `JASYPT_ENCRYPTOR_PASSWORD` | `kingstore-secret-key-2024` | Descifra propiedades con `ENC(...)` |
+| `SPRING_PROFILES_ACTIVE` | `local` | Activa el perfil local |
+| `JWT_SECRET` | `kingstore-secret-key-ingesoft-2026` | Firma tokens JWT |
+| `SPRING_DATASOURCE_PASSWORD` | *(usa valor cifrado en properties)* | Contraseña RDS (opcional) |
+
+Para más detalles sobre el cifrado de propiedades, ver [`ENCRYPTION_GUIDE.md`](ENCRYPTION_GUIDE.md).
+
+---
+
 ## Despliegue del Backend
 
 El backend es una aplicación Spring Boot multi-módulo (Maven). Se despliega como contenedor Docker en EC2 y se conecta a una base de datos MySQL en AWS RDS.
