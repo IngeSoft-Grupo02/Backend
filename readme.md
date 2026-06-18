@@ -76,6 +76,9 @@ El `.env` ya viene con los valores correctos para local. No es necesario modific
 
 **2. Cargar las variables de entorno:**
 
+> **Por qué es necesario:** `JWT_SECRET` y `JASYPT_ENCRYPTOR_PASSWORD` se leen directamente del entorno del proceso. Si no están cargadas, el JWT no funcionará y las propiedades cifradas (`ENC(...)`) no podrán desencriptarse.
+> `SPRING_PROFILES_ACTIVE` ya tiene `local` como valor por defecto en `application.properties`, así que el perfil siempre se activa aunque no cargues el `.env`.
+
 Linux/Mac:
 ```bash
 export $(grep -v '^\s*#' .env | grep -v '^\s*$' | xargs)
