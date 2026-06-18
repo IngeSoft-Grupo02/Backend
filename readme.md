@@ -61,22 +61,49 @@ git push origin feature/JIRA-123-feature-description
 ### Configuración inicial (solo una vez)
 
 **1. Crear el archivo `.env`:**
+
+Linux/Mac:
 ```bash
 cp .env.example .env
+```
+Windows:
+```cmd
+copy .env.example .env
 ```
 El `.env` ya viene con los valores correctos para local. No es necesario modificarlo.
 
 > `.env` está en `.gitignore` — nunca se sube al repositorio.
 
 **2. Cargar las variables de entorno:**
+
+Linux/Mac:
 ```bash
-export $(cat .env | xargs)
+export $(grep -v '^\s*#' .env | grep -v '^\s*$' | xargs)
+```
+
+Windows (PowerShell):
+```powershell
+Get-Content .env | Where-Object { $_ -notmatch '^\s*#' -and $_ -match '=' } | ForEach-Object { $k,$v = $_ -split '=',2; [System.Environment]::SetEnvironmentVariable($k,$v) }
+```
+
+Windows (CMD):
+```cmd
+for /f "usebackq tokens=1,* delims==" %a in (.env) do @if not "%a:~0,1%"=="#" if not "%a"=="" set "%a=%b"
 ```
 
 **3. Levantar el proyecto:**
+
+Linux/Mac:
 ```bash
-./mvnw spring-boot:run
+./mvnw spring-boot:run -pl app -am
 ```
+
+Windows:
+```cmd
+mvnw.cmd spring-boot:run -pl app -am
+```
+
+> El flag `-am` (also make) compila primero los módulos dependientes (`domain`, `repository`, `service`, `api`) antes de levantar `app`.
 
 El backend queda disponible en `http://localhost:8080`.
 
@@ -84,17 +111,18 @@ El backend queda disponible en `http://localhost:8080`.
 
 ### Perfiles de Spring Boot
 
-| Perfil | Cuándo se usa | Base de datos |
-|--------|--------------|---------------|
-| `local` | Desarrollo en tu máquina | RDS compartida (dev) |
-| `prod`  | Servidor EC2 | RDS compartida (prod) |
+Spring Boot carga siempre `application.properties` como base, y encima aplica los overrides del perfil activo:
 
-> **Importante:** el perfil `local` conecta a la misma RDS. Ten cuidado con operaciones destructivas sobre datos que otros devs estén usando.
+| Perfil | Cuándo se usa | Archivo de overrides | Base de datos |
+|--------|--------------|----------------------|---------------|
+| `local` | Desarrollo en tu máquina | `application-local.properties` | RDS compartida (dev) |
+| `prod`  | Servidor EC2 | `application-prod.properties` | RDS compartida (prod) |
 
-El perfil activo se controla desde `.env`:
-```
-SPRING_PROFILES_ACTIVE=local
-```
+El perfil activo se controla con la variable de entorno `SPRING_PROFILES_ACTIVE`. En tu `.env` local ya viene configurado como `local` — no necesitas cambiarlo.
+
+> **Requisito para el perfil `local`:** tu IP debe estar en el Security Group del RDS (puerto 3306). Si obtienes `Access denied` al arrancar, pide al responsable de AWS que agregue tu IP como regla inbound.
+
+> **Para despliegue en EC2:** el `.env` del servidor debe tener `SPRING_PROFILES_ACTIVE=prod`. Con ese valor, Spring ignora `application-local.properties` y conecta al RDS de producción.
 
 ---
 
@@ -102,12 +130,19 @@ SPRING_PROFILES_ACTIVE=local
 
 Los tests usan **H2 en memoria** — no requieren conexión a RDS ni variables de entorno configuradas.
 
+Linux/Mac:
 ```bash
 # Correr todos los tests
 ./mvnw test
 
 # Correr tests + reporte de cobertura (mínimo 90%)
 ./mvnw verify
+```
+
+Windows:
+```cmd
+mvnw.cmd test
+mvnw.cmd verify
 ```
 
 El reporte de cobertura queda en `app/target/site/jacoco-aggregate/index.html`.
@@ -118,11 +153,20 @@ El reporte de cobertura queda en `app/target/site/jacoco-aggregate/index.html`.
 
 1. Abrir el proyecto desde la raíz (`/Backend`)
 2. IntelliJ detecta automáticamente el proyecto Maven multi-módulo
-3. Configurar las variables de entorno en **Run/Debug Configurations**:
-   - `JASYPT_ENCRYPTOR_PASSWORD=kingstore-secret-key-2024`
-   - `SPRING_PROFILES_ACTIVE=local`
-   - `JWT_SECRET=kingstore-secret-key-ingesoft-2026`
-4. Correr la clase `KingstoreBackendApplication`
+3. Ir a **Run > Edit Configurations...**
+4. Si no existe, crear una nueva configuración: **+ > Application**
+5. Configurar:
+   - **Main class:** `pe.edu.pucp.kingstore.KingstoreBackendApplication`
+   - **Module:** `kingstore-backend.app`
+   - **Environment variables** (hacer clic en el ícono de carpeta a la derecha del campo):
+     ```
+     JASYPT_ENCRYPTOR_PASSWORD=kingstore-secret-key-2024
+     SPRING_PROFILES_ACTIVE=local
+     JWT_SECRET=kingstore-secret-key-ingesoft-2026
+     ```
+6. Hacer clic en **OK** y correr con el botón ▶
+
+> **Alternativa con plugin EnvFile:** IntelliJ tiene el plugin [EnvFile](https://plugins.jetbrains.com/plugin/7861-envfile) que permite apuntar directamente al archivo `.env` en lugar de copiar las variables manualmente. En **Run/Debug Configurations → EnvFile tab**, activar _Enable EnvFile_ y agregar el `.env` del proyecto.
 
 ---
 
