@@ -1,5 +1,6 @@
 package pe.edu.pucp.kingstore.api.security;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -12,6 +13,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import java.util.Arrays;
 import java.util.List;
 
 @Configuration
@@ -19,9 +21,16 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final List<String> allowedOriginPatterns;
 
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
+    public SecurityConfig(
+            JwtAuthenticationFilter jwtAuthenticationFilter,
+            @Value("${kingstore.cors.allowed-origin-patterns:http://localhost:3000}") String allowedOriginPatterns) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.allowedOriginPatterns = Arrays.stream(allowedOriginPatterns.split(","))
+                .map(String::trim)
+                .filter(origin -> !origin.isEmpty())
+                .toList();
     }
 
     @Bean
@@ -35,6 +44,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // Endpoints publicos - no requieren token
                         .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
+                        .requestMatchers("/auth/password/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/stores/*/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/stores/*/customers/register").permitAll()
                         .requestMatchers(HttpMethod.GET, "/stores/public", "/stores/public/**").permitAll() //nuevo
@@ -60,17 +70,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOriginPatterns(List.of(
-                "http://100.57.218.181",
-                "http://100.57.218.181:*",
-                "https://ec2-100-57-218-181.compute-1.amazonaws.com",
-                "http://localhost:3000",
-                "http://localhost:3001",
-                "http://localhost:3002",
-                "http://localhost:3003"));
-//        config.setAllowedOriginPatterns(List.of(
-//            "http://100.57.218.181:3000",
-//            "http://localhost:3000"));//ANTIGUO
+        config.setAllowedOriginPatterns(allowedOriginPatterns);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
