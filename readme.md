@@ -50,6 +50,159 @@ git push origin feature/JIRA-123-feature-description
 
 ---
 
+## Desarrollo Local
+
+### Requisitos previos
+
+- Java 21 ([descargar](https://adoptium.net/))
+- Maven (o usar el wrapper `./mvnw` incluido — no requiere instalación)
+- IDE recomendado: IntelliJ IDEA
+
+### Configuración inicial (solo una vez)
+
+**1. Crear el archivo `.env`:**
+
+Linux/Mac:
+```bash
+cp .env.example .env
+```
+Windows:
+```cmd
+copy .env.example .env
+```
+El `.env` ya viene con los valores correctos para local. No es necesario modificarlo.
+
+> `.env` está en `.gitignore` — nunca se sube al repositorio.
+
+**2. Cargar las variables de entorno:**
+
+> **Por qué es necesario:** `JWT_SECRET` y `JASYPT_ENCRYPTOR_PASSWORD` se leen directamente del entorno del proceso. Si no están cargadas, el JWT no funcionará y las propiedades cifradas (`ENC(...)`) no podrán desencriptarse.
+> `SPRING_PROFILES_ACTIVE` ya tiene `local` como valor por defecto en `application.properties`, así que el perfil siempre se activa aunque no cargues el `.env`.
+
+Linux/Mac:
+```bash
+export $(grep -v '^\s*#' .env | grep -v '^\s*$' | xargs)
+```
+
+Windows (PowerShell):
+```powershell
+Get-Content .env | Where-Object { $_ -notmatch '^\s*#' -and $_ -match '=' } | ForEach-Object { $k,$v = $_ -split '=',2; [System.Environment]::SetEnvironmentVariable($k,$v) }
+```
+
+Windows (CMD):
+```cmd
+for /f "usebackq tokens=1,* delims==" %a in (.env) do @if not "%a:~0,1%"=="#" if not "%a"=="" set "%a=%b"
+```
+
+**3. Levantar el proyecto:**
+
+Linux/Mac:
+```bash
+./mvnw spring-boot:run -pl app -am
+```
+
+Windows:
+```cmd
+mvnw.cmd spring-boot:run -pl app -am
+```
+
+> El flag `-am` (also make) compila primero los módulos dependientes (`domain`, `repository`, `service`, `api`) antes de levantar `app`.
+
+El backend queda disponible en `http://localhost:8080`.
+
+---
+
+### Perfiles de Spring Boot
+
+Spring Boot carga siempre `application.properties` como base, y encima aplica los overrides del perfil activo:
+
+| Perfil | Cuándo se usa | Archivo de overrides | Base de datos |
+|--------|--------------|----------------------|---------------|
+| `local` | Desarrollo en tu máquina | `application-local.properties` | RDS compartida (dev) |
+| `prod`  | Servidor EC2 | `application-prod.properties` | RDS compartida (prod) |
+
+El perfil activo se controla con la variable de entorno `SPRING_PROFILES_ACTIVE`. En tu `.env` local ya viene configurado como `local` — no necesitas cambiarlo.
+
+> **Requisito para el perfil `local`:** tu IP debe estar en el Security Group del RDS (puerto 3306). Si obtienes `Access denied` al arrancar, pide al responsable de AWS que agregue tu IP como regla inbound.
+
+> **Para despliegue en EC2:** el `.env` del servidor debe tener `SPRING_PROFILES_ACTIVE=prod`. Con ese valor, Spring ignora `application-local.properties` y conecta al RDS de producción.
+
+---
+
+### Correr los tests
+
+Los tests usan **H2 en memoria** — no requieren conexión a RDS ni variables de entorno configuradas.
+
+Linux/Mac:
+```bash
+# Correr todos los tests
+./mvnw test
+
+# Correr tests + reporte de cobertura (mínimo 90%)
+./mvnw verify
+```
+
+Windows:
+```cmd
+mvnw.cmd test
+mvnw.cmd verify
+```
+
+El reporte de cobertura queda en `app/target/site/jacoco-aggregate/index.html`.
+
+---
+
+### Levantar desde IntelliJ IDEA
+
+1. Abrir el proyecto desde la raíz (`/Backend`)
+2. IntelliJ detecta automáticamente el proyecto Maven multi-módulo
+3. Ir a **Run > Edit Configurations...**
+4. Si no existe, crear una nueva configuración: **+ > Application**
+5. Configurar:
+   - **Main class:** `pe.edu.pucp.kingstore.KingstoreBackendApplication`
+   - **Module:** `kingstore-backend.app`
+   - **Environment variables** (hacer clic en el ícono de carpeta a la derecha del campo):
+     ```
+     JASYPT_ENCRYPTOR_PASSWORD=kingstore-secret-key-2024
+     SPRING_PROFILES_ACTIVE=local
+     JWT_SECRET=kingstore-secret-key-ingesoft-2026
+     ```
+6. Hacer clic en **OK** y correr con el botón ▶
+
+> **Alternativa con plugin EnvFile:** IntelliJ tiene el plugin [EnvFile](https://plugins.jetbrains.com/plugin/7861-envfile) que permite apuntar directamente al archivo `.env` en lugar de copiar las variables manualmente. En **Run/Debug Configurations → EnvFile tab**, activar _Enable EnvFile_ y agregar el `.env` del proyecto.
+
+---
+
+### Estructura del proyecto
+
+```
+Backend/
+├── domain/       # Entidades JPA y DTOs
+├── repository/   # Repositorios Spring Data
+├── service/      # Lógica de negocio
+├── api/          # Controllers REST y configuración de seguridad
+└── app/          # Módulo principal: arranca Spring Boot
+    └── src/main/resources/
+        ├── application.properties          # Config base (conecta a RDS)
+        ├── application-local.properties    # Overrides para local (logs verbose)
+        └── application-prod.properties     # Overrides para producción
+```
+
+---
+
+### Variables de entorno locales
+
+| Variable | Valor por defecto (local) | Descripción |
+|----------|--------------------------|-------------|
+| `JASYPT_ENCRYPTOR_PASSWORD` | `kingstore-secret-key-2024` | Descifra propiedades con `ENC(...)` |
+| `SPRING_PROFILES_ACTIVE` | `local` | Activa el perfil local |
+| `JWT_SECRET` | `kingstore-secret-key-ingesoft-2026` | Firma tokens JWT |
+| `SPRING_DATASOURCE_PASSWORD` | *(usa valor cifrado en properties)* | Contraseña RDS (opcional) |
+
+Para más detalles sobre el cifrado de propiedades, ver [`ENCRYPTION_GUIDE.md`](ENCRYPTION_GUIDE.md).
+
+---
+
 ## Despliegue del Backend
 
 El backend es una aplicación Spring Boot multi-módulo (Maven). Se despliega como contenedor Docker en EC2 y se conecta a una base de datos MySQL en AWS RDS.
