@@ -138,6 +138,8 @@ public class UserController {
             return ResponseEntity.status(201).body(Map.of("id", created.getId(), "email", created.getEmail()));
         } catch (BusinessRuleException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", "Error al crear el usuario: " + e.getMessage()));
         }
     }
 

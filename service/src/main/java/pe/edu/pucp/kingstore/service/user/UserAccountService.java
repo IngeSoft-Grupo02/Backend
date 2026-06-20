@@ -184,6 +184,7 @@ public class UserAccountService extends AbstractCrudService<UserAccount> {
                 admin.setPhone(dto.getPhone());
                 admin.setGender(dto.getGender());
                 admin.setActive(true);
+                admin.setPosition("Administrador del Sistema");
                 administratorRepository.save(admin);
             }
         }
