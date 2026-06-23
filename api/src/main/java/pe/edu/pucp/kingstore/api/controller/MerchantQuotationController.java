@@ -1,14 +1,14 @@
-package pe.edu.pucp.kingstore.api.controller.merchant;
+package pe.edu.pucp.kingstore.api.controller;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import pe.edu.pucp.kingstore.api.context.MerchantContext;
 import pe.edu.pucp.kingstore.domain.dto.quotation.QuotationResponseRequestDTO;
-import pe.edu.pucp.kingstore.domain.model.quotation.enums.QuotationStatus;
 import pe.edu.pucp.kingstore.domain.model.store.Store;
 import pe.edu.pucp.kingstore.service.quotation.QuotationService;
-
+import pe.edu.pucp.kingstore.domain.model.quotation.enums.QuotationStatus;
+import pe.edu.pucp.kingstore.service.order.OrderService;
 import static pe.edu.pucp.kingstore.service.user.util.MerchantStringUtil.parseQuotationStatus;
 
 @RestController
@@ -17,10 +17,12 @@ public class MerchantQuotationController extends BaseMerchantController {
 
     private final QuotationService quotationService;
 
+
     public MerchantQuotationController(MerchantContext merchantContext,
                                        QuotationService quotationService) {
         super(merchantContext);
         this.quotationService = quotationService;
+
     }
 
     @GetMapping("/quotations")
@@ -51,6 +53,7 @@ public class MerchantQuotationController extends BaseMerchantController {
                     request.getStatus(),
                     request.getObservations()
             );
+
             return ResponseEntity.ok(quotationService.toResponseDTO(responded, store.getId()));
         });
     }

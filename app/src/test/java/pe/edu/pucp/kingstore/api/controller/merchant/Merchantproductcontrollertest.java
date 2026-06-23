@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.core.Authentication;
 import pe.edu.pucp.kingstore.api.context.MerchantContext;
+import pe.edu.pucp.kingstore.api.controller.MerchantProductController;
 import pe.edu.pucp.kingstore.domain.dto.product.ProductRequestDTO;
 import pe.edu.pucp.kingstore.domain.dto.product.ProductResponseDTO;
 import pe.edu.pucp.kingstore.domain.model.product.Product;

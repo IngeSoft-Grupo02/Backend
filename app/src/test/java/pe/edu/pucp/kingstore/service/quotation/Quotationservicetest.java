@@ -18,7 +18,7 @@ import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
 
 import java.util.List;
 import java.util.Optional;
-
+import java.util.ArrayList;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -357,4 +357,182 @@ class QuotationServiceTest {
 
         assertThat(dto.getItems().get(0).getVariant()).isNull();
     }
+    // =========================================================================
+// createFromCart
+// =========================================================================
+
+    @Test
+    void createFromCartCreatesQuotationWithItemsCopiedFromCart() {
+        pe.edu.pucp.kingstore.domain.model.product.Product product =
+                new pe.edu.pucp.kingstore.domain.model.product.Product();
+        product.setId(1);
+        product.setBasePrice(100.0);
+
+        ProductVariant variant = new ProductVariant();
+        variant.setId(1);
+        variant.setProduct(product);
+
+        pe.edu.pucp.kingstore.domain.model.cart.CartItem cartItem =
+                new pe.edu.pucp.kingstore.domain.model.cart.CartItem();
+        cartItem.setId(1);
+        cartItem.setProductVariant(variant);
+        cartItem.setQuantity(2);
+        cartItem.setPrice(100.0);
+        cartItem.setSubtotal(200.0);
+
+        ShoppingCart cart = cart(1);
+        cart.setItems(new java.util.ArrayList<>(List.of(cartItem)));
+        cart.setDiscount(0.0);
+
+        when(quotationRepository.findByShoppingCartId(1)).thenReturn(Optional.empty());
+        when(quotationRepository.save(any(Quotation.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Quotation result = service.createFromCart(cart);
+
+        assertThat(result.getStatus()).isEqualTo(QuotationStatus.PENDING);
+        assertThat(result.getItems()).hasSize(1);
+        assertThat(result.getItems().get(0).getQuantity()).isEqualTo(2);
+    }
+
+    @Test
+    void createFromCartThrowsWhenCartIsEmpty() {
+        ShoppingCart cart = cart(1);
+        cart.setItems(new java.util.ArrayList<>());
+
+        assertThatThrownBy(() -> service.createFromCart(cart))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("at least one item");
+    }
+
+    @Test
+    void createFromCartThrowsWhenActivePendingQuotationExists() {
+        pe.edu.pucp.kingstore.domain.model.product.Product product =
+                new pe.edu.pucp.kingstore.domain.model.product.Product();
+        ProductVariant variant = new ProductVariant();
+        variant.setProduct(product);
+
+        pe.edu.pucp.kingstore.domain.model.cart.CartItem cartItem =
+                new pe.edu.pucp.kingstore.domain.model.cart.CartItem();
+        cartItem.setProductVariant(variant);
+        cartItem.setQuantity(1);
+        cartItem.setPrice(50.0);
+        cartItem.setSubtotal(50.0);
+
+        ShoppingCart cart = cart(1);
+        cart.setItems(new java.util.ArrayList<>(List.of(cartItem)));
+        cart.setDiscount(0.0);
+
+        Quotation existing = quotation(1, cart, List.of(), 0);
+        existing.setStatus(QuotationStatus.PENDING);
+        when(quotationRepository.findByShoppingCartId(1)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> service.createFromCart(cart))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("pending quotation");
+    }
+
+// =========================================================================
+// acceptByCustomer / declineByCustomer
+// =========================================================================
+
+    @Test
+    void acceptByCustomerChangesStatusToApproved() {
+        Quotation quotation = quotation(1, cart(1), List.of(), 0);
+        quotation.setStatus(QuotationStatus.PENDING);
+
+        when(quotationRepository.findById(1)).thenReturn(Optional.of(quotation));
+        when(quotationRepository.save(any(Quotation.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Quotation result = service.acceptByCustomer(1);
+
+        assertThat(result.getStatus()).isEqualTo(QuotationStatus.APPROVED);
+        assertThat(result.getResponseAt()).isNotNull();
+    }
+
+    @Test
+    void acceptByCustomerThrowsWhenNotPending() {
+        Quotation quotation = quotation(1, cart(1), List.of(), 0);
+        quotation.setStatus(QuotationStatus.APPROVED);
+
+        when(quotationRepository.findById(1)).thenReturn(Optional.of(quotation));
+
+        assertThatThrownBy(() -> service.acceptByCustomer(1))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("pending quotations");
+    }
+
+    @Test
+    void declineByCustomerChangesStatusToRejected() {
+        Quotation quotation = quotation(1, cart(1), List.of(), 0);
+        quotation.setStatus(QuotationStatus.PENDING);
+
+        when(quotationRepository.findById(1)).thenReturn(Optional.of(quotation));
+        when(quotationRepository.save(any(Quotation.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Quotation result = service.declineByCustomer(1);
+
+        assertThat(result.getStatus()).isEqualTo(QuotationStatus.REJECTED);
+        assertThat(result.getResponseAt()).isNotNull();
+    }
+
+    @Test
+    void declineByCustomerThrowsWhenNotPending() {
+        Quotation quotation = quotation(1, cart(1), List.of(), 0);
+        quotation.setStatus(QuotationStatus.REJECTED);
+
+        when(quotationRepository.findById(1)).thenReturn(Optional.of(quotation));
+
+        assertThatThrownBy(() -> service.declineByCustomer(1))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("pending quotations");
+    }
+
+// =========================================================================
+// findByCustomerAndStore / findByCustomerInStore
+// =========================================================================
+
+    @Test
+    void findByCustomerAndStoreFiltersQuotationsByStore() {
+        pe.edu.pucp.kingstore.domain.model.store.Store store =
+                new pe.edu.pucp.kingstore.domain.model.store.Store();
+        store.setId(10);
+
+        pe.edu.pucp.kingstore.domain.model.product.Product product =
+                new pe.edu.pucp.kingstore.domain.model.product.Product();
+        product.setStore(store);
+
+        ProductVariant variant = new ProductVariant();
+        variant.setProduct(product);
+
+        pe.edu.pucp.kingstore.domain.model.cart.CartItem cartItem =
+                new pe.edu.pucp.kingstore.domain.model.cart.CartItem();
+        cartItem.setProductVariant(variant);
+        cartItem.setQuantity(1);
+
+        ShoppingCart cart = cart(1);
+        cart.setItems(new java.util.ArrayList<>(List.of(cartItem)));
+
+        Quotation quotation = quotation(1, cart, List.of(), 0);
+        quotation.setStatus(QuotationStatus.PENDING);
+
+        when(quotationRepository.findByShoppingCart_Customer_Id(1))
+                .thenReturn(List.of(quotation));
+
+        List<Quotation> result = service.findByCustomerAndStore(1, 10);
+
+        assertThat(result).containsExactly(quotation);
+    }
+
+    @Test
+    void findByCustomerInStoreThrowsWhenNotFound() {
+        when(quotationRepository.findByShoppingCart_Customer_Id(1)).thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.findByCustomerInStore(99, 1, 10))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+
 }

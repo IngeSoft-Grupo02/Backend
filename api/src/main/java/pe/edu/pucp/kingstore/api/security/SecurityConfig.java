@@ -43,8 +43,12 @@ public class SecurityConfig {
                         // Solo administradores
                         .requestMatchers("/admin/**").hasRole("SYSTEM_ADMIN")
                         .requestMatchers("/merchant/**").hasRole("MERCHANT")
+                        .requestMatchers("/stores/*/cart/**").hasRole("CUSTOMER") //new
                         // Perfil del cliente autenticado, restringido a su propia tienda *****NUEVO
                         .requestMatchers(HttpMethod.GET, "/stores/*/customers/me").hasRole("CUSTOMER")
+                        .requestMatchers("/stores/*/cart/**").hasRole("CUSTOMER")
+                        .requestMatchers("/stores/*/quotations/**").hasRole("CUSTOMER")
+                        .requestMatchers("/stores/*/orders/**").hasRole("CUSTOMER")
                         // Todo lo demÃ¡s requiere autenticaciÃ³n
                         .anyRequest().authenticated()
                 )

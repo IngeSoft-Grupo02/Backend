@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.Setter;
 import pe.edu.pucp.kingstore.domain.model.BaseEntity;
 import pe.edu.pucp.kingstore.domain.model.product.ProductVariant;
+import pe.edu.pucp.kingstore.domain.model.product.CustomDesign;
 
 @Getter
 @Setter
@@ -23,5 +24,9 @@ public class CartItem extends BaseEntity {
 
     @Column(nullable = false)
     private double subtotal;
+
+    @OneToOne(cascade = CascadeType.ALL, orphanRemoval = true)
+    @JoinColumn(name = "custom_design_id")
+    private CustomDesign customDesign;
 
 }

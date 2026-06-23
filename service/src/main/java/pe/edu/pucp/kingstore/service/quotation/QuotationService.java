@@ -9,6 +9,8 @@ import pe.edu.pucp.kingstore.repository.quotation.QuotationRepository;
 import pe.edu.pucp.kingstore.service.common.AbstractCrudService;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
 import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
+import pe.edu.pucp.kingstore.domain.model.cart.ShoppingCart;
+import pe.edu.pucp.kingstore.domain.model.quotation.QuotationItem;
 
 import pe.edu.pucp.kingstore.domain.dto.quotation.QuotationItemResponseDTO;
 import pe.edu.pucp.kingstore.domain.dto.quotation.QuotationResponseDTO;
@@ -26,6 +28,104 @@ public class QuotationService extends AbstractCrudService<Quotation> {
     public QuotationService(QuotationRepository quotationRepository) {
         super(quotationRepository, "Quotation");
         this.quotationRepository = quotationRepository;
+    }
+    /**
+     * Crea una cotización a partir del carrito del cliente.
+     * Copia cada CartItem como QuotationItem para preservar
+     * el estado del carrito en el momento de la solicitud.
+     */
+    @Transactional
+    public Quotation createFromCart(ShoppingCart cart) {
+        if (cart.getItems() == null || cart.getItems().isEmpty()) {
+            throw new BusinessRuleException("Cart must have at least one item to create a quotation");
+        }
+        // Un carrito solo puede tener una cotización pendiente activa
+        quotationRepository.findByShoppingCartId(cart.getId()).ifPresent(existing -> {
+            if (existing.getStatus() == QuotationStatus.PENDING) {
+                throw new BusinessRuleException("Cart already has a pending quotation");
+            }
+        });
+
+        Quotation quotation = new Quotation();
+        quotation.setShoppingCart(cart);
+        quotation.setStatus(QuotationStatus.PENDING);
+        quotation.setDiscount(cart.getDiscount());
+
+        List<QuotationItem> items = cart.getItems().stream().map(cartItem -> {
+            QuotationItem qi = new QuotationItem();
+            qi.setProductVariant(cartItem.getProductVariant());
+            qi.setQuantity(cartItem.getQuantity());
+            qi.setPrice(cartItem.getPrice());
+            qi.setSubTotal(cartItem.getSubtotal());
+            return qi;
+        }).toList();
+
+        quotation.setItems(new java.util.ArrayList<>(items));
+        return create(quotation);
+    }
+
+    /**
+     * Devuelve todas las cotizaciones del cliente en una tienda específica.
+     */
+    @Transactional(readOnly = true)
+    public List<Quotation> findByCustomerAndStore(Integer customerId, Integer storeId) {
+        requireId(customerId);
+        requireId(storeId);
+        return quotationRepository.findByShoppingCart_Customer_Id(customerId).stream()
+                .filter(q -> {
+                    var cart = q.getShoppingCart();
+                    if (cart == null || cart.getItems() == null || cart.getItems().isEmpty()) {
+                        return false;
+                    }
+                    return cart.getItems().stream().anyMatch(item -> {
+                        var product = item.getProductVariant() != null
+                                ? item.getProductVariant().getProduct() : null;
+                        return product != null
+                                && Objects.equals(product.getStore().getId(), storeId);
+                    });
+                })
+                .toList();
+    }
+
+    /**
+     * Busca una cotización específica del cliente validando scope de tienda.
+     */
+    @Transactional(readOnly = true)
+    public Quotation findByCustomerInStore(Integer quotationId,
+                                           Integer customerId, Integer storeId) {
+        requireId(quotationId);
+        return findByCustomerAndStore(customerId, storeId).stream()
+                .filter(q -> Objects.equals(q.getId(), quotationId))
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException("Quotation", quotationId));
+    }
+
+    /**
+     * El cliente acepta la propuesta — pasa a APPROVED.
+     */
+    @Transactional
+    public Quotation acceptByCustomer(Integer quotationId) {
+        Quotation quotation = getById(quotationId);
+        if (quotation.getStatus() != QuotationStatus.PENDING) {
+            throw new BusinessRuleException("Only pending quotations can be accepted by the customer");
+        }
+        quotation.setStatus(QuotationStatus.APPROVED);
+        quotation.setResponseAt(LocalDateTime.now());
+        return quotationRepository.save(quotation);
+    }
+
+    /**
+     * El cliente desiste — pasa a REJECTED.
+     */
+    @Transactional
+    public Quotation declineByCustomer(Integer quotationId) {
+        Quotation quotation = getById(quotationId);
+        if (quotation.getStatus() != QuotationStatus.PENDING) {
+            throw new BusinessRuleException("Only pending quotations can be declined by the customer");
+        }
+        quotation.setStatus(QuotationStatus.REJECTED);
+        quotation.setResponseAt(LocalDateTime.now());
+        return quotationRepository.save(quotation);
     }
 
     @Transactional(readOnly = true)

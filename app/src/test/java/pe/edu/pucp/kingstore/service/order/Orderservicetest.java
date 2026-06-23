@@ -429,4 +429,182 @@ class OrderServiceTest {
         delivered.setFinalTotal(0.0);
         assertThat(service.toResponseDTO(delivered, 10).getStatusLabel()).isEqualTo("Entregado");
     }
+    // =========================================================================
+// createFromQuotation
+// =========================================================================
+
+    @Test
+    void createFromQuotationCreatesOrderWithItemsCopied() {
+        pe.edu.pucp.kingstore.domain.model.product.Product product =
+                new pe.edu.pucp.kingstore.domain.model.product.Product();
+        product.setId(1);
+
+        pe.edu.pucp.kingstore.domain.model.product.ProductVariant variant =
+                new pe.edu.pucp.kingstore.domain.model.product.ProductVariant();
+        variant.setId(1);
+        variant.setProduct(product);
+
+        pe.edu.pucp.kingstore.domain.model.quotation.QuotationItem qi =
+                new pe.edu.pucp.kingstore.domain.model.quotation.QuotationItem();
+        qi.setProductVariant(variant);
+        qi.setQuantity(2);
+        qi.setPrice(100.0);
+        qi.setSubTotal(200.0);
+
+        pe.edu.pucp.kingstore.domain.model.quotation.Quotation quotation =
+                new pe.edu.pucp.kingstore.domain.model.quotation.Quotation();
+        quotation.setId(1);
+        quotation.setStatus(pe.edu.pucp.kingstore.domain.model.quotation.enums.QuotationStatus.APPROVED);
+        quotation.setDiscount(0.0);
+        quotation.setItems(new java.util.ArrayList<>(List.of(qi)));
+
+        when(orderRepository.findByQuotationId(1)).thenReturn(Optional.empty());
+        when(orderRepository.save(any(Order.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Order result = service.createFromQuotation(quotation);
+
+        assertThat(result.getStatus()).isEqualTo(OrderStatus.PAYMENT_CONFIRMED);
+        assertThat(result.getItems()).hasSize(1);
+        assertThat(result.getItems().get(0).getQuantity()).isEqualTo(2);
+    }
+
+    @Test
+    void createFromQuotationThrowsWhenQuotationNotApproved() {
+        pe.edu.pucp.kingstore.domain.model.quotation.Quotation quotation =
+                new pe.edu.pucp.kingstore.domain.model.quotation.Quotation();
+        quotation.setId(1);
+        quotation.setStatus(pe.edu.pucp.kingstore.domain.model.quotation.enums.QuotationStatus.PENDING);
+        quotation.setItems(new java.util.ArrayList<>());
+
+        assertThatThrownBy(() -> service.createFromQuotation(quotation))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("approved quotation");
+    }
+
+    @Test
+    void createFromQuotationThrowsWhenOrderAlreadyExists() {
+        pe.edu.pucp.kingstore.domain.model.quotation.Quotation quotation =
+                new pe.edu.pucp.kingstore.domain.model.quotation.Quotation();
+        quotation.setId(1);
+        quotation.setStatus(pe.edu.pucp.kingstore.domain.model.quotation.enums.QuotationStatus.APPROVED);
+        quotation.setItems(new java.util.ArrayList<>());
+
+        Order existing = new Order();
+        existing.setId(1);
+        when(orderRepository.findByQuotationId(1)).thenReturn(Optional.of(existing));
+
+        assertThatThrownBy(() -> service.createFromQuotation(quotation))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("already exists");
+    }
+
+// =========================================================================
+// advanceStatus
+// =========================================================================
+
+    @Test
+    void advanceStatusFollowsCorrectFlow() {
+        Order order = new Order();
+        order.setId(1);
+        order.setStatus(OrderStatus.PAYMENT_CONFIRMED);
+        when(orderRepository.findById(1)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertThat(service.advanceStatus(1).getStatus()).isEqualTo(OrderStatus.IN_PREPARATION);
+
+        order.setStatus(OrderStatus.IN_PREPARATION);
+        assertThat(service.advanceStatus(1).getStatus()).isEqualTo(OrderStatus.IN_TRANSIT);
+
+        order.setStatus(OrderStatus.IN_TRANSIT);
+        assertThat(service.advanceStatus(1).getStatus()).isEqualTo(OrderStatus.DELIVERED);
+    }
+
+    @Test
+    void advanceStatusThrowsWhenAlreadyDelivered() {
+        Order order = new Order();
+        order.setId(1);
+        order.setStatus(OrderStatus.DELIVERED);
+        when(orderRepository.findById(1)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> service.advanceStatus(1))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("cannot be advanced");
+    }
+
+// =========================================================================
+// cancel
+// =========================================================================
+
+    @Test
+    void cancelChangesStatusToCancelledWithReason() {
+        Order order = new Order();
+        order.setId(1);
+        order.setStatus(OrderStatus.IN_PREPARATION);
+        when(orderRepository.findById(1)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Order result = service.cancel(1, "Cliente desistió");
+
+        assertThat(result.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+    }
+
+    @Test
+    void cancelThrowsWhenReasonIsBlank() {
+        assertThatThrownBy(() -> service.cancel(1, ""))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("reason is required");
+    }
+
+    @Test
+    void cancelThrowsWhenOrderAlreadyDelivered() {
+        Order order = new Order();
+        order.setId(1);
+        order.setStatus(OrderStatus.DELIVERED);
+        when(orderRepository.findById(1)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> service.cancel(1, "motivo"))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("cannot be cancelled");
+    }
+
+// =========================================================================
+// ship
+// =========================================================================
+
+    @Test
+    void shipChangesStatusToInTransitAndSavesReference() {
+        Order order = new Order();
+        order.setId(1);
+        order.setStatus(OrderStatus.IN_PREPARATION);
+        when(orderRepository.findById(1)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Order result = service.ship(1, "GU-12345");
+
+        assertThat(result.getStatus()).isEqualTo(OrderStatus.IN_TRANSIT);
+    }
+
+    @Test
+    void shipThrowsWhenReferenceIsBlank() {
+        assertThatThrownBy(() -> service.ship(1, ""))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("reference is required");
+    }
+
+    @Test
+    void shipThrowsWhenOrderNotInPreparation() {
+        Order order = new Order();
+        order.setId(1);
+        order.setStatus(OrderStatus.PAYMENT_CONFIRMED);
+        when(orderRepository.findById(1)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> service.ship(1, "GU-12345"))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("in preparation");
+    }
+
 }
