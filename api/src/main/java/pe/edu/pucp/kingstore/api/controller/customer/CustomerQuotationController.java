@@ -12,7 +12,6 @@ import pe.edu.pucp.kingstore.service.cart.ShoppingCartService;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
 import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
 import pe.edu.pucp.kingstore.service.quotation.QuotationService;
-import pe.edu.pucp.kingstore.service.order.OrderService;
 import java.util.Map;
 
 /**
@@ -29,16 +28,13 @@ public class CustomerQuotationController {
     private final CustomerContext     customerContext;
     private final ShoppingCartService shoppingCartService;
     private final QuotationService    quotationService;
-    private final OrderService orderService;
 
     public CustomerQuotationController(CustomerContext customerContext,
                                        ShoppingCartService shoppingCartService,
-                                       QuotationService quotationService,
-                                       OrderService orderService) {
+                                       QuotationService quotationService) {
         this.customerContext     = customerContext;
         this.shoppingCartService = shoppingCartService;
         this.quotationService    = quotationService;
-        this.orderService        = orderService;
     }
 
     // POST /stores/{slug}/quotations
@@ -88,40 +84,6 @@ public class CustomerQuotationController {
                     quotationService.toResponseDTO(quotation, store.getId()));
         } catch (ResourceNotFoundException | BusinessRuleException e) {
             return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
-        }
-    }
-
-    // PATCH /stores/{slug}/quotations/{id}/accept
-    @PatchMapping("/{id}/accept")
-    public ResponseEntity<?> accept(@PathVariable String slug,
-                                    @PathVariable Integer id,
-                                    Authentication authentication) {
-        try {
-            Store store       = customerContext.store(slug);
-            Customer customer = customerContext.customer(authentication, store);
-            quotationService.findByCustomerInStore(id, customer.getId(), store.getId());
-            Quotation updated = quotationService.acceptByCustomer(id);
-            orderService.createFromQuotation(updated);
-            return ResponseEntity.ok(quotationService.toResponseDTO(updated, store.getId()));
-        } catch (ResourceNotFoundException | BusinessRuleException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
-        }
-    }
-
-    // PATCH /stores/{slug}/quotations/{id}/decline
-    @PatchMapping("/{id}/decline")
-    public ResponseEntity<?> decline(@PathVariable String slug,
-                                     @PathVariable Integer id,
-                                     Authentication authentication) {
-        try {
-            Store store       = customerContext.store(slug);
-            Customer customer = customerContext.customer(authentication, store);
-            quotationService.findByCustomerInStore(id, customer.getId(), store.getId());
-            Quotation updated = quotationService.declineByCustomer(id);
-            return ResponseEntity.ok(
-                    quotationService.toResponseDTO(updated, store.getId()));
-        } catch (ResourceNotFoundException | BusinessRuleException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 }

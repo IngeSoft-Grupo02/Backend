@@ -16,13 +16,14 @@ import static pe.edu.pucp.kingstore.service.user.util.MerchantStringUtil.parseQu
 public class MerchantQuotationController extends BaseMerchantController {
 
     private final QuotationService quotationService;
-
+    private final OrderService orderService;
 
     public MerchantQuotationController(MerchantContext merchantContext,
-                                       QuotationService quotationService) {
+                                       QuotationService quotationService,
+                                       OrderService orderService) {
         super(merchantContext);
         this.quotationService = quotationService;
-
+        this.orderService = orderService;
     }
 
     @GetMapping("/quotations")
@@ -40,6 +41,7 @@ public class MerchantQuotationController extends BaseMerchantController {
         });
     }
 
+    // DESPUÉS de respond(), agrega la creación de orden si status es APPROVED:
     @PatchMapping("/quotations/{id}/respond")
     public ResponseEntity<?> respondQuotation(Authentication authentication,
                                               @PathVariable Integer id,
@@ -53,7 +55,10 @@ public class MerchantQuotationController extends BaseMerchantController {
                     request.getStatus(),
                     request.getObservations()
             );
-
+            // Merchant aprueba → orden creada automáticamente
+            if (responded.getStatus() == QuotationStatus.APPROVED) {
+                orderService.createFromQuotation(responded);
+            }
             return ResponseEntity.ok(quotationService.toResponseDTO(responded, store.getId()));
         });
     }

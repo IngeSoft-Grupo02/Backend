@@ -17,10 +17,7 @@ import pe.edu.pucp.kingstore.domain.model.user.Customer;
 import pe.edu.pucp.kingstore.service.cart.ShoppingCartService;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
 import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
-import pe.edu.pucp.kingstore.service.order.OrderService;
 import pe.edu.pucp.kingstore.service.quotation.QuotationService;
-import pe.edu.pucp.kingstore.domain.model.order.Order;
-import pe.edu.pucp.kingstore.service.order.OrderService;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -33,7 +30,6 @@ class CustomerQuotationControllerTest {
     @Mock private CustomerContext     customerContext;
     @Mock private ShoppingCartService shoppingCartService;
     @Mock private QuotationService    quotationService;
-    @Mock private   OrderService orderService;
     private CustomerQuotationController controller;
     private Authentication authentication;
     private Store store;
@@ -44,7 +40,7 @@ class CustomerQuotationControllerTest {
 
     @BeforeEach
     void setUp() {
-        controller     = new CustomerQuotationController(customerContext, shoppingCartService, quotationService, orderService);
+        controller     = new CustomerQuotationController(customerContext, shoppingCartService, quotationService);
         authentication = mock(Authentication.class);
 
         store = new Store();
@@ -150,79 +146,5 @@ class CustomerQuotationControllerTest {
         var result = controller.findById("tienda-luna", 99, authentication);
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-    }
-
-    // ── PATCH /stores/{slug}/quotations/{id}/accept ───────────────────────────
-
-    @Test
-    void acceptChangesStatusToApproved() {
-        QuotationResponseDTO approvedDTO = new QuotationResponseDTO();
-        approvedDTO.setId(1);
-        approvedDTO.setStatus(QuotationStatus.APPROVED);
-        approvedDTO.setStatusLabel("Aprobada");
-
-        quotation.setStatus(QuotationStatus.APPROVED);
-
-        when(customerContext.store("tienda-luna")).thenReturn(store);
-        when(customerContext.customer(authentication, store)).thenReturn(customer);
-        when(quotationService.findByCustomerInStore(1, 1, 10)).thenReturn(quotation);
-        when(quotationService.acceptByCustomer(1)).thenReturn(quotation);
-        when(orderService.createFromQuotation(quotation)).thenReturn(new Order());
-        when(quotationService.toResponseDTO(quotation, 10)).thenReturn(approvedDTO);
-
-        var result = controller.accept("tienda-luna", 1, authentication);
-
-        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(((QuotationResponseDTO) result.getBody()).getStatusLabel()).isEqualTo("Aprobada");
-    }
-
-
-    @Test
-    void acceptReturnsBadRequestWhenNotPending() {
-        when(customerContext.store("tienda-luna")).thenReturn(store);
-        when(customerContext.customer(authentication, store)).thenReturn(customer);
-        when(quotationService.findByCustomerInStore(1, 1, 10)).thenReturn(quotation);
-        when(quotationService.acceptByCustomer(1))
-                .thenThrow(new BusinessRuleException("Only pending quotations can be accepted"));
-
-        var result = controller.accept("tienda-luna", 1, authentication);
-
-        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-    }
-
-    // ── PATCH /stores/{slug}/quotations/{id}/decline ──────────────────────────
-
-    @Test
-    void declineChangesStatusToRejected() {
-        QuotationResponseDTO rejectedDTO = new QuotationResponseDTO();
-        rejectedDTO.setId(1);
-        rejectedDTO.setStatus(QuotationStatus.REJECTED);
-        rejectedDTO.setStatusLabel("Rechazada");
-
-        quotation.setStatus(QuotationStatus.REJECTED);
-
-        when(customerContext.store("tienda-luna")).thenReturn(store);
-        when(customerContext.customer(authentication, store)).thenReturn(customer);
-        when(quotationService.findByCustomerInStore(1, 1, 10)).thenReturn(quotation);
-        when(quotationService.declineByCustomer(1)).thenReturn(quotation);
-        when(quotationService.toResponseDTO(quotation, 10)).thenReturn(rejectedDTO);
-
-        var result = controller.decline("tienda-luna", 1, authentication);
-
-        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(((QuotationResponseDTO) result.getBody()).getStatusLabel()).isEqualTo("Rechazada");
-    }
-
-    @Test
-    void declineReturnsBadRequestWhenNotPending() {
-        when(customerContext.store("tienda-luna")).thenReturn(store);
-        when(customerContext.customer(authentication, store)).thenReturn(customer);
-        when(quotationService.findByCustomerInStore(1, 1, 10)).thenReturn(quotation);
-        when(quotationService.declineByCustomer(1))
-                .thenThrow(new BusinessRuleException("Only pending quotations can be declined"));
-
-        var result = controller.decline("tienda-luna", 1, authentication);
-
-        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 }
