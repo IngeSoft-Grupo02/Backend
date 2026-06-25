@@ -1,4 +1,4 @@
-package pe.edu.pucp.kingstore.api.controller.merchant;
+package pe.edu.pucp.kingstore.api.controller;
 
 
 import org.springframework.http.ResponseEntity;
@@ -54,4 +54,45 @@ public class MerchantOrderController extends BaseMerchantController {
             return ResponseEntity.ok(orderService.toResponseDTO(updated, store.getId()));
         });
     }
+    // PATCH /merchant/orders/{id}/advance
+    @PatchMapping("/orders/{id}/advance")
+    public ResponseEntity<?> advanceStatus(Authentication authentication,
+                                           @PathVariable Integer id,
+                                           @RequestParam(required = false) Integer storeId) {
+        return handle(() -> {
+            Store store = currentMerchantStore(authentication, storeId);
+            orderService.findInStore(id, store.getId());
+            var updated = orderService.advanceStatus(id);
+            return ResponseEntity.ok(orderService.toResponseDTO(updated, store.getId()));
+        });
+    }
+
+    // PATCH /merchant/orders/{id}/cancel
+    @PatchMapping("/orders/{id}/cancel")
+    public ResponseEntity<?> cancel(Authentication authentication,
+                                    @PathVariable Integer id,
+                                    @RequestParam(required = false) Integer storeId,
+                                    @RequestBody pe.edu.pucp.kingstore.domain.dto.order.OrderCancelRequestDTO request) {
+        return handle(() -> {
+            Store store = currentMerchantStore(authentication, storeId);
+            orderService.findInStore(id, store.getId());
+            var updated = orderService.cancel(id, request.getReason());
+            return ResponseEntity.ok(orderService.toResponseDTO(updated, store.getId()));
+        });
+    }
+
+    // PATCH /merchant/orders/{id}/ship
+    @PatchMapping("/orders/{id}/ship")
+    public ResponseEntity<?> ship(Authentication authentication,
+                                  @PathVariable Integer id,
+                                  @RequestParam(required = false) Integer storeId,
+                                  @RequestBody pe.edu.pucp.kingstore.domain.dto.order.OrderShipRequestDTO request) {
+        return handle(() -> {
+            Store store = currentMerchantStore(authentication, storeId);
+            orderService.findInStore(id, store.getId());
+            var updated = orderService.ship(id, request.getShippingReference());
+            return ResponseEntity.ok(orderService.toResponseDTO(updated, store.getId()));
+        });
+    }
+
 }

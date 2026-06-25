@@ -13,6 +13,7 @@ import pe.edu.pucp.kingstore.domain.model.product.ProductVariant;
 import pe.edu.pucp.kingstore.domain.model.product.enums.Color;
 import pe.edu.pucp.kingstore.domain.model.product.enums.ProductStatus;
 import pe.edu.pucp.kingstore.domain.model.store.Store;
+import pe.edu.pucp.kingstore.repository.product.DiscountRepository;
 import pe.edu.pucp.kingstore.repository.product.ProductRepository;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
 import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
@@ -44,10 +45,12 @@ class ProductServiceCoverageTest {
     private ProductRepository productRepository;
 
     private ProductService service;
+    @Mock
+    private DiscountRepository discountRepository;
 
     @BeforeEach
     void setUp() {
-        service = new ProductService(productRepository);
+        service = new ProductService(productRepository, discountRepository);
     }
 
     private Store store() {

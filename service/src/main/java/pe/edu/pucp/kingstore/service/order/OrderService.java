@@ -14,6 +14,8 @@ import pe.edu.pucp.kingstore.domain.dto.order.OrderItemResponseDTO;
 import pe.edu.pucp.kingstore.domain.dto.order.OrderResponseDTO;
 import pe.edu.pucp.kingstore.domain.dto.order.OrderShippingResponseDTO;
 import pe.edu.pucp.kingstore.service.user.util.MerchantCustomerUtil;
+import pe.edu.pucp.kingstore.domain.model.quotation.Quotation;
+
 
 import java.util.List;
 import java.util.Objects;
@@ -157,6 +159,143 @@ public class OrderService extends AbstractCrudService<Order> {
         dto.setActualDeliveryDate(shipping.getActualDeliveryDate());
         return dto;
     }
+
+    /**
+     * Crea un pedido a partir de una cotización aprobada.
+     * Copia los items de la cotización al pedido.
+     */
+    @Transactional
+    public Order createFromQuotation(Quotation quotation) {
+        if (quotation.getStatus() != pe.edu.pucp.kingstore.domain.model.quotation.enums.QuotationStatus.APPROVED) {
+            throw new BusinessRuleException("Order can only be created from an approved quotation");
+        }
+        // Verificar que no existe ya un pedido para esta cotización
+        orderRepository.findByQuotationId(quotation.getId()).ifPresent(existing -> {
+            throw new BusinessRuleException("Order already exists for this quotation");
+        });
+
+        Order order = new Order();
+        order.setQuotation(quotation);
+        order.setStatus(OrderStatus.PAYMENT_CONFIRMED);
+        order.setTotalDiscount(quotation.getDiscount());
+
+        List<OrderItem> items = quotation.getItems().stream().map(qi -> {
+            OrderItem oi = new OrderItem();
+            oi.setProductVariant(qi.getProductVariant());
+            oi.setQuantity(qi.getQuantity());
+            oi.setUnitPrice(qi.getPrice());
+            oi.setSubTotal(qi.getSubTotal());
+            return oi;
+        }).toList();
+
+        order.setItems(new java.util.ArrayList<>(items));
+        return create(order);
+    }
+
+    /**
+     * Devuelve los pedidos del cliente en una tienda específica.
+     */
+    @Transactional(readOnly = true)
+    public List<Order> findByCustomerAndStore(Integer customerId, Integer storeId) {
+        requireId(customerId);
+        requireId(storeId);
+        return orderRepository.findByQuotation_ShoppingCart_Customer_Id(customerId).stream()
+                .filter(o -> {
+                    if (o.getItems() == null || o.getItems().isEmpty()) return false;
+                    return o.getItems().stream().anyMatch(item -> {
+                        var product = item.getProductVariant() != null
+                                ? item.getProductVariant().getProduct() : null;
+                        return product != null && Objects.equals(product.getStore().getId(), storeId);
+                    });
+                })
+                .toList();
+    }
+
+    /**
+     * Busca un pedido específico del cliente validando scope de tienda.
+     */
+    @Transactional(readOnly = true)
+    public Order findByCustomerInStore(Integer orderId, Integer customerId, Integer storeId) {
+        requireId(orderId);
+        return findByCustomerAndStore(customerId, storeId).stream()
+                .filter(o -> Objects.equals(o.getId(), orderId))
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException("Order", orderId));
+    }
+
+
+    // Mapa de transiciones válidas del flujo merchant
+    private static final java.util.Map<OrderStatus, OrderStatus> NEXT_STATUS = java.util.Map.of(
+            OrderStatus.PAYMENT_CONFIRMED, OrderStatus.IN_PREPARATION,
+            OrderStatus.IN_PREPARATION,    OrderStatus.IN_TRANSIT,
+            OrderStatus.IN_TRANSIT,        OrderStatus.DELIVERED
+    );
+
+    /**
+     * Avanza el pedido al siguiente estado en el flujo.
+     * PAYMENT_CONFIRMED → IN_PREPARATION → IN_TRANSIT → DELIVERED
+     */
+    @Transactional
+    public Order advanceStatus(Integer orderId) {
+        Order order = getById(orderId);
+        OrderStatus next = NEXT_STATUS.get(order.getStatus());
+        if (next == null) {
+            throw new BusinessRuleException(
+                    "Order cannot be advanced from status: " + order.getStatus());
+        }
+        order.setStatus(next);
+        return orderRepository.save(order);
+    }
+
+    /**
+     * Cancela un pedido. El motivo es obligatorio.
+     * Solo se pueden cancelar pedidos que no estén entregados ni ya cancelados.
+     */
+    @Transactional
+    public Order cancel(Integer orderId, String reason) {
+        if (reason == null || reason.isBlank()) {
+            throw new BusinessRuleException("Cancellation reason is required");
+        }
+        Order order = getById(orderId);
+        if (order.getStatus() == OrderStatus.DELIVERED
+                || order.getStatus() == OrderStatus.CANCELLED) {
+            throw new BusinessRuleException(
+                    "Order cannot be cancelled from status: " + order.getStatus());
+        }
+        order.setStatus(OrderStatus.CANCELLED);
+        // Guardamos el motivo en las observaciones de la cotización asociada
+        if (order.getQuotation() != null) {
+            order.getQuotation().setObservations(reason);
+        }
+        return orderRepository.save(order);
+    }
+
+    /**
+     * Marca el pedido como enviado e incluye referencia de envío.
+     * La referencia es obligatoria (número de guía o nombre del motorizado).
+     */
+    @Transactional
+    public Order ship(Integer orderId, String shippingReference) {
+        if (shippingReference == null || shippingReference.isBlank()) {
+            throw new BusinessRuleException("Shipping reference is required");
+        }
+        Order order = getById(orderId);
+        if (order.getStatus() != OrderStatus.IN_PREPARATION) {
+            throw new BusinessRuleException("Only orders in preparation can be shipped");
+        }
+        // Guardar referencia en ShippingDetail si existe, o en observaciones
+        if (order.getShippingDetail() != null) {
+            order.getShippingDetail().setDescription(shippingReference);
+        } else {
+            if (order.getQuotation() != null) {
+                order.getQuotation().setObservations(
+                        "Shipping ref: " + shippingReference);
+            }
+        }
+        order.setStatus(OrderStatus.IN_TRANSIT);
+        return orderRepository.save(order);
+    }
+
     @Override
     protected void validateForSave(Order order) {
         if (order.getQuotation() == null || order.getQuotation().getId() == null) {

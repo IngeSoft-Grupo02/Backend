@@ -115,7 +115,7 @@ class CoreServiceCoverageTest {
 
     @Test
     void crudServicesCoverCreateUpdateQueriesAndValidation() {
-        ProductService productService = new ProductService(productRepository);
+        ProductService productService = new ProductService(productRepository, discountRepository);
         Product product = product();
         when(productRepository.save(any(Product.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(productRepository.findById(5)).thenReturn(Optional.of(product));
@@ -170,7 +170,7 @@ class CoreServiceCoverageTest {
         variant.setStock(-1);
         assertThatThrownBy(() -> variantService.create(variant)).isInstanceOf(BusinessRuleException.class);
 
-        ShoppingCartService cartService = new ShoppingCartService(shoppingCartRepository);
+        ShoppingCartService cartService = new ShoppingCartService(shoppingCartRepository, discountRepository);
         ShoppingCart cart = cart();
         when(shoppingCartRepository.save(any(ShoppingCart.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(shoppingCartRepository.findByCustomerId(10)).thenReturn(Optional.of(cart));
@@ -204,7 +204,7 @@ class CoreServiceCoverageTest {
         assertThat(orderService.changeStatus(9, OrderStatus.IN_TRANSIT).getStatus()).isEqualTo(OrderStatus.IN_TRANSIT);
         assertThatThrownBy(() -> orderService.changeStatus(9, null)).isInstanceOf(BusinessRuleException.class);
 
-        PaymentReceiptService receiptService = new PaymentReceiptService(paymentReceiptRepository);
+        PaymentReceiptService receiptService = new PaymentReceiptService(paymentReceiptRepository, orderRepository);
         PaymentReceipt receipt = receipt(order);
         when(paymentReceiptRepository.save(any(PaymentReceipt.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(paymentReceiptRepository.findByOrderId(9)).thenReturn(Optional.of(receipt));

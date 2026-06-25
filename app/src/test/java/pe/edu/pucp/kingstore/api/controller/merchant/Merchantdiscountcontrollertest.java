@@ -8,6 +8,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import pe.edu.pucp.kingstore.api.context.MerchantContext;
+import pe.edu.pucp.kingstore.api.controller.MerchantDiscountController;
 import pe.edu.pucp.kingstore.domain.dto.product.DiscountRequestDTO;
 import pe.edu.pucp.kingstore.domain.dto.product.DiscountResponseDTO;
 import pe.edu.pucp.kingstore.domain.model.product.Discount;

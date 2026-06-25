@@ -6,7 +6,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import pe.edu.pucp.kingstore.domain.model.quotation.Quotation;
 import pe.edu.pucp.kingstore.domain.model.quotation.enums.QuotationStatus;
-
+import pe.edu.pucp.kingstore.domain.model.user.Customer;
 
 import java.util.List;
 import java.util.Optional;
@@ -16,7 +16,8 @@ public interface QuotationRepository
     extends JpaRepository<Quotation, Integer> {
 
     Optional<Quotation> findByShoppingCartId(Integer shoppingCartId);
-    List<Quotation> findByStatus (QuotationStatus status);
+
+    List<Quotation> findByStatus(QuotationStatus status);
 
     @Query("""
             select distinct q
@@ -42,4 +43,5 @@ public interface QuotationRepository
     List<Quotation> findByStoreIdAndStatus(@Param("storeId") Integer storeId,
                                            @Param("status") QuotationStatus status);
 
+    List<Quotation> findByShoppingCart_Customer_Id(Integer customerId);
 }

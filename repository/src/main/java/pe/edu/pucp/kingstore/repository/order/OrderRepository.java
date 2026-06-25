@@ -39,5 +39,6 @@ public interface OrderRepository
             """)
     List<Order> findByStoreIdAndStatus(@Param("storeId") Integer storeId,
                                        @Param("status") OrderStatus status);
+    List<Order> findByQuotation_ShoppingCart_Customer_Id(Integer customerId);
 
 }

@@ -1,14 +1,16 @@
 package pe.edu.pucp.kingstore.service.product;
 
-
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import pe.edu.pucp.kingstore.domain.dto.product.DiscountPublicDTO;
+import pe.edu.pucp.kingstore.domain.dto.product.ProductPublicDTO;
+import pe.edu.pucp.kingstore.domain.model.product.Discount;
 import pe.edu.pucp.kingstore.domain.model.product.Product;
 import pe.edu.pucp.kingstore.domain.model.product.enums.ProductStatus;
+import pe.edu.pucp.kingstore.repository.product.DiscountRepository;
 import pe.edu.pucp.kingstore.repository.product.ProductRepository;
 import pe.edu.pucp.kingstore.service.common.AbstractCrudService;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
-
 import java.util.List;
 import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
 import java.util.Objects;
@@ -17,13 +19,11 @@ import pe.edu.pucp.kingstore.domain.dto.product.ProductResponseDTO;
 import pe.edu.pucp.kingstore.domain.model.product.ProductVariant;
 import pe.edu.pucp.kingstore.domain.model.product.enums.Color;
 import pe.edu.pucp.kingstore.domain.model.store.Store;
-import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
 import pe.edu.pucp.kingstore.service.storage.StorageService;
 import pe.edu.pucp.kingstore.service.user.util.MerchantStringUtil;
 import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Objects;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -31,10 +31,13 @@ import java.util.stream.Collectors;
 public class ProductService extends AbstractCrudService<Product> {
 
     private final ProductRepository productRepository;
+    private final DiscountRepository discountRepository;
 
-    public ProductService(ProductRepository productRepository) {
+    public ProductService(ProductRepository productRepository,
+                          DiscountRepository discountRepository) {
         super(productRepository, "Product");
         this.productRepository = productRepository;
+        this.discountRepository = discountRepository;
     }
 
     @Transactional(readOnly = true)
@@ -100,6 +103,63 @@ public class ProductService extends AbstractCrudService<Product> {
         String key          = "products/" + store.getSlug() + "/" + UUID.randomUUID() + "-" + safeFilename;
         return storageService.uploadBytes(key, image.getBytes(),
                 MerchantStringUtil.contentType(filename));
+    }
+    // Catalogo PUBLIC
+    @Transactional(readOnly = true)
+    public List<Product> findPublicByStore(Integer storeId){
+        requireId(storeId);
+        return productRepository.findByStoreIdAndActive(storeId, true).stream()
+                .filter(p -> p.getStatus() == ProductStatus.ACTIVE)
+                .toList();
+    }
+    @Transactional(readOnly = true)
+    public Product findPublicInStore(Integer productId, Integer storeId) {
+        requireId(productId);
+        requireId(storeId);
+        Product product = getById(productId);
+        if (!Objects.equals(product.getStore().getId(), storeId)
+                || !Boolean.TRUE.equals(product.getActive())
+                || product.getStatus() != ProductStatus.ACTIVE) {
+            throw new ResourceNotFoundException("Product", productId);
+        }
+        return product;
+    }
+
+    @Transactional(readOnly = true)
+    public ProductPublicDTO toPublicDTO(Product product){
+        List<ProductPublicDTO.ProductVariantPublicDTO> variants =
+                product.getVariants() == null ? List.of()
+                        : product.getVariants().stream()
+                          .filter(v -> v.getStock()>0)
+                          .map(v -> new ProductPublicDTO.ProductVariantPublicDTO(
+                                  v.getId(), v.getSize(), v.getColor(), v.getStock()))
+                          .toList();
+        List<DiscountPublicDTO> discounts =
+                discountRepository.findByStoreId(product.getStore().getId()).stream()
+                        .filter(d -> Boolean.TRUE.equals(d.getActive()))
+                        .filter(d -> appliesToProduct(d, product))
+                        .map(d -> new DiscountPublicDTO(
+                                d.getId(),
+                                d.getName(),
+                                d.getVolumeType(),
+                                d.getMinQuantity(),
+                                d.getMaxQuantity(),
+                                d.getDiscountPercentage()))
+                        .toList();
+        return new ProductPublicDTO(
+                product.getId(),
+                product.getName(),
+                product.getDescription(),
+                product.getBasePrice(),
+                product.getImageUrls() == null ? List.of() : product.getImageUrls(),
+                variants,
+                discounts
+        );
+    }
+
+    private boolean appliesToProduct(Discount discount, Product product){
+        if(discount.getProduct () == null) return true;
+        return Objects.equals(discount.getProduct().getId(), product.getId());
     }
 
     // ── Entity → DTO ──────────────────────────────────────────────────────────────
@@ -239,4 +299,6 @@ public class ProductService extends AbstractCrudService<Product> {
             });
         }
     }
+
+
 }

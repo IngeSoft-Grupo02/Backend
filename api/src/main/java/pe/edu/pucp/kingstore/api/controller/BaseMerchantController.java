@@ -1,4 +1,4 @@
-package pe.edu.pucp.kingstore.api.controller.merchant;
+package pe.edu.pucp.kingstore.api.controller;
 
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
