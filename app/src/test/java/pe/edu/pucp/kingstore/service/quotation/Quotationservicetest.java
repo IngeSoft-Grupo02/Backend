@@ -406,7 +406,7 @@ class QuotationServiceTest {
     }
 
     @Test
-    void createFromCartThrowsWhenActivePendingQuotationExists() {
+    void createFromCartThrowsWhenAnyQuotationExistsForCart() {
         pe.edu.pucp.kingstore.domain.model.product.Product product =
                 new pe.edu.pucp.kingstore.domain.model.product.Product();
         ProductVariant variant = new ProductVariant();
@@ -429,7 +429,7 @@ class QuotationServiceTest {
 
         assertThatThrownBy(() -> service.createFromCart(cart))
                 .isInstanceOf(BusinessRuleException.class)
-                .hasMessageContaining("pending quotation");
+                .hasMessageContaining("already has a quotation");
     }
 
 // =========================================================================

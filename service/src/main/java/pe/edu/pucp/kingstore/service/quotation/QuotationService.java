@@ -39,11 +39,10 @@ public class QuotationService extends AbstractCrudService<Quotation> {
         if (cart.getItems() == null || cart.getItems().isEmpty()) {
             throw new BusinessRuleException("Cart must have at least one item to create a quotation");
         }
-        // Un carrito solo puede tener una cotización pendiente activa
+        // Un carrito solo puede tener una cotización (unique constraint en shopping_cart_id).
+        // Para hacer una nueva cotización el cliente debe usar un carrito nuevo.
         quotationRepository.findByShoppingCartId(cart.getId()).ifPresent(existing -> {
-            if (existing.getStatus() == QuotationStatus.PENDING) {
-                throw new BusinessRuleException("Cart already has a pending quotation");
-            }
+            throw new BusinessRuleException("Cart already has a quotation");
         });
 
         Quotation quotation = new Quotation();

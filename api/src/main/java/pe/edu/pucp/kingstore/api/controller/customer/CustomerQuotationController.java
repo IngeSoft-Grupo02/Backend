@@ -46,6 +46,8 @@ public class CustomerQuotationController {
             Customer customer   = customerContext.customer(authentication, store);
             ShoppingCart cart   = shoppingCartService.getOrCreateCart(customer);
             Quotation quotation = quotationService.createFromCart(cart);
+            // Desactivar el carrito para que la próxima cotización use uno nuevo.
+            shoppingCartService.deactivate(cart.getId());
             return ResponseEntity.status(201).body(
                     quotationService.toResponseDTO(quotation, store.getId()));
         } catch (ResourceNotFoundException | BusinessRuleException e) {

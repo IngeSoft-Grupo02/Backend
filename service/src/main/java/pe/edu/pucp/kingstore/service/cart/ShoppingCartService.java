@@ -89,6 +89,9 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
 
         if (existing != null) {
             int newQty = existing.getQuantity() + quantity;
+            if (variant.getStock() < newQty) {
+                throw new BusinessRuleException("Not enough stock for the requested quantity");
+            }
             existing.setQuantity(newQty);
             existing.setPrice(finalPrice);
             existing.setSubtotal(finalPrice * newQty);
