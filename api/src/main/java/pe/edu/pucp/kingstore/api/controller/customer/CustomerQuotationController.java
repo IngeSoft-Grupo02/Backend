@@ -42,9 +42,18 @@ public class CustomerQuotationController {
     public ResponseEntity<?> create(@PathVariable String slug,
                                     Authentication authentication) {
         try {
-            Store store         = customerContext.store(slug);
-            Customer customer   = customerContext.customer(authentication, store);
-            ShoppingCart cart   = shoppingCartService.getOrCreateCart(customer);
+            Store store       = customerContext.store(slug);
+            Customer customer = customerContext.customer(authentication, store);
+            ShoppingCart cart = shoppingCartService.getOrCreateCart(customer);
+
+            // Si el carrito activo ya tiene cotización, desactivarlo para romper el ciclo:
+            // de lo contrario createFromCart lanzaría y deactivate nunca se ejecutaría,
+            // dejando al cliente atrapado en el mismo carrito en cada intento.
+            if (quotationService.findByShoppingCart(cart.getId()).isPresent()) {
+                shoppingCartService.deactivate(cart.getId());
+                return ResponseEntity.badRequest().body(Map.of("error", "Cart already has a quotation"));
+            }
+
             Quotation quotation = quotationService.createFromCart(cart);
             // Desactivar el carrito para que la próxima cotización use uno nuevo.
             shoppingCartService.deactivate(cart.getId());

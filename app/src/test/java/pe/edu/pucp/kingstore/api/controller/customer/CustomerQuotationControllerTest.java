@@ -19,9 +19,11 @@ import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
 import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
 import pe.edu.pucp.kingstore.service.quotation.QuotationService;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -69,6 +71,7 @@ class CustomerQuotationControllerTest {
         when(customerContext.store("tienda-luna")).thenReturn(store);
         when(customerContext.customer(authentication, store)).thenReturn(customer);
         when(shoppingCartService.getOrCreateCart(customer)).thenReturn(cart);
+        when(quotationService.findByShoppingCart(1)).thenReturn(Optional.empty());
         when(quotationService.createFromCart(cart)).thenReturn(quotation);
         when(quotationService.toResponseDTO(quotation, 10)).thenReturn(responseDTO);
 
@@ -83,12 +86,40 @@ class CustomerQuotationControllerTest {
         when(customerContext.store("tienda-luna")).thenReturn(store);
         when(customerContext.customer(authentication, store)).thenReturn(customer);
         when(shoppingCartService.getOrCreateCart(customer)).thenReturn(cart);
+        when(quotationService.findByShoppingCart(1)).thenReturn(Optional.empty());
         when(quotationService.createFromCart(cart))
                 .thenThrow(new BusinessRuleException("Cart must have at least one item"));
 
         var result = controller.create("tienda-luna", authentication);
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    void createDeactivatesCartAndReturnsBadRequestWhenCartAlreadyHasQuotation() {
+        when(customerContext.store("tienda-luna")).thenReturn(store);
+        when(customerContext.customer(authentication, store)).thenReturn(customer);
+        when(shoppingCartService.getOrCreateCart(customer)).thenReturn(cart);
+        when(quotationService.findByShoppingCart(1)).thenReturn(Optional.of(quotation));
+
+        var result = controller.create("tienda-luna", authentication);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        verify(shoppingCartService).deactivate(1);
+    }
+
+    @Test
+    void createDeactivatesCartAfterSuccessfulQuotationCreation() {
+        when(customerContext.store("tienda-luna")).thenReturn(store);
+        when(customerContext.customer(authentication, store)).thenReturn(customer);
+        when(shoppingCartService.getOrCreateCart(customer)).thenReturn(cart);
+        when(quotationService.findByShoppingCart(1)).thenReturn(Optional.empty());
+        when(quotationService.createFromCart(cart)).thenReturn(quotation);
+        when(quotationService.toResponseDTO(quotation, 10)).thenReturn(responseDTO);
+
+        controller.create("tienda-luna", authentication);
+
+        verify(shoppingCartService).deactivate(1);
     }
 
     // ── GET /stores/{slug}/quotations ─────────────────────────────────────────
