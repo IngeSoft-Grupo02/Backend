@@ -73,9 +73,8 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
         if (quantity <= 0) {
             throw new BusinessRuleException("Quantity must be positive");
         }
-        if (variant.getStock() < quantity) {
-            throw new BusinessRuleException("Not enough stock for the requested quantity");
-        }
+        // El stock NO bloquea la cotización: el cliente puede solicitar cantidades
+        // por encima del stock disponible y el comerciante decide si las acepta o rechaza.
 
         // Si ya existe ese variant en el carrito, suma la cantidad
         CartItem existing = cart.getItems().stream()
@@ -89,9 +88,6 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
 
         if (existing != null) {
             int newQty = existing.getQuantity() + quantity;
-            if (variant.getStock() < newQty) {
-                throw new BusinessRuleException("Not enough stock for the requested quantity");
-            }
             existing.setQuantity(newQty);
             existing.setPrice(finalPrice);
             existing.setSubtotal(finalPrice * newQty);
@@ -124,9 +120,8 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
                         .ResourceNotFoundException("Cart item", cartItemId));
 
         ProductVariant variant = item.getProductVariant();
-        if (variant.getStock() < quantity) {
-            throw new BusinessRuleException("Not enough stock for the requested quantity");
-        }
+        // El stock NO bloquea la actualización del carrito (mismo criterio que addItem):
+        // la cotización admite cantidades por encima del stock disponible.
 
         double price = variant.getProduct().getBasePrice();
         double discountApplied = resolveDiscount(storeId, variant.getProduct(), quantity);

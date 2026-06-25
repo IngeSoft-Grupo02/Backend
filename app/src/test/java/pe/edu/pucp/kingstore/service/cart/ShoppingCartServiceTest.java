@@ -188,16 +188,23 @@ class ShoppingCartServiceTest {
     }
 
     @Test
-    void addItemThrowsWhenInsufficientStock() {
+    void addItemAllowsQuantityAboveAvailableStock() {
+        // Regla de negocio: el stock no bloquea la cotización. El cliente puede
+        // solicitar más unidades de las disponibles y el comerciante decide.
         Customer customer = customer(1);
         Store store = store(10);
         Product product = product(1, store, 100.0);
         ProductVariant variant = variant(1, product, 3);
         ShoppingCart cart = emptyCart(customer);
 
-        assertThatThrownBy(() -> service.addItem(cart, variant, 5, 10))
-                .isInstanceOf(BusinessRuleException.class)
-                .hasMessageContaining("Not enough stock");
+        when(discountRepository.findByStoreId(10)).thenReturn(List.of());
+        when(shoppingCartRepository.save(any(ShoppingCart.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ShoppingCart result = service.addItem(cart, variant, 5, 10);
+
+        assertThat(result.getItems()).hasSize(1);
+        assertThat(result.getItems().get(0).getQuantity()).isEqualTo(5);
     }
 
     @Test
@@ -252,6 +259,32 @@ class ShoppingCartServiceTest {
 
         assertThat(result.getItems().get(0).getQuantity()).isEqualTo(5);
         assertThat(result.getItems().get(0).getSubtotal()).isEqualTo(500.0);
+    }
+
+    @Test
+    void updateItemAllowsQuantityAboveAvailableStock() {
+        // Mismo criterio que addItem: el stock no bloquea la cotización.
+        Customer customer = customer(1);
+        Store store = store(10);
+        Product product = product(1, store, 100.0);
+        ProductVariant variant = variant(1, product, 3);
+        ShoppingCart cart = emptyCart(customer);
+
+        CartItem item = new CartItem();
+        item.setId(1);
+        item.setProductVariant(variant);
+        item.setQuantity(2);
+        item.setPrice(100.0);
+        item.setSubtotal(200.0);
+        cart.getItems().add(item);
+
+        when(discountRepository.findByStoreId(10)).thenReturn(List.of());
+        when(shoppingCartRepository.save(any(ShoppingCart.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ShoppingCart result = service.updateItem(cart, 1, 50, 10);
+
+        assertThat(result.getItems().get(0).getQuantity()).isEqualTo(50);
     }
 
     @Test
