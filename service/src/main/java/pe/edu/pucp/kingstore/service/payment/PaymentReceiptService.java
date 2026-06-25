@@ -3,6 +3,8 @@ package pe.edu.pucp.kingstore.service.payment;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pe.edu.pucp.kingstore.domain.model.payment.PaymentReceipt;
+import pe.edu.pucp.kingstore.domain.model.payment.enums.PaymentMethod;
+import pe.edu.pucp.kingstore.domain.model.payment.enums.ReceiptType;
 import pe.edu.pucp.kingstore.repository.payment.PaymentReceiptRepository;
 import pe.edu.pucp.kingstore.service.common.AbstractCrudService;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
@@ -69,6 +71,67 @@ public class PaymentReceiptService extends AbstractCrudService<PaymentReceipt> {
         orderRepository.save(order);
 
         return create(receipt);
+    }
+
+    // Agrega el parámetro receiptType:
+    @Transactional
+    public PaymentReceipt simulatePayment(Order order, String ruc,
+                                          PaymentMethod paymentMethod,
+                                          String cardNumber, String cardHolder,
+                                          String expiryDate, String cvv,
+                                          ReceiptType receiptType) {
+        if (order.getStatus() != OrderStatus.PAYMENT_CONFIRMED) {
+            throw new pe.edu.pucp.kingstore.service.common.BusinessRuleException(
+                    "Only confirmed orders can be paid");
+        }
+        paymentReceiptRepository.findByOrderId(order.getId()).ifPresent(existing -> {
+            throw new pe.edu.pucp.kingstore.service.common.BusinessRuleException(
+                    "Order already has a payment receipt");
+        });
+
+        // Validar RUC si es factura
+        ReceiptType type = receiptType != null ? receiptType : ReceiptType.BOLETA;
+        if (type == ReceiptType.FACTURA) {
+            validateRuc(ruc);
+        }
+
+        // Validar tarjeta
+        validateCard(cardNumber, cardHolder, expiryDate, cvv);
+
+        // Simular tarjeta declinada
+        if (cardNumber != null && cardNumber.replaceAll("\\s", "").endsWith("0000")) {
+            throw new pe.edu.pucp.kingstore.service.common.BusinessRuleException(
+                    "Payment declined — card rejected by issuer");
+        }
+
+        PaymentReceipt receipt = new PaymentReceipt();
+        receipt.setOrder(order);
+        receipt.setRuc(ruc);
+        receipt.setPaymentMethod(paymentMethod != null ? paymentMethod
+                : pe.edu.pucp.kingstore.domain.model.payment.enums.PaymentMethod.VIRTUAL);
+        receipt.setReceiptType(type);
+        receipt.setFinalTotal(order.getFinalTotal());
+
+        order.setStatus(OrderStatus.PAYMENT_CONFIRMED);
+        orderRepository.save(order);
+
+        return create(receipt);
+    }
+
+    // Agrega el método validateRuc:
+    private void validateRuc(String ruc) {
+        if (ruc == null || ruc.isBlank()) {
+            throw new pe.edu.pucp.kingstore.service.common.BusinessRuleException(
+                    "RUC is required for invoices");
+        }
+        if (!ruc.matches("\\d{11}")) {
+            throw new pe.edu.pucp.kingstore.service.common.BusinessRuleException(
+                    "RUC must have 11 digits");
+        }
+        if (!ruc.startsWith("10") && !ruc.startsWith("20")) {
+            throw new pe.edu.pucp.kingstore.service.common.BusinessRuleException(
+                    "RUC must start with 10 or 20");
+        }
     }
 
     private void validateCard(String cardNumber, String cardHolder,

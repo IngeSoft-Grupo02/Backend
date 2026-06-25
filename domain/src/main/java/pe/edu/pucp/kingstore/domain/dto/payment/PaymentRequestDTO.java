@@ -2,6 +2,7 @@ package pe.edu.pucp.kingstore.domain.dto.payment;
 
 import lombok.Data;
 import pe.edu.pucp.kingstore.domain.model.payment.enums.PaymentMethod;
+import pe.edu.pucp.kingstore.domain.model.payment.enums.ReceiptType;
 
 /**
  * DTO de entrada para el pago simulado.
@@ -16,4 +17,5 @@ public class PaymentRequestDTO {
     private String cardHolder;
     private String expiryDate;
     private String cvv;
+    private ReceiptType receiptType;
 }

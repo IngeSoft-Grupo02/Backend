@@ -9,6 +9,7 @@ import pe.edu.pucp.kingstore.domain.model.order.enums.District;
 import pe.edu.pucp.kingstore.domain.model.order.enums.OrderStatus;
 import pe.edu.pucp.kingstore.domain.model.payment.PaymentReceipt;
 import pe.edu.pucp.kingstore.domain.model.payment.enums.PaymentMethod;
+import pe.edu.pucp.kingstore.domain.model.payment.enums.ReceiptType;
 import pe.edu.pucp.kingstore.domain.model.product.Product;
 import pe.edu.pucp.kingstore.domain.model.product.ProductVariant;
 import pe.edu.pucp.kingstore.domain.model.product.enums.Color;
@@ -43,6 +44,7 @@ public class PaymentTestDataUtil {
         paymentReceipt.setSubTotal(10.4);
         paymentReceipt.setFinalTotal(97.4);
         paymentReceipt.setPaymentMethod(PaymentMethod.VIRTUAL);
+        paymentReceipt.setReceiptType(ReceiptType.BOLETA);
         return paymentReceipt;
     }
 
@@ -55,6 +57,7 @@ public class PaymentTestDataUtil {
         paymentReceipt.setSubTotal(20.4);
         paymentReceipt.setFinalTotal(117.4);
         paymentReceipt.setPaymentMethod(PaymentMethod.VIRTUAL);
+        paymentReceipt.setReceiptType(ReceiptType.BOLETA);
         return paymentReceipt;
     }
 
@@ -67,6 +70,7 @@ public class PaymentTestDataUtil {
         paymentReceipt.setSubTotal(40.4);
         paymentReceipt.setFinalTotal(417.4);
         paymentReceipt.setPaymentMethod(PaymentMethod.CASH_ON_DELIVERY);
+        paymentReceipt.setReceiptType(ReceiptType.FACTURA);
         return paymentReceipt;
     }
 
