@@ -61,15 +61,15 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOriginPatterns(List.of(
-                "http://52.205.138.95",
-                "http://52.205.138.95:*",
-                "https://ec2-100-27-222-84.compute-1.amazonaws.com",
+                "http://100.57.218.181",
+                "http://100.57.218.181:*",
+                "https://ec2-100-57-218-181.compute-1.amazonaws.com",
                 "http://localhost:3000",
                 "http://localhost:3001",
                 "http://localhost:3002",
                 "http://localhost:3003"));
 //        config.setAllowedOriginPatterns(List.of(
-//            "http://52.205.138.95:3000",
+//            "http://100.57.218.181:3000",
 //            "http://localhost:3000"));//ANTIGUO
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));

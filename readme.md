@@ -205,112 +205,85 @@ Para más detalles sobre el cifrado de propiedades, ver [`ENCRYPTION_GUIDE.md`](
 
 ## Despliegue del Backend
 
-El backend es una aplicación Spring Boot multi-módulo (Maven). Se despliega como contenedor Docker en EC2 y se conecta a una base de datos MySQL en AWS RDS.
+El backend es una aplicación Spring Boot multi-módulo (Maven). Se despliega automáticamente en EC2 mediante GitHub Actions al hacer push a `main`. No se requiere Docker Hub ni intervención manual.
 
 ### Arquitectura
 
 ```
-Internet → EC2:8080
-              │
-         Spring Boot (Docker)
-              │
-         AWS RDS MySQL
+push a main
+     │
+GitHub Actions
+     ├── ./mvnw package -DskipTests   → app/target/*.jar
+     ├── docker build                  → imagen local (sin registry)
+     ├── docker save | gzip | scp      → backend-image.tar.gz al EC2
+     └── ssh: docker load + compose up
+                    │
+              EC2:8080 (Spring Boot)
+                    │
+              AWS RDS MySQL
 ```
-
-### Requisitos previos
-
-- Java 21
-- Maven (o usar el wrapper `./mvnw` incluido en el repo)
-- Docker instalado y sesión iniciada en Docker Hub (`docker login`)
 
 ### Datos del servidor
 
 | Campo | Valor |
 |-------|-------|
-| IP EC2 | `52.205.138.95` |
+| IP EC2 | `100.57.218.181` |
 | Puerto backend | `8080` |
-| Imagen Docker Hub | `bryanpisco/kingstore-backend:latest` |
-| Conexión SSH | `ssh -i "ingesoft_key.pem" ubuntu@ec2-52-205-138-95.compute-1.amazonaws.com` |
+| Directorio en servidor | `~/kingstore/backend/` |
+| Conexión SSH | `ssh -i "kingstore_key.pem" ubuntu@ec2-100-57-218-181.compute-1.amazonaws.com` |
 
 ---
 
-### Primer despliegue en el servidor (solo una vez)
+### Configuración inicial (solo una vez)
 
-**1. Conectarse al servidor:**
+#### Secrets en GitHub
+
+El workflow lee los secrets desde **Settings → Environments → production** del repositorio Backend. Deben estar configurados:
+
+| Secret | Descripción |
+|--------|-------------|
+| `EC2_HOST` | IP del servidor (`100.57.218.181`) |
+| `EC2_USER` | Usuario SSH (`ubuntu`) |
+| `EC2_SSH_KEY` | Clave privada SSH (contenido del archivo `.pem`) |
+| `EC2_KNOWN_HOSTS` | Output de `ssh-keyscan 100.57.218.181` |
+| `JASYPT_ENCRYPTOR_PASSWORD` | Clave para desencriptar propiedades cifradas |
+| `JWT_SECRET` | Clave para firmar tokens JWT |
+| `SPRING_DATASOURCE_PASSWORD` | Contraseña de la base de datos MySQL en RDS |
+
+> Las credenciales AWS (S3) las provee automáticamente el IAM Role asociado a la instancia EC2. No se configuran manualmente.
+
+Para obtener el valor de `EC2_KNOWN_HOSTS`:
 ```bash
-ssh -i "ingesoft_key.pem" ubuntu@ec2-52-205-138-95.compute-1.amazonaws.com
-```
-
-**2. Crear el archivo `.env` con las credenciales del backend:**
-
-> Este archivo nunca se sube al repositorio. Contiene los secretos necesarios para que Spring Boot arranque correctamente.
-
-```bash
-cat > .env << 'EOF'
-JASYPT_ENCRYPTOR_PASSWORD=kingstore-secret-key-2024
-JWT_SECRET=kingstore-secret-key-ingesoft-2026
-SPRING_DATASOURCE_PASSWORD=<password_de_rds>
-EOF
-```
-
-**3. Copiar el `docker-compose.yml` al servidor (desde tu máquina local):**
-```bash
-scp -i "ingesoft_key.pem" \
-    ../Frontend/docker-compose.yml \
-    ubuntu@ec2-52-205-138-95.compute-1.amazonaws.com:~/docker-compose.yml
-```
-
-**4. Levantar los contenedores:**
-```bash
-docker compose pull
-docker compose up -d
-docker compose ps   # verificar que el backend esté "Up"
+ssh-keyscan 100.57.218.181
 ```
 
 ---
 
-### Publicar nueva versión (tras cada cambio de código)
+### Publicar nueva versión
 
-Ejecutar desde la raíz del proyecto backend (`/Backend`):
+Solo hace falta hacer merge a `main`. El workflow `.github/workflows/backend-cd.yml` se activa automáticamente y:
 
-**1. Compilar el JAR:**
-```bash
-./mvnw clean package -DskipTests
-```
-> El JAR generado queda en `app/target/*.jar`. El flag `-DskipTests` omite los tests para agilizar el build.
+1. Compila el JAR en el runner de GitHub Actions
+2. Construye la imagen Docker
+3. Transfiere la imagen al EC2 vía SSH/SCP
+4. Levanta el contenedor con `docker-compose.production.yml`
+5. Verifica que el puerto 8080 responda (hasta 90 segundos de espera)
 
-**2. Construir la imagen Docker:**
-```bash
-docker build -t bryanpisco/kingstore-backend:latest .
-```
-
-**3. Subir la imagen a Docker Hub:**
-```bash
-docker push bryanpisco/kingstore-backend:latest
-```
-
-**4. Actualizar el servidor:**
-```bash
-ssh -i "ingesoft_key.pem" ubuntu@ec2-52-205-138-95.compute-1.amazonaws.com
-
-docker compose pull backend      # descarga la imagen nueva
-docker compose up -d backend     # reinicia solo el contenedor del backend
-docker compose logs backend -f   # ver logs en tiempo real para confirmar que arrancó
-```
+Puedes seguir el progreso en la pestaña **Actions** del repositorio en GitHub.
 
 ---
 
-### Ver logs del backend
+### Ver logs del backend en el servidor
 
 ```bash
+ssh -i "kingstore_key.pem" ubuntu@ec2-100-57-218-181.compute-1.amazonaws.com
+cd ~/kingstore/backend
+
 # Últimas 50 líneas
-docker compose logs backend --tail=50
+docker compose -f docker-compose.production.yml logs backend --tail=50
 
 # En tiempo real (Ctrl+C para salir)
-docker compose logs backend -f
-
-# Logs de todos los servicios en tiempo real
-docker compose logs -f
+docker compose -f docker-compose.production.yml logs backend -f
 ```
 
 ---
@@ -318,39 +291,37 @@ docker compose logs -f
 ### Apagar el backend
 
 ```bash
-ssh -i "ingesoft_key.pem" ubuntu@ec2-52-205-138-95.compute-1.amazonaws.com
+ssh -i "kingstore_key.pem" ubuntu@ec2-100-57-218-181.compute-1.amazonaws.com
+cd ~/kingstore/backend
 ```
 
-**Opción 1 — Detener solo el backend (el resto sigue corriendo):**
+**Opción 1 — Detener el contenedor (se puede reiniciar):**
 ```bash
-docker compose stop backend
+docker compose -f docker-compose.production.yml stop
 ```
 
-**Opción 2 — Detener y eliminar el contenedor del backend:**
+**Opción 2 — Detener y eliminar el contenedor:**
 ```bash
-docker compose down backend
+docker compose -f docker-compose.production.yml down
 ```
 
-**Opción 3 — Apagar todos los servicios (frontend + backend):**
+**Opción 3 — Apagar y limpiar la imagen (el próximo CD la reconstruye):**
 ```bash
-docker compose down
+docker compose -f docker-compose.production.yml down --rmi all
 ```
-> Los datos en RDS y las imágenes Docker no se eliminan. Solo se detienen los contenedores.
 
-**Opción 4 — Apagar todo y limpiar imágenes (fuerza re-descarga en el próximo despliegue):**
-```bash
-docker compose down --rmi all
-```
+> Los datos en RDS no se eliminan. Solo se detiene el contenedor.
 
 ---
 
-### Variables de entorno del backend
+### Variables de entorno del backend en producción
+
+El workflow escribe automáticamente un archivo `.env` en `~/kingstore/backend/` en cada despliegue con las siguientes variables:
 
 | Variable | Descripción |
 |----------|-------------|
-| `SPRING_PROFILES_ACTIVE` | Perfil activo. Usar `prod` en el servidor |
 | `JASYPT_ENCRYPTOR_PASSWORD` | Clave para desencriptar propiedades sensibles en `application.properties` |
 | `JWT_SECRET` | Clave para firmar y verificar tokens JWT |
 | `SPRING_DATASOURCE_PASSWORD` | Contraseña de la base de datos MySQL en RDS |
 
-> Las credenciales AWS (S3) las provee automáticamente el IAM Role asociado a la instancia EC2. No se configuran manualmente.
+`SPRING_PROFILES_ACTIVE=prod` se pasa directamente en `docker-compose.production.yml`.
