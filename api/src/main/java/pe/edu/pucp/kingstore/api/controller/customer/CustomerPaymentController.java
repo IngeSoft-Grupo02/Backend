@@ -34,33 +34,42 @@ public class CustomerPaymentController {
         this.orderService          = orderService;
         this.paymentReceiptService = paymentReceiptService;
     }
-    // PATCH /stores/{slug}/orders/{id}/payment
+    // POST /stores/{slug}/orders/{id}/payment
     @PostMapping("/{id}/payment")
     public ResponseEntity<?> pay(@PathVariable String slug,
                                  @PathVariable Integer id,
                                  Authentication authentication,
                                  @RequestBody(required = false) PaymentRequestDTO request) {
         try {
+            // CAMBIO: receiptType es obligatorio — el cliente debe elegir boleta o factura
+            if (request == null || request.getReceiptType() == null) {
+                throw new BusinessRuleException("Receipt type is required (BOLETA or FACTURA)");
+            }
+
             Store store       = customerContext.store(slug);
             Customer customer = customerContext.customer(authentication, store);
             Order order = orderService.findByCustomerInStore(id, customer.getId(), store.getId());
 
-            String ruc        = request != null ? request.getRuc()           : null;
-            var method        = request != null ? request.getPaymentMethod() : null;
-            String cardNumber = request != null ? request.getCardNumber()    : null;
-            String cardHolder = request != null ? request.getCardHolder()    : null;
-            String expiryDate = request != null ? request.getExpiryDate()   : null;
-            String cvv        = request != null ? request.getCvv()          : null;
+            String ruc        = request.getRuc();
+            var method        = request.getPaymentMethod();
+            String cardNumber = request.getCardNumber();
+            String cardHolder = request.getCardHolder();
+            String expiryDate = request.getExpiryDate();
+            String cvv        = request.getCvv();
+            // CAMBIO: receiptType viene del request, ya validado arriba
+            var receiptType   = request.getReceiptType();
+
 
             var receipt = paymentReceiptService.simulatePayment(
-                    order, ruc, method, cardNumber, cardHolder, expiryDate, cvv);
+                    order, ruc, method, cardNumber, cardHolder, expiryDate, cvv, receiptType);
 
             return ResponseEntity.status(201).body(Map.of(
                     "message",       "Pago confirmado exitosamente",
                     "receiptId",     receipt.getId(),
                     "orderId",       order.getId(),
                     "total",         receipt.getFinalTotal(),
-                    "paymentStatus", "APPROVED"
+                    "paymentStatus", "APPROVED",
+                    "receiptType",   receipt.getReceiptType().name()
             ));
         } catch (ResourceNotFoundException | BusinessRuleException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));

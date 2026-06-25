@@ -20,6 +20,7 @@ import pe.edu.pucp.kingstore.repository.quotation.QuotationRepository;
 import pe.edu.pucp.kingstore.repository.store.StoreRepository;
 import pe.edu.pucp.kingstore.repository.user.CustomerRepository;
 import pe.edu.pucp.kingstore.repository.user.UserAccountRepository;
+import pe.edu.pucp.kingstore.domain.model.payment.enums.ReceiptType;
 
 import java.util.List;
 import java.util.Optional;

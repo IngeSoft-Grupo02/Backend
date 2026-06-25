@@ -19,6 +19,7 @@ import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
 import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
 import pe.edu.pucp.kingstore.service.order.OrderService;
 import pe.edu.pucp.kingstore.service.payment.PaymentReceiptService;
+import pe.edu.pucp.kingstore.domain.model.payment.enums.ReceiptType;
 
 import java.util.Map;
 
@@ -64,6 +65,7 @@ class CustomerPaymentControllerTest {
         request.setCardHolder("Juan Perez");
         request.setExpiryDate("12/27");
         request.setCvv("123");
+        request.setReceiptType(ReceiptType.BOLETA);
         return request;
     }
 
@@ -75,13 +77,14 @@ class CustomerPaymentControllerTest {
         PaymentReceipt receipt = new PaymentReceipt();
         receipt.setId(1);
         receipt.setFinalTotal(200.0);
+        receipt.setReceiptType(ReceiptType.BOLETA);
 
         when(customerContext.store("tienda-luna")).thenReturn(store);
         when(customerContext.customer(authentication, store)).thenReturn(customer);
         when(orderService.findByCustomerInStore(1, 1, 10)).thenReturn(order);
         when(paymentReceiptService.simulatePayment(
                 order, "20123456789", PaymentMethod.VIRTUAL,
-                "4111111111111111", "Juan Perez", "12/27", "123"))
+                "4111111111111111", "Juan Perez", "12/27", "123", ReceiptType.BOLETA))
                 .thenReturn(receipt);
 
         var result = controller.pay("tienda-luna", 1, authentication, request);
@@ -95,21 +98,9 @@ class CustomerPaymentControllerTest {
     }
 
     @Test
-    void payWorksWithNullRequest() {
-        PaymentReceipt receipt = new PaymentReceipt();
-        receipt.setId(1);
-        receipt.setFinalTotal(200.0);
-
-        when(customerContext.store("tienda-luna")).thenReturn(store);
-        when(customerContext.customer(authentication, store)).thenReturn(customer);
-        when(orderService.findByCustomerInStore(1, 1, 10)).thenReturn(order);
-        when(paymentReceiptService.simulatePayment(
-                order, null, null, null, null, null, null))
-                .thenReturn(receipt);
-
+    void payReturnsBadRequestWhenReceiptTypeNotProvided() {
         var result = controller.pay("tienda-luna", 1, authentication, null);
-
-        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 
     @Test
@@ -122,7 +113,7 @@ class CustomerPaymentControllerTest {
         when(orderService.findByCustomerInStore(1, 1, 10)).thenReturn(order);
         when(paymentReceiptService.simulatePayment(
                 order, "20123456789", PaymentMethod.VIRTUAL,
-                "4111111110000", "Juan Perez", "12/27", "123"))
+                "4111111110000", "Juan Perez", "12/27", "123", ReceiptType.BOLETA))
                 .thenThrow(new BusinessRuleException("Payment declined — card rejected by issuer"));
 
         var result = controller.pay("tienda-luna", 1, authentication, request);
@@ -151,7 +142,7 @@ class CustomerPaymentControllerTest {
         when(orderService.findByCustomerInStore(1, 1, 10)).thenReturn(order);
         when(paymentReceiptService.simulatePayment(
                 order, "20123456789", PaymentMethod.VIRTUAL,
-                "4111111111111111", "Juan Perez", "12/27", "123"))
+                "4111111111111111", "Juan Perez", "12/27", "123", ReceiptType.BOLETA))
                 .thenThrow(new BusinessRuleException("Order already has a payment receipt"));
 
         var result = controller.pay("tienda-luna", 1, authentication, request);
