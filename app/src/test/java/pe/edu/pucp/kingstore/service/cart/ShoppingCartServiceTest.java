@@ -23,8 +23,6 @@ import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -93,7 +91,7 @@ class ShoppingCartServiceTest {
     void getOrCreateCartReturnsExistingCart() {
         Customer customer = customer(1);
         ShoppingCart existing = emptyCart(customer);
-        when(shoppingCartRepository.findByCustomerId(1)).thenReturn(Optional.of(existing));
+        when(shoppingCartRepository.findByCustomerIdAndActiveTrueOrderByIdDesc(1)).thenReturn(List.of(existing));
 
         ShoppingCart result = service.getOrCreateCart(customer);
 
@@ -103,7 +101,7 @@ class ShoppingCartServiceTest {
     @Test
     void getOrCreateCartCreatesNewCartWhenNoneExists() {
         Customer customer = customer(1);
-        when(shoppingCartRepository.findByCustomerId(1)).thenReturn(Optional.empty());
+        when(shoppingCartRepository.findByCustomerIdAndActiveTrueOrderByIdDesc(1)).thenReturn(List.of());
         when(shoppingCartRepository.save(any(ShoppingCart.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -112,6 +110,21 @@ class ShoppingCartServiceTest {
         assertThat(result.getCustomer()).isEqualTo(customer);
         assertThat(result.getItems()).isEmpty();
         assertThat(result.getTotalAmount()).isEqualTo(0);
+    }
+
+    @Test
+    void getOrCreateCartReturnsMostRecentActiveCartWhenCustomerHasHistoricalCarts() {
+        Customer customer = customer(1);
+        ShoppingCart older = emptyCart(customer);
+        older.setId(10);
+        ShoppingCart latest = emptyCart(customer);
+        latest.setId(12);
+        when(shoppingCartRepository.findByCustomerIdAndActiveTrueOrderByIdDesc(1))
+                .thenReturn(List.of(latest, older));
+
+        ShoppingCart result = service.getOrCreateCart(customer);
+
+        assertThat(result).isSameAs(latest);
     }
 
     // ── addItem ───────────────────────────────────────────────────────────────

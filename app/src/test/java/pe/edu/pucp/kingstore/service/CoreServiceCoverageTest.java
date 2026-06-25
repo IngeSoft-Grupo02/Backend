@@ -173,7 +173,7 @@ class CoreServiceCoverageTest {
         ShoppingCartService cartService = new ShoppingCartService(shoppingCartRepository, discountRepository);
         ShoppingCart cart = cart();
         when(shoppingCartRepository.save(any(ShoppingCart.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(shoppingCartRepository.findByCustomerId(10)).thenReturn(Optional.of(cart));
+        when(shoppingCartRepository.findByCustomerIdAndActiveTrueOrderByIdDesc(10)).thenReturn(List.of(cart));
         assertThat(cartService.create(cart).getTotalAmount()).isEqualTo(17);
         assertThat(cartService.findByCustomer(10)).contains(cart);
         cart.getItems().get(0).setQuantity(0);

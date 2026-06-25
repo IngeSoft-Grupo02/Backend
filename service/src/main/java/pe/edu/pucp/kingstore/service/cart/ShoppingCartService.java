@@ -37,7 +37,9 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
     @Transactional(readOnly = true)
     public Optional<ShoppingCart> findByCustomer(Integer customerId) {
         requireId(customerId);
-        return shoppingCartRepository.findByCustomerId(customerId);
+        return shoppingCartRepository.findByCustomerIdAndActiveTrueOrderByIdDesc(customerId)
+                .stream()
+                .findFirst();
     }
     // ── Operaciones del cliente ───────────────────────────────────────────────────
 
@@ -46,7 +48,9 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
      */
     @Transactional
     public ShoppingCart getOrCreateCart(Customer customer) {
-        return shoppingCartRepository.findByCustomerId(customer.getId())
+        return shoppingCartRepository.findByCustomerIdAndActiveTrueOrderByIdDesc(customer.getId())
+                .stream()
+                .findFirst()
                 .orElseGet(() -> {
                     ShoppingCart cart = new ShoppingCart();
                     cart.setCustomer(customer);

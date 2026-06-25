@@ -4,11 +4,11 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 import pe.edu.pucp.kingstore.domain.model.cart.ShoppingCart;
 
-import java.util.Optional;
+import java.util.List;
 
 @Repository
 public interface ShoppingCartRepository
     extends JpaRepository<ShoppingCart, Integer> {
-    Optional<ShoppingCart> findByCustomerId(Integer customerId);
+    List<ShoppingCart> findByCustomerIdAndActiveTrueOrderByIdDesc(Integer customerId);
 
 }

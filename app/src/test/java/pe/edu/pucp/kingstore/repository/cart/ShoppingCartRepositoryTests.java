@@ -137,10 +137,35 @@ public class ShoppingCartRepositoryTests {
         ShoppingCart shoppingCartA = underTest.save(CartTestDataUtil.createShoppingCartA(customerA, product));
         ShoppingCart shoppingCartB = underTest.save(CartTestDataUtil.createShoppingCartB(customerB, product));
 
-        Optional<ShoppingCart> result = underTest.findByCustomerId(customerA.getId());
+        List<ShoppingCart> result = underTest.findByCustomerIdAndActiveTrueOrderByIdDesc(customerA.getId());
 
-        assertThat(result).isPresent();
-        assertThat(result.get().getId()).isEqualTo(shoppingCartA.getId());
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getId()).isEqualTo(shoppingCartA.getId());
 
+    }
+
+    @Test
+    public void testThatFindByCustomerIdAndActiveTrueOrderByIdDescReturnsMostRecentFirst() {
+        UserAccount userAccount = userAccountRepository.save(CartTestDataUtil.createUserAccountA());
+        Store store = storeRepository.save(CartTestDataUtil.createTestStore());
+        Customer customer = CartTestDataUtil.createCustomerA(userAccount);
+        customer.setStore(store);
+        customer = customerRepository.save(customer);
+        Product product = productRepository.save(CartTestDataUtil.createTestProduct(store));
+
+        ShoppingCart shoppingCartA = underTest.save(CartTestDataUtil.createShoppingCartA(customer, product));
+        ShoppingCart shoppingCartB = underTest.save(CartTestDataUtil.createShoppingCartB(customer, product));
+        ShoppingCart inactiveCart = CartTestDataUtil.createShoppingCartC(customer, product);
+        inactiveCart.setActive(false);
+        inactiveCart = underTest.save(inactiveCart);
+
+        List<ShoppingCart> result = underTest.findByCustomerIdAndActiveTrueOrderByIdDesc(customer.getId());
+
+        assertThat(result)
+                .extracting(ShoppingCart::getId)
+                .containsExactly(shoppingCartB.getId(), shoppingCartA.getId());
+        assertThat(result)
+                .extracting(ShoppingCart::getId)
+                .doesNotContain(inactiveCart.getId());
     }
 }
