@@ -1,0 +1,132 @@
+name: Backend CD
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: backend-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy backend to EC2
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      IMAGE_NAME: kingstore-backend:${{ github.sha }}
+      EC2_HOST: ${{ secrets.EC2_HOST }}
+      EC2_USER: ${{ secrets.EC2_USER }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate deployment configuration
+        env:
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          EC2_KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
+          JASYPT_ENCRYPTOR_PASSWORD: ${{ secrets.JASYPT_ENCRYPTOR_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          SPRING_DATASOURCE_PASSWORD: ${{ secrets.SPRING_DATASOURCE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$EC2_HOST"
+          test -n "$EC2_USER"
+          test -n "$EC2_SSH_KEY"
+          test -n "$EC2_KNOWN_HOSTS"
+          test -n "$JASYPT_ENCRYPTOR_PASSWORD"
+          test -n "$JWT_SECRET"
+          test -n "$SPRING_DATASOURCE_PASSWORD"
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build JAR
+        run: ./mvnw package -DskipTests --no-transfer-progress
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build production image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: ${{ env.IMAGE_NAME }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Package image
+        run: docker save "$IMAGE_NAME" | gzip -1 > backend-image.tar.gz
+
+      - name: Configure SSH
+        env:
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          EC2_KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$EC2_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Write secrets file
+        env:
+          JASYPT_ENCRYPTOR_PASSWORD: ${{ secrets.JASYPT_ENCRYPTOR_PASSWORD }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          SPRING_DATASOURCE_PASSWORD: ${{ secrets.SPRING_DATASOURCE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          printf 'JASYPT_ENCRYPTOR_PASSWORD=%s\nJWT_SECRET=%s\nSPRING_DATASOURCE_PASSWORD=%s\n' \
+            "$JASYPT_ENCRYPTOR_PASSWORD" "$JWT_SECRET" "$SPRING_DATASOURCE_PASSWORD" \
+            > backend-secrets.env
+
+      - name: Transfer deployment files
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/deploy_key "$EC2_USER@$EC2_HOST" 'mkdir -p ~/kingstore/backend'
+          scp -i ~/.ssh/deploy_key \
+            backend-image.tar.gz docker-compose.production.yml backend-secrets.env \
+            "$EC2_USER@$EC2_HOST:~/kingstore/backend/"
+          ssh -i ~/.ssh/deploy_key "$EC2_USER@$EC2_HOST" \
+            'chmod 600 ~/kingstore/backend/backend-secrets.env && \
+             mv ~/kingstore/backend/backend-secrets.env ~/kingstore/backend/.env'
+
+      - name: Deploy container
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/deploy_key "$EC2_USER@$EC2_HOST" \
+            "BACKEND_IMAGE='$IMAGE_NAME' bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd ~/kingstore/backend
+          export BACKEND_IMAGE
+          docker load --input backend-image.tar.gz
+          docker compose -f docker-compose.production.yml up -d --remove-orphans
+          rm -f backend-image.tar.gz
+          docker image prune -f
+          docker compose -f docker-compose.production.yml ps
+          REMOTE
+
+      - name: Verify deployment
+        run: |
+          curl --silent --output /dev/null \
+            --retry 18 --retry-connrefused --retry-delay 5 \
+            --max-time 5 \
+            -X POST -H "Content-Type: application/json" -d '{}' \
+            "http://$EC2_HOST:8080/auth/login"
+
+      - name: Remove temporary credentials
+        if: always()
+        run: rm -f ~/.ssh/deploy_key backend-image.tar.gz backend-secrets.env
