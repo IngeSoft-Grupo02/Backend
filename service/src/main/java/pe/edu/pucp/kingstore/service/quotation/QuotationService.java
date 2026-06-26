@@ -13,6 +13,7 @@ import pe.edu.pucp.kingstore.domain.model.cart.ShoppingCart;
 import pe.edu.pucp.kingstore.domain.model.quotation.QuotationItem;
 
 import pe.edu.pucp.kingstore.domain.dto.quotation.QuotationItemResponseDTO;
+import pe.edu.pucp.kingstore.domain.dto.quotation.QuotationDesignDTO;
 import pe.edu.pucp.kingstore.domain.dto.quotation.QuotationResponseDTO;
 import pe.edu.pucp.kingstore.service.user.util.MerchantCustomerUtil;
 import java.util.List;
@@ -251,6 +252,17 @@ public class QuotationService extends AbstractCrudService<Quotation> {
         dto.setObservations(quotation.getObservations());
         dto.setStoreId(storeId);
         dto.setItems(items);
+        dto.setDesigns(quotation.getDesigns() == null
+                ? List.of()
+                : quotation.getDesigns().stream()
+                    .filter(design -> Boolean.TRUE.equals(design.getActive()))
+                    .map(design -> new QuotationDesignDTO(
+                            design.getId(),
+                            design.getOriginalFileName(),
+                            design.getFileUrl(),
+                            design.getContentType(),
+                            design.getSizeBytes()))
+                    .toList());
 
         // Datos reales del cliente.
         dto.setCustomerName(MerchantCustomerUtil.customerName(customer));

@@ -9,6 +9,7 @@ import pe.edu.pucp.kingstore.domain.model.cart.ShoppingCart;
 import pe.edu.pucp.kingstore.domain.model.product.ProductVariant;
 import pe.edu.pucp.kingstore.domain.model.product.enums.Color;
 import pe.edu.pucp.kingstore.domain.model.quotation.Quotation;
+import pe.edu.pucp.kingstore.domain.model.quotation.QuotationDesign;
 import pe.edu.pucp.kingstore.domain.model.quotation.QuotationItem;
 import pe.edu.pucp.kingstore.domain.model.quotation.enums.QuotationStatus;
 import pe.edu.pucp.kingstore.domain.model.user.Customer;
@@ -330,6 +331,13 @@ class QuotationServiceTest {
         quotation.setTotalAmount(25.0);
         quotation.setDescription("Necesito polos para evento corporativo");
         quotation.setObservations("Aprobado con stock disponible");
+        QuotationDesign design = new QuotationDesign();
+        design.setId(7);
+        design.setOriginalFileName("diseno-frontal.png");
+        design.setFileUrl("https://bucket.s3.amazonaws.com/design/street-kings/quotations/1/diseno-frontal.png");
+        design.setContentType("image/png");
+        design.setSizeBytes(123456L);
+        quotation.setDesigns(List.of(design));
 
         var dto = service.toResponseDTO(quotation, 10);
 
@@ -340,6 +348,9 @@ class QuotationServiceTest {
         assertThat(dto.getStoreId()).isEqualTo(10);
         assertThat(dto.getDescription()).isEqualTo("Necesito polos para evento corporativo");
         assertThat(dto.getObservations()).isEqualTo("Aprobado con stock disponible");
+        assertThat(dto.getDesigns()).hasSize(1);
+        assertThat(dto.getDesigns().get(0).getFileName()).isEqualTo("diseno-frontal.png");
+        assertThat(dto.getDesigns().get(0).getUrl()).contains("/design/street-kings/quotations/1/");
         assertThat(dto.getItems()).hasSize(1);
         assertThat(dto.getItems().get(0).getVariant()).isEqualTo("M / BLACK");
         assertThat(dto.getItems().get(0).getSubTotal()).isEqualTo(30.0);
