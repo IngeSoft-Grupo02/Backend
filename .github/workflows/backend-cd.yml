@@ -35,6 +35,9 @@ jobs:
           JASYPT_ENCRYPTOR_PASSWORD: ${{ secrets.JASYPT_ENCRYPTOR_PASSWORD }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           SPRING_DATASOURCE_PASSWORD: ${{ secrets.SPRING_DATASOURCE_PASSWORD }}
+          MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
+          MAIL_APP_PASSWORD: ${{ secrets.MAIL_APP_PASSWORD }}
+          FRONTEND_BASE_URL: ${{ vars.FRONTEND_BASE_URL || 'http://100.57.218.181' }}
           KINGSTORE_STORAGE_PROVIDER: ${{ vars.KINGSTORE_STORAGE_PROVIDER || 's3' }}
           AWS_S3_BUCKET_NAME: ${{ vars.AWS_S3_BUCKET_NAME || 'kingstore-assets-563688183512-us-east-1-an' }}
           AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
@@ -47,6 +50,9 @@ jobs:
           test -n "$JASYPT_ENCRYPTOR_PASSWORD"
           test -n "$JWT_SECRET"
           test -n "$SPRING_DATASOURCE_PASSWORD"
+          test -n "$MAIL_USERNAME"
+          test -n "$MAIL_APP_PASSWORD"
+          test -n "$FRONTEND_BASE_URL"
           test -n "$KINGSTORE_STORAGE_PROVIDER"
           test -n "$AWS_S3_BUCKET_NAME"
           test -n "$AWS_REGION"
@@ -93,6 +99,9 @@ jobs:
           JASYPT_ENCRYPTOR_PASSWORD: ${{ secrets.JASYPT_ENCRYPTOR_PASSWORD }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           SPRING_DATASOURCE_PASSWORD: ${{ secrets.SPRING_DATASOURCE_PASSWORD }}
+          MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
+          MAIL_APP_PASSWORD: ${{ secrets.MAIL_APP_PASSWORD }}
+          FRONTEND_BASE_URL: ${{ vars.FRONTEND_BASE_URL || 'http://100.57.218.181' }}
           KINGSTORE_STORAGE_PROVIDER: ${{ vars.KINGSTORE_STORAGE_PROVIDER || 's3' }}
           AWS_S3_BUCKET_NAME: ${{ vars.AWS_S3_BUCKET_NAME || 'kingstore-assets-563688183512-us-east-1-an' }}
           AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
@@ -101,8 +110,9 @@ jobs:
           AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
         run: |
           set -euo pipefail
-          printf 'JASYPT_ENCRYPTOR_PASSWORD=%s\nJWT_SECRET=%s\nSPRING_DATASOURCE_PASSWORD=%s\nKINGSTORE_STORAGE_PROVIDER=%s\nAWS_S3_BUCKET_NAME=%s\nAWS_REGION=%s\nAWS_ACCESS_KEY_ID=%s\nAWS_SECRET_ACCESS_KEY=%s\nAWS_SESSION_TOKEN=%s\n' \
+          printf 'JASYPT_ENCRYPTOR_PASSWORD=%s\nJWT_SECRET=%s\nSPRING_DATASOURCE_PASSWORD=%s\nMAIL_USERNAME=%s\nMAIL_APP_PASSWORD=%s\nFRONTEND_BASE_URL=%s\nKINGSTORE_STORAGE_PROVIDER=%s\nAWS_S3_BUCKET_NAME=%s\nAWS_REGION=%s\nAWS_ACCESS_KEY_ID=%s\nAWS_SECRET_ACCESS_KEY=%s\nAWS_SESSION_TOKEN=%s\n' \
             "$JASYPT_ENCRYPTOR_PASSWORD" "$JWT_SECRET" "$SPRING_DATASOURCE_PASSWORD" \
+            "$MAIL_USERNAME" "$MAIL_APP_PASSWORD" "$FRONTEND_BASE_URL" \
             "$KINGSTORE_STORAGE_PROVIDER" "$AWS_S3_BUCKET_NAME" "$AWS_REGION" \
             "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" "$AWS_SESSION_TOKEN" \
             > backend-secrets.env
