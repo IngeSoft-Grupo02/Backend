@@ -5,8 +5,6 @@ import org.springframework.web.bind.annotation.*;
 import pe.edu.pucp.kingstore.domain.dto.store.StoreDTO;
 import pe.edu.pucp.kingstore.domain.model.store.Store;
 import pe.edu.pucp.kingstore.domain.model.store.enums.StoreStatus;
-import pe.edu.pucp.kingstore.repository.store.StoreCategoryRepository;
-import pe.edu.pucp.kingstore.repository.user.MerchantRepository;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
 import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
 import pe.edu.pucp.kingstore.service.store.StoreService;
@@ -19,15 +17,9 @@ import java.util.Map;
 public class StoreController {
 
     private final StoreService            storeService;
-    private final MerchantRepository      merchantRepository;
-    private final StoreCategoryRepository categoryRepository;
 
-    public StoreController(StoreService storeService,
-                           MerchantRepository merchantRepository,
-                           StoreCategoryRepository categoryRepository) {
+    public StoreController(StoreService storeService) {
         this.storeService       = storeService;
-        this.merchantRepository = merchantRepository;
-        this.categoryRepository = categoryRepository;
     }
 
     @GetMapping
@@ -62,18 +54,7 @@ public class StoreController {
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@PathVariable Integer id, @RequestBody StoreDTO dto) {
         try {
-            Store store = storeService.getById(id);
-            if (dto.getStoreName()     != null) store.setStoreName(dto.getStoreName());
-            if (dto.getSlug()          != null) store.setSlug(dto.getSlug());
-            if (dto.getDescription()   != null) store.setDescription(dto.getDescription());
-            if (dto.getPrimaryColor()  != null) store.setPrimaryColor(dto.getPrimaryColor());
-            if (dto.getSecondaryColor()!= null) store.setSecondaryColor(dto.getSecondaryColor());
-            if (dto.getTertiaryColor() != null) store.setTertiaryColor(dto.getTertiaryColor());
-            if (dto.getMerchantId()    != null)
-                merchantRepository.findById(dto.getMerchantId()).ifPresent(store::setMerchant);
-            if (dto.getCategoryId()    != null)
-                categoryRepository.findById(dto.getCategoryId()).ifPresent(store::setCategory);
-            return ResponseEntity.ok(storeService.update(id, store));
+            return ResponseEntity.ok(storeService.updateFromDTO(id, dto));
         } catch (ResourceNotFoundException e) {
             return ResponseEntity.status(404).body(e.getMessage());
         } catch (BusinessRuleException e) {

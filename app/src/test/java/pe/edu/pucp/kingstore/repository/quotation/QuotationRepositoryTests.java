@@ -190,4 +190,38 @@ public class QuotationRepositoryTests {
                         quotationB.getId()
                 );
     }
+
+    @Test
+    public void findByCustomerIdAndStoreIdIsolatesQuotationsBetweenStoresOfSameAccount(){
+        // Un mismo UserAccount global con dos membresías (Customer) en dos tiendas distintas.
+        UserAccount account = userAccountRepository.save(QuotationTestDataUtil.createUserAccountA());
+
+        Store storeA = storeRepository.save(QuotationTestDataUtil.createTestStore());
+        Store storeBSeed = QuotationTestDataUtil.createTestStore();
+        storeBSeed.setStoreName("Urban Threads");
+        storeBSeed.setSlug("urban-threads-iso");
+        storeBSeed.setCategory(storeA.getCategory());
+        Store storeB = storeRepository.save(storeBSeed);
+
+        Customer customerA = QuotationTestDataUtil.createCustomerA(account);
+        customerA.setStore(storeA);
+        customerA = customerRepository.save(customerA);
+
+        Customer customerB = QuotationTestDataUtil.createCustomerA(account);
+        customerB.setStore(storeB);
+        customerB = customerRepository.save(customerB);
+
+        Product product = productRepository.save(QuotationTestDataUtil.createTestProduct(storeA));
+        ShoppingCart cartA = shoppingCartRepository.save(QuotationTestDataUtil.createShoppingCartA(customerA, product));
+        Quotation quotationA = underTest.save(QuotationTestDataUtil.createQuotationA(cartA, product));
+
+        // La cotización creada en storeA SOLO la ve el Customer de storeA.
+        assertThat(underTest.findByCustomerIdAndStoreId(customerA.getId(), storeA.getId()))
+                .extracting(Quotation::getId)
+                .containsExactly(quotationA.getId());
+
+        // El mismo UserAccount en storeB (otro Customer.id) NO ve la actividad de storeA.
+        assertThat(underTest.findByCustomerIdAndStoreId(customerB.getId(), storeB.getId()))
+                .isEmpty();
+    }
 }

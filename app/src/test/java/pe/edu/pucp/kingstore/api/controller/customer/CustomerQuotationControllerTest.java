@@ -21,7 +21,10 @@ import pe.edu.pucp.kingstore.service.quotation.QuotationService;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -89,6 +92,36 @@ class CustomerQuotationControllerTest {
         var result = controller.create("tienda-luna", authentication);
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    void createDoesNotDeactivateCartWhenCreationFails() {
+        // El carrito SOLO se desactiva tras crear la cotización con éxito. Si
+        // createFromCart lanza (carrito vacío o, en una carrera, ya cotizado), no
+        // debe destruirse el carrito: nada de deactivate y respuesta 400.
+        when(customerContext.store("tienda-luna")).thenReturn(store);
+        when(customerContext.customer(authentication, store)).thenReturn(customer);
+        when(shoppingCartService.getOrCreateCart(customer)).thenReturn(cart);
+        when(quotationService.createFromCart(cart))
+                .thenThrow(new BusinessRuleException("Cart already has a quotation"));
+
+        var result = controller.create("tienda-luna", authentication);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        verify(shoppingCartService, never()).deactivate(anyInt());
+    }
+
+    @Test
+    void createDeactivatesCartAfterSuccessfulQuotationCreation() {
+        when(customerContext.store("tienda-luna")).thenReturn(store);
+        when(customerContext.customer(authentication, store)).thenReturn(customer);
+        when(shoppingCartService.getOrCreateCart(customer)).thenReturn(cart);
+        when(quotationService.createFromCart(cart)).thenReturn(quotation);
+        when(quotationService.toResponseDTO(quotation, 10)).thenReturn(responseDTO);
+
+        controller.create("tienda-luna", authentication);
+
+        verify(shoppingCartService).deactivate(1);
     }
 
     // ── GET /stores/{slug}/quotations ─────────────────────────────────────────

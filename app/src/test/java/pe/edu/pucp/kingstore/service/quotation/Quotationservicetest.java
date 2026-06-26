@@ -406,7 +406,7 @@ class QuotationServiceTest {
     }
 
     @Test
-    void createFromCartThrowsWhenActivePendingQuotationExists() {
+    void createFromCartThrowsWhenAnyQuotationExistsForCart() {
         pe.edu.pucp.kingstore.domain.model.product.Product product =
                 new pe.edu.pucp.kingstore.domain.model.product.Product();
         ProductVariant variant = new ProductVariant();
@@ -429,7 +429,7 @@ class QuotationServiceTest {
 
         assertThatThrownBy(() -> service.createFromCart(cart))
                 .isInstanceOf(BusinessRuleException.class)
-                .hasMessageContaining("pending quotation");
+                .hasMessageContaining("already has a quotation");
     }
 
 // =========================================================================
@@ -495,30 +495,13 @@ class QuotationServiceTest {
 // =========================================================================
 
     @Test
-    void findByCustomerAndStoreFiltersQuotationsByStore() {
-        pe.edu.pucp.kingstore.domain.model.store.Store store =
-                new pe.edu.pucp.kingstore.domain.model.store.Store();
-        store.setId(10);
-
-        pe.edu.pucp.kingstore.domain.model.product.Product product =
-                new pe.edu.pucp.kingstore.domain.model.product.Product();
-        product.setStore(store);
-
-        ProductVariant variant = new ProductVariant();
-        variant.setProduct(product);
-
-        pe.edu.pucp.kingstore.domain.model.cart.CartItem cartItem =
-                new pe.edu.pucp.kingstore.domain.model.cart.CartItem();
-        cartItem.setProductVariant(variant);
-        cartItem.setQuantity(1);
-
-        ShoppingCart cart = cart(1);
-        cart.setItems(new java.util.ArrayList<>(List.of(cartItem)));
-
-        Quotation quotation = quotation(1, cart, List.of(), 0);
+    void findByCustomerAndStoreDelegatesToCustomerStoreQuery() {
+        // El criterio de pertenencia es customer.id + customer.store.id (query
+        // repository-level), igual de robusto y consistente con el del comerciante.
+        Quotation quotation = quotation(1, cart(1), List.of(), 0);
         quotation.setStatus(QuotationStatus.PENDING);
 
-        when(quotationRepository.findByShoppingCart_Customer_Id(1))
+        when(quotationRepository.findByCustomerIdAndStoreId(1, 10))
                 .thenReturn(List.of(quotation));
 
         List<Quotation> result = service.findByCustomerAndStore(1, 10);
@@ -527,8 +510,25 @@ class QuotationServiceTest {
     }
 
     @Test
+    void findByCustomerAndStoreListsQuotationEvenWhenCartItemsAreEmptyOrInconsistent() {
+        // La pertenencia a la tienda se decide por customer.store, NO por los items
+        // del carrito. Una cotización con el carrito vacío (o con items históricos
+        // inconsistentes) igual debe listarse para el cliente — tal como la ve el
+        // comerciante por quotation_item. Ya no se oculta por datos de cart_item.
+        ShoppingCart emptyCart = cart(1);
+        emptyCart.setItems(new ArrayList<>());
+        Quotation quotation = quotation(2, emptyCart, List.of(), 0);
+        quotation.setStatus(QuotationStatus.APPROVED);
+
+        when(quotationRepository.findByCustomerIdAndStoreId(1, 10))
+                .thenReturn(List.of(quotation));
+
+        assertThat(service.findByCustomerAndStore(1, 10)).containsExactly(quotation);
+    }
+
+    @Test
     void findByCustomerInStoreThrowsWhenNotFound() {
-        when(quotationRepository.findByShoppingCart_Customer_Id(1)).thenReturn(List.of());
+        when(quotationRepository.findByCustomerIdAndStoreId(1, 10)).thenReturn(List.of());
 
         assertThatThrownBy(() -> service.findByCustomerInStore(99, 1, 10))
                 .isInstanceOf(ResourceNotFoundException.class);

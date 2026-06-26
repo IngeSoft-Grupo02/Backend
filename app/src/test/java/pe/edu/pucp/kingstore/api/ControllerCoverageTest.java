@@ -152,7 +152,7 @@ class ControllerCoverageTest {
     void storeControllerDelegatesAndMapsValidationResponses() {
         StoreService storeService = mock(StoreService.class);
         StoreCategoryRepository categoryRepository = mock(StoreCategoryRepository.class);
-        StoreController controller = new StoreController(storeService, merchantRepository, categoryRepository);
+        StoreController controller = new StoreController(storeService);
         Store store = store(1, "Original", merchant(11, account(11, "owner@test.com")));
         StoreDTO dto = new StoreDTO();
         dto.setStoreName("Updated");
@@ -178,14 +178,13 @@ class ControllerCoverageTest {
         when(storeService.createFromDTO(new StoreDTO())).thenThrow(new BusinessRuleException("bad"));
         assertThat(controller.create(new StoreDTO()).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
 
-        when(merchantRepository.findById(11)).thenReturn(Optional.of(store.getMerchant()));
-        when(categoryRepository.findById(2)).thenReturn(Optional.of(category));
-        when(storeService.update(1, store)).thenReturn(store);
+        store.setStoreName("Updated");
+        when(storeService.updateFromDTO(1, dto)).thenReturn(store);
         ResponseEntity<?> updated = controller.update(1, dto);
         assertThat(updated.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(store.getStoreName()).isEqualTo("Updated");
+        assertThat(updated.getBody()).isEqualTo(store);
 
-        when(storeService.getById(404)).thenThrow(new ResourceNotFoundException("Store", 404));
+        when(storeService.updateFromDTO(404, dto)).thenThrow(new ResourceNotFoundException("Store", 404));
         assertThat(controller.update(404, dto).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         when(storeService.suspend(1)).thenReturn(store);
         when(storeService.deactivate(1)).thenReturn(store);
@@ -421,15 +420,14 @@ class ControllerCoverageTest {
 
         StoreService storeService = mock(StoreService.class);
         StoreCategoryRepository categoryRepository = mock(StoreCategoryRepository.class);
-        StoreController storeController = new StoreController(storeService, merchantRepository, categoryRepository);
+        StoreController storeController = new StoreController(storeService);
         StoreDTO storeDTO = new StoreDTO();
         storeDTO.setStoreName("Updated");
         Store store = store(7, "Store", merchant(7, account(7, "merchant7@test.com")));
 
         when(storeService.getById(404)).thenThrow(new ResourceNotFoundException("Store", 404));
         assertThat(storeController.getById(404).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-        when(storeService.getById(7)).thenReturn(store);
-        when(storeService.update(eq(7), any(Store.class))).thenThrow(new BusinessRuleException("bad store"));
+        when(storeService.updateFromDTO(7, storeDTO)).thenThrow(new BusinessRuleException("bad store"));
         assertThat(storeController.update(7, storeDTO).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         when(storeService.suspend(404)).thenThrow(new ResourceNotFoundException("Store", 404));
         assertThat(storeController.suspend(404).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);

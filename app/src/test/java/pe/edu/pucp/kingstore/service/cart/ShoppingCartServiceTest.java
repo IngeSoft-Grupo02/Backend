@@ -14,17 +14,18 @@ import pe.edu.pucp.kingstore.domain.model.product.Product;
 import pe.edu.pucp.kingstore.domain.model.product.ProductVariant;
 import pe.edu.pucp.kingstore.domain.model.product.enums.Color;
 import pe.edu.pucp.kingstore.domain.model.product.enums.VolumeType;
+import pe.edu.pucp.kingstore.domain.model.quotation.Quotation;
 import pe.edu.pucp.kingstore.domain.model.store.Store;
 import pe.edu.pucp.kingstore.domain.model.user.Customer;
 import pe.edu.pucp.kingstore.repository.cart.ShoppingCartRepository;
 import pe.edu.pucp.kingstore.repository.product.DiscountRepository;
+import pe.edu.pucp.kingstore.repository.quotation.QuotationRepository;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
 import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -35,12 +36,13 @@ class ShoppingCartServiceTest {
 
     @Mock private ShoppingCartRepository shoppingCartRepository;
     @Mock private DiscountRepository discountRepository;
+    @Mock private QuotationRepository quotationRepository;
 
     private ShoppingCartService service;
 
     @BeforeEach
     void setUp() {
-        service = new ShoppingCartService(shoppingCartRepository, discountRepository);
+        service = new ShoppingCartService(shoppingCartRepository, discountRepository, quotationRepository);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -93,7 +95,8 @@ class ShoppingCartServiceTest {
     void getOrCreateCartReturnsExistingCart() {
         Customer customer = customer(1);
         ShoppingCart existing = emptyCart(customer);
-        when(shoppingCartRepository.findByCustomerId(1)).thenReturn(Optional.of(existing));
+        when(shoppingCartRepository.findByCustomerIdAndActiveTrueOrderByIdDesc(1)).thenReturn(List.of(existing));
+        when(quotationRepository.findByShoppingCartId(1)).thenReturn(Optional.empty());
 
         ShoppingCart result = service.getOrCreateCart(customer);
 
@@ -103,7 +106,7 @@ class ShoppingCartServiceTest {
     @Test
     void getOrCreateCartCreatesNewCartWhenNoneExists() {
         Customer customer = customer(1);
-        when(shoppingCartRepository.findByCustomerId(1)).thenReturn(Optional.empty());
+        when(shoppingCartRepository.findByCustomerIdAndActiveTrueOrderByIdDesc(1)).thenReturn(List.of());
         when(shoppingCartRepository.save(any(ShoppingCart.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -112,6 +115,67 @@ class ShoppingCartServiceTest {
         assertThat(result.getCustomer()).isEqualTo(customer);
         assertThat(result.getItems()).isEmpty();
         assertThat(result.getTotalAmount()).isEqualTo(0);
+    }
+
+    @Test
+    void getOrCreateCartReturnsMostRecentActiveCartWhenCustomerHasHistoricalCarts() {
+        Customer customer = customer(1);
+        ShoppingCart older = emptyCart(customer);
+        older.setId(10);
+        ShoppingCart latest = emptyCart(customer);
+        latest.setId(12);
+        when(shoppingCartRepository.findByCustomerIdAndActiveTrueOrderByIdDesc(1))
+                .thenReturn(List.of(latest, older));
+        when(quotationRepository.findByShoppingCartId(12)).thenReturn(Optional.empty());
+
+        ShoppingCart result = service.getOrCreateCart(customer);
+
+        assertThat(result).isSameAs(latest);
+    }
+
+    @Test
+    void getOrCreateCartDeactivatesQuotedActiveCartAndCreatesNew() {
+        // Carrito activo PERO ya cotizado (estado inconsistente histórico): debe
+        // desactivarse y devolverse uno nuevo y vacío. El cliente no queda atrapado.
+        Customer customer = customer(1);
+        ShoppingCart quoted = emptyCart(customer);
+        quoted.setId(5);
+        quoted.setActive(true);
+        when(shoppingCartRepository.findByCustomerIdAndActiveTrueOrderByIdDesc(1))
+                .thenReturn(List.of(quoted));
+        when(quotationRepository.findByShoppingCartId(5)).thenReturn(Optional.of(new Quotation()));
+        when(shoppingCartRepository.save(any(ShoppingCart.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ShoppingCart result = service.getOrCreateCart(customer);
+
+        assertThat(quoted.getActive()).isFalse();
+        assertThat(result).isNotSameAs(quoted);
+        assertThat(result.getItems()).isEmpty();
+        assertThat(result.getCustomer()).isEqualTo(customer);
+    }
+
+    @Test
+    void getOrCreateCartSkipsQuotedCartAndReturnsCleanActiveOne() {
+        // Con varios carritos activos históricos: salta el ya cotizado (desactivándolo)
+        // y devuelve el primero válido sin cotización, sin crear uno innecesario.
+        Customer customer = customer(1);
+        ShoppingCart quoted = emptyCart(customer);
+        quoted.setId(12);
+        quoted.setActive(true);
+        ShoppingCart clean = emptyCart(customer);
+        clean.setId(10);
+        when(shoppingCartRepository.findByCustomerIdAndActiveTrueOrderByIdDesc(1))
+                .thenReturn(List.of(quoted, clean));
+        when(quotationRepository.findByShoppingCartId(12)).thenReturn(Optional.of(new Quotation()));
+        when(quotationRepository.findByShoppingCartId(10)).thenReturn(Optional.empty());
+        when(shoppingCartRepository.save(any(ShoppingCart.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ShoppingCart result = service.getOrCreateCart(customer);
+
+        assertThat(result).isSameAs(clean);
+        assertThat(quoted.getActive()).isFalse();
     }
 
     // ── addItem ───────────────────────────────────────────────────────────────
@@ -175,16 +239,23 @@ class ShoppingCartServiceTest {
     }
 
     @Test
-    void addItemThrowsWhenInsufficientStock() {
+    void addItemAllowsQuantityAboveAvailableStock() {
+        // Regla de negocio: el stock no bloquea la cotización. El cliente puede
+        // solicitar más unidades de las disponibles y el comerciante decide.
         Customer customer = customer(1);
         Store store = store(10);
         Product product = product(1, store, 100.0);
         ProductVariant variant = variant(1, product, 3);
         ShoppingCart cart = emptyCart(customer);
 
-        assertThatThrownBy(() -> service.addItem(cart, variant, 5, 10))
-                .isInstanceOf(BusinessRuleException.class)
-                .hasMessageContaining("Not enough stock");
+        when(discountRepository.findByStoreId(10)).thenReturn(List.of());
+        when(shoppingCartRepository.save(any(ShoppingCart.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ShoppingCart result = service.addItem(cart, variant, 5, 10);
+
+        assertThat(result.getItems()).hasSize(1);
+        assertThat(result.getItems().get(0).getQuantity()).isEqualTo(5);
     }
 
     @Test
@@ -239,6 +310,32 @@ class ShoppingCartServiceTest {
 
         assertThat(result.getItems().get(0).getQuantity()).isEqualTo(5);
         assertThat(result.getItems().get(0).getSubtotal()).isEqualTo(500.0);
+    }
+
+    @Test
+    void updateItemAllowsQuantityAboveAvailableStock() {
+        // Mismo criterio que addItem: el stock no bloquea la cotización.
+        Customer customer = customer(1);
+        Store store = store(10);
+        Product product = product(1, store, 100.0);
+        ProductVariant variant = variant(1, product, 3);
+        ShoppingCart cart = emptyCart(customer);
+
+        CartItem item = new CartItem();
+        item.setId(1);
+        item.setProductVariant(variant);
+        item.setQuantity(2);
+        item.setPrice(100.0);
+        item.setSubtotal(200.0);
+        cart.getItems().add(item);
+
+        when(discountRepository.findByStoreId(10)).thenReturn(List.of());
+        when(shoppingCartRepository.save(any(ShoppingCart.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ShoppingCart result = service.updateItem(cart, 1, 50, 10);
+
+        assertThat(result.getItems().get(0).getQuantity()).isEqualTo(50);
     }
 
     @Test

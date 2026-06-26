@@ -115,7 +115,6 @@ class BulkUploadServiceCoverageTest {
                 storeName,slug,categoryId,primaryColor,secondaryColor,tertiaryColor,description,merchantEmail,logoFileName
                 King Store,king-store,1,ONYX_BLACK,SLATE,RAW_GOLD,Main store,merchant@kingstore.pe,logo.png
                 """);
-        when(storeRepository.findBySlug("king-store")).thenReturn(Optional.empty());
         when(categoryRepository.findById(1)).thenReturn(Optional.of(category));
         when(userAccountRepository.findByEmail("merchant@kingstore.pe")).thenReturn(Optional.of(account));
         when(merchantRepository.findByUserAccountId(8)).thenReturn(Optional.of(merchant));
@@ -130,6 +129,34 @@ class BulkUploadServiceCoverageTest {
         assertThat(captor.getValue().getCategoryId()).isEqualTo(1);
         assertThat(captor.getValue().getPrimaryColor()).isEqualTo(PrimaryColor.ONYX_BLACK);
         assertThat(captor.getValue().getMerchantId()).isEqualTo(9);
+        assertThat(captor.getValue().getSlug()).isNull();
+    }
+
+    @Test
+    void bulkUpload_generatesSlugAutomatically() throws Exception {
+        StoreCategory category = new StoreCategory();
+        category.setId(1);
+        UserAccount account = new UserAccount();
+        account.setId(8);
+        Merchant merchant = new Merchant();
+        merchant.setId(9);
+        MockMultipartFile stores = csv("stores.csv", """
+                storeName,categoryId,primaryColor,secondaryColor,tertiaryColor,description,merchantEmail,logoFileName
+                Hilos Urbanos,1,ONYX_BLACK,SLATE,RAW_GOLD,Main store,merchant@kingstore.pe,logo.png
+                """);
+        when(categoryRepository.findById(1)).thenReturn(Optional.of(category));
+        when(userAccountRepository.findByEmail("merchant@kingstore.pe")).thenReturn(Optional.of(account));
+        when(merchantRepository.findByUserAccountId(8)).thenReturn(Optional.of(merchant));
+
+        BulkUploadResponseDTO response = service.process(null, stores, null);
+
+        assertThat(response.getStoresProcessed()).isEqualTo(1);
+        assertThat(response.getStoresCreated()).isEqualTo(1);
+        assertThat(response.getErrorCount()).isZero();
+        ArgumentCaptor<StoreDTO> captor = ArgumentCaptor.forClass(StoreDTO.class);
+        verify(storeService).createFromDTO(captor.capture());
+        assertThat(captor.getValue().getStoreName()).isEqualTo("Hilos Urbanos");
+        assertThat(captor.getValue().getSlug()).isNull();
     }
 
     @Test
@@ -199,7 +226,6 @@ class BulkUploadServiceCoverageTest {
 
         Store existingStore = new Store();
         existingStore.setId(2);
-        when(storeRepository.findBySlug("taken-store")).thenReturn(Optional.of(existingStore));
         when(categoryRepository.findById(99)).thenReturn(Optional.empty());
         String longName = "A".repeat(101);
         MockMultipartFile invalidStores = csv("stores.csv", """
@@ -211,7 +237,7 @@ class BulkUploadServiceCoverageTest {
 
         assertThat(invalidStoreResponse.getStoresCreated()).isZero();
         assertThat(invalidStoreResponse.getIncidences()).extracting(BulkIncidenceDTO::getCode)
-                .contains("VAL_NAME", "DUPLICATE", "REF_NOT_FOUND", "VAL_MERCHANT");
+                .contains("VAL_NAME", "REF_NOT_FOUND", "VAL_MERCHANT");
 
         StoreCategory category = new StoreCategory();
         category.setId(1);
@@ -219,7 +245,6 @@ class BulkUploadServiceCoverageTest {
         account.setId(8);
         Merchant merchant = new Merchant();
         merchant.setId(9);
-        when(storeRepository.findBySlug("boom-store")).thenReturn(Optional.empty());
         when(categoryRepository.findById(1)).thenReturn(Optional.of(category));
         when(userAccountRepository.findByEmail("owner@kingstore.pe")).thenReturn(Optional.of(account));
         when(merchantRepository.findByUserAccountId(8)).thenReturn(Optional.of(merchant));

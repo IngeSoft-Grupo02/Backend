@@ -44,4 +44,20 @@ public interface QuotationRepository
                                            @Param("status") QuotationStatus status);
 
     List<Quotation> findByShoppingCart_Customer_Id(Integer customerId);
+
+    /**
+     * Lista las cotizaciones de un cliente dentro de una tienda determinando la
+     * pertenencia por el cliente dueño del carrito y su tienda (customer.store),
+     * que es un dato fiable y NOT NULL. No depende de los items del carrito
+     * (cart_item), por lo que no oculta cotizaciones válidas cuando el carrito
+     * quedó vacío o con items históricos inconsistentes.
+     */
+    @Query("""
+            select distinct q
+            from Quotation q
+            where q.shoppingCart.customer.id = :customerId
+              and q.shoppingCart.customer.store.id = :storeId
+            """)
+    List<Quotation> findByCustomerIdAndStoreId(@Param("customerId") Integer customerId,
+                                               @Param("storeId") Integer storeId);
 }

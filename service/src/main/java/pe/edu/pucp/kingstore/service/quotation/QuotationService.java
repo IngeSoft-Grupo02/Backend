@@ -39,11 +39,10 @@ public class QuotationService extends AbstractCrudService<Quotation> {
         if (cart.getItems() == null || cart.getItems().isEmpty()) {
             throw new BusinessRuleException("Cart must have at least one item to create a quotation");
         }
-        // Un carrito solo puede tener una cotización pendiente activa
+        // Un carrito solo puede tener una cotización (unique constraint en shopping_cart_id).
+        // Para hacer una nueva cotización el cliente debe usar un carrito nuevo.
         quotationRepository.findByShoppingCartId(cart.getId()).ifPresent(existing -> {
-            if (existing.getStatus() == QuotationStatus.PENDING) {
-                throw new BusinessRuleException("Cart already has a pending quotation");
-            }
+            throw new BusinessRuleException("Cart already has a quotation");
         });
 
         Quotation quotation = new Quotation();
@@ -66,25 +65,20 @@ public class QuotationService extends AbstractCrudService<Quotation> {
 
     /**
      * Devuelve todas las cotizaciones del cliente en una tienda específica.
+     *
+     * La pertenencia a la tienda se determina por el cliente dueño del carrito
+     * (customer.store, dato NOT NULL y fiable), NO por los items del carrito.
+     * Antes se recorría shopping_cart.items y se exigía product.store == storeId,
+     * lo que ocultaba cotizaciones válidas cuando el carrito quedaba vacío o con
+     * items históricos inconsistentes — y divergía del criterio del Comerciante,
+     * que lista por quotation_item. Ahora ambos ven las mismas cotizaciones
+     * válidas del mismo cliente/tienda.
      */
     @Transactional(readOnly = true)
     public List<Quotation> findByCustomerAndStore(Integer customerId, Integer storeId) {
         requireId(customerId);
         requireId(storeId);
-        return quotationRepository.findByShoppingCart_Customer_Id(customerId).stream()
-                .filter(q -> {
-                    var cart = q.getShoppingCart();
-                    if (cart == null || cart.getItems() == null || cart.getItems().isEmpty()) {
-                        return false;
-                    }
-                    return cart.getItems().stream().anyMatch(item -> {
-                        var product = item.getProductVariant() != null
-                                ? item.getProductVariant().getProduct() : null;
-                        return product != null
-                                && Objects.equals(product.getStore().getId(), storeId);
-                    });
-                })
-                .toList();
+        return quotationRepository.findByCustomerIdAndStoreId(customerId, storeId);
     }
 
     /**

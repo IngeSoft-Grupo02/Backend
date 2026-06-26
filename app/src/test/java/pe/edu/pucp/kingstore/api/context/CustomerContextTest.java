@@ -119,7 +119,7 @@ class CustomerContextTest {
         customer.setStore(customerStore);
 
         when(authentication.getName()).thenReturn("5");
-        when(customerRepository.findByUserAccountId(5)).thenReturn(Optional.of(customer));
+        when(customerRepository.findByUserAccountIdAndStore_Id(5, 10)).thenReturn(Optional.of(customer));
 
         Customer result = context.customer(authentication, store);
 
@@ -132,11 +132,11 @@ class CustomerContextTest {
         store.setId(10);
 
         when(authentication.getName()).thenReturn("5");
-        when(customerRepository.findByUserAccountId(5)).thenReturn(Optional.empty());
+        when(customerRepository.findByUserAccountIdAndStore_Id(5, 10)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> context.customer(authentication, store))
                 .isInstanceOf(BusinessRuleException.class)
-                .hasMessageContaining("Customer profile not found");
+                .hasMessageContaining("does not belong to this store");
     }
 
     @Test
@@ -144,15 +144,10 @@ class CustomerContextTest {
         Store store = new Store();
         store.setId(10);
 
-        Store otherStore = new Store();
-        otherStore.setId(99);
-
-        Customer customer = new Customer();
-        customer.setId(1);
-        customer.setStore(otherStore);
-
         when(authentication.getName()).thenReturn("5");
-        when(customerRepository.findByUserAccountId(5)).thenReturn(Optional.of(customer));
+        // El cliente no tiene membresía en la tienda solicitada (id 10): la consulta
+        // scoped por (cuenta, tienda) no devuelve nada.
+        when(customerRepository.findByUserAccountIdAndStore_Id(5, 10)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> context.customer(authentication, store))
                 .isInstanceOf(BusinessRuleException.class)

@@ -50,14 +50,12 @@ public class CustomerContext {
 
     public Customer customer(Authentication authentication, Store store) {
         if (cachedCustomer != null) return cachedCustomer;
+        // Un UserAccount puede tener varias membresías (una por tienda). Resolver la de
+        // ESTA tienda asegura el aislamiento multi-tenant: carrito/cotizaciones/pedidos
+        // quedan ligados al Customer de la tienda del slug, no al de otra tienda.
         cachedCustomer = customerRepository
-                .findByUserAccountId(userAccountId(authentication))
-                .orElseThrow(() -> new BusinessRuleException("Customer profile not found"));
-
-        // Aislamiento multi-tenant — el cliente debe pertenecer a esta tienda
-        if (!store.getId().equals(cachedCustomer.getStore().getId())) {
-            throw new BusinessRuleException("Customer does not belong to this store");
-        }
+                .findByUserAccountIdAndStore_Id(userAccountId(authentication), store.getId())
+                .orElseThrow(() -> new BusinessRuleException("Customer does not belong to this store"));
         return cachedCustomer;
     }
 }

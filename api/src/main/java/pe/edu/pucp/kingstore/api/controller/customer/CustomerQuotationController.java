@@ -42,10 +42,18 @@ public class CustomerQuotationController {
     public ResponseEntity<?> create(@PathVariable String slug,
                                     Authentication authentication) {
         try {
-            Store store         = customerContext.store(slug);
-            Customer customer   = customerContext.customer(authentication, store);
-            ShoppingCart cart   = shoppingCartService.getOrCreateCart(customer);
+            Store store       = customerContext.store(slug);
+            Customer customer = customerContext.customer(authentication, store);
+            // getOrCreateCart garantiza un carrito activo SIN cotización (nunca uno ya
+            // cotizado), por lo que aquí solo hay que crear la cotización y desactivar.
+            ShoppingCart cart = shoppingCartService.getOrCreateCart(customer);
+
             Quotation quotation = quotationService.createFromCart(cart);
+            // Desactivar el carrito SOLO tras crear la cotización con éxito, para que
+            // el próximo GET /cart devuelva un carrito nuevo y vacío. Si createFromCart
+            // lanza (carrito vacío o, en una carrera, ya cotizado), el carrito NO se
+            // desactiva y no se pierde nada.
+            shoppingCartService.deactivate(cart.getId());
             return ResponseEntity.status(201).body(
                     quotationService.toResponseDTO(quotation, store.getId()));
         } catch (ResourceNotFoundException | BusinessRuleException e) {

@@ -5,6 +5,7 @@ import org.springframework.transaction.annotation.Transactional;
 import pe.edu.pucp.kingstore.domain.model.cart.CartItem;
 import pe.edu.pucp.kingstore.domain.model.cart.ShoppingCart;
 import pe.edu.pucp.kingstore.repository.cart.ShoppingCartRepository;
+import pe.edu.pucp.kingstore.repository.quotation.QuotationRepository;
 import pe.edu.pucp.kingstore.service.common.AbstractCrudService;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
 import pe.edu.pucp.kingstore.domain.dto.cart.CartResponseDTO;
@@ -26,36 +27,58 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
 
     private final ShoppingCartRepository shoppingCartRepository;
     private final DiscountRepository discountRepository;
+    private final QuotationRepository quotationRepository;
 
     public ShoppingCartService(ShoppingCartRepository shoppingCartRepository,
-                               DiscountRepository discountRepository) {
+                               DiscountRepository discountRepository,
+                               QuotationRepository quotationRepository) {
         super(shoppingCartRepository, "Shopping cart");
         this.shoppingCartRepository = shoppingCartRepository;
         this.discountRepository = discountRepository;
+        this.quotationRepository = quotationRepository;
     }
 
     @Transactional(readOnly = true)
     public Optional<ShoppingCart> findByCustomer(Integer customerId) {
         requireId(customerId);
-        return shoppingCartRepository.findByCustomerId(customerId);
+        return shoppingCartRepository.findByCustomerIdAndActiveTrueOrderByIdDesc(customerId)
+                .stream()
+                .findFirst();
     }
     // ── Operaciones del cliente ───────────────────────────────────────────────────
 
     /**
-     * Obtiene el carrito activo del cliente o crea uno vacío si no existe.
+     * Obtiene un carrito activo del cliente APTO para seguir comprando/cotizando,
+     * o crea uno vacío si no hay ninguno.
+     *
+     * Garantiza el invariante "un carrito ya cotizado no permanece activo":
+     * recorre los carritos activos (del más reciente al más antiguo) y
+     *   - devuelve el primero que NO tenga cotización asociada;
+     *   - desactiva los que ya tengan cotización (estado inconsistente que arrastra
+     *     la BD histórica) para que no vuelvan a aparecer como activos.
+     * Si no queda ninguno reutilizable, crea un carrito nuevo y vacío.
+     *
+     * Así nunca se devuelve un carrito "gastado": ni addItem agrega productos sobre
+     * un carrito ya cotizado, ni createFromCart intenta recotizarlo, evitando que el
+     * cliente quede atrapado y que el carrito se vacíe sin generar cotización.
      */
     @Transactional
     public ShoppingCart getOrCreateCart(Customer customer) {
-        return shoppingCartRepository.findByCustomerId(customer.getId())
-                .orElseGet(() -> {
-                    ShoppingCart cart = new ShoppingCart();
-                    cart.setCustomer(customer);
-                    cart.setItems(new ArrayList<>());
-                    cart.setSubTotal(0);
-                    cart.setDiscount(0);
-                    cart.setTotalAmount(0);
-                    return shoppingCartRepository.save(cart);
-                });
+        for (ShoppingCart cart : shoppingCartRepository
+                .findByCustomerIdAndActiveTrueOrderByIdDesc(customer.getId())) {
+            if (quotationRepository.findByShoppingCartId(cart.getId()).isEmpty()) {
+                return cart;
+            }
+            cart.setActive(false);
+            shoppingCartRepository.save(cart);
+        }
+        ShoppingCart cart = new ShoppingCart();
+        cart.setCustomer(customer);
+        cart.setItems(new ArrayList<>());
+        cart.setSubTotal(0);
+        cart.setDiscount(0);
+        cart.setTotalAmount(0);
+        return shoppingCartRepository.save(cart);
     }
 
     /**
@@ -69,9 +92,8 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
         if (quantity <= 0) {
             throw new BusinessRuleException("Quantity must be positive");
         }
-        if (variant.getStock() < quantity) {
-            throw new BusinessRuleException("Not enough stock for the requested quantity");
-        }
+        // El stock NO bloquea la cotización: el cliente puede solicitar cantidades
+        // por encima del stock disponible y el comerciante decide si las acepta o rechaza.
 
         // Si ya existe ese variant en el carrito, suma la cantidad
         CartItem existing = cart.getItems().stream()
@@ -117,9 +139,8 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
                         .ResourceNotFoundException("Cart item", cartItemId));
 
         ProductVariant variant = item.getProductVariant();
-        if (variant.getStock() < quantity) {
-            throw new BusinessRuleException("Not enough stock for the requested quantity");
-        }
+        // El stock NO bloquea la actualización del carrito (mismo criterio que addItem):
+        // la cotización admite cantidades por encima del stock disponible.
 
         double price = variant.getProduct().getBasePrice();
         double discountApplied = resolveDiscount(storeId, variant.getProduct(), quantity);

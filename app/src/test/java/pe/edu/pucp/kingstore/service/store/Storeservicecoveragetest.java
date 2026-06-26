@@ -104,18 +104,21 @@ class StoreServiceCoverageTest {
     }
 
     @Test
-    void createForMerchantThrowsWhenSlugAlreadyRegistered() {
+    void createForMerchantGeneratesUniqueSlugWhenBaseAlreadyRegistered() {
         MerchantStoreRequestDTO dto = requestDTO();
-        dto.setSlug("mi-tienda");
+        dto.setSlug("slug-manual-ignorado");
         Store existing = storeWithCategory(99, "mi-tienda");
         when(storeRepository.findBySlug("mi-tienda")).thenReturn(Optional.of(existing));
+        when(storeRepository.findBySlug("mi-tienda-2")).thenReturn(Optional.empty());
+        when(categoryRepository.findById(1)).thenReturn(Optional.of(category(1)));
+        when(storeRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         Merchant merchant = new Merchant();
         merchant.setId(1);
 
-        assertThatThrownBy(() -> service.createForMerchant(merchant, dto))
-                .isInstanceOf(BusinessRuleException.class)
-                .hasMessageContaining("slug is already registered");
+        Store saved = service.createForMerchant(merchant, dto);
+
+        assertThat(saved.getSlug()).isEqualTo("mi-tienda-2");
     }
 
     @Test
@@ -191,7 +194,6 @@ class StoreServiceCoverageTest {
         store.setSecondaryColor(SecondaryColor.TERRA);
         store.setTertiaryColor(TertiaryColor.EMERALD);
 
-        when(storeRepository.findBySlug("mi-tienda")).thenReturn(Optional.of(store));
         when(storeRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         MerchantStoreRequestDTO dto = requestDTO();
@@ -234,7 +236,6 @@ class StoreServiceCoverageTest {
         Store store = storeWithCategory(5, "mi-tienda");
         store.setStoreStatus(StoreStatus.ACTIVE);
 
-        when(storeRepository.findBySlug("mi-tienda")).thenReturn(Optional.of(store));
         when(categoryRepository.findById(1)).thenReturn(Optional.of(category(1)));
         when(storeRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -252,7 +253,6 @@ class StoreServiceCoverageTest {
         Store store = storeWithCategory(5, "mi-tienda");
         store.setStoreStatus(StoreStatus.ACTIVE);
 
-        when(storeRepository.findBySlug("mi-tienda")).thenReturn(Optional.of(store));
         when(categoryRepository.findById(1)).thenReturn(Optional.of(category(1)));
         when(storeRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -275,7 +275,6 @@ class StoreServiceCoverageTest {
         dto.setSlug("mi-tienda");
         dto.setCategoryId(99);
 
-        when(storeRepository.findBySlug("mi-tienda")).thenReturn(Optional.empty());
         when(categoryRepository.findById(99)).thenReturn(Optional.empty());
 
         Merchant merchant = new Merchant();
@@ -310,7 +309,6 @@ class StoreServiceCoverageTest {
         dto.setSlug("mi-tienda");
         dto.setCategoryId(null);
 
-        when(storeRepository.findBySlug("mi-tienda")).thenReturn(Optional.empty());
         when(categoryRepository.findAll()).thenReturn(List.of());
 
         Merchant merchant = new Merchant();
@@ -325,7 +323,6 @@ class StoreServiceCoverageTest {
     void updateForMerchantKeepsExistingCategoryWhenCategoryIdNullAndCategoryPresent() {
         Store store = storeWithCategory(5, "mi-tienda");
 
-        when(storeRepository.findBySlug("mi-tienda")).thenReturn(Optional.of(store));
         when(storeRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         MerchantStoreRequestDTO dto = requestDTO();

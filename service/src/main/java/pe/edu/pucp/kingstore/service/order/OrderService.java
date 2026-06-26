@@ -202,13 +202,26 @@ public class OrderService extends AbstractCrudService<Order> {
         return orderRepository.findByQuotation_ShoppingCart_Customer_Id(customerId).stream()
                 .filter(o -> {
                     if (o.getItems() == null || o.getItems().isEmpty()) return false;
-                    return o.getItems().stream().anyMatch(item -> {
-                        var product = item.getProductVariant() != null
-                                ? item.getProductVariant().getProduct() : null;
-                        return product != null && Objects.equals(product.getStore().getId(), storeId);
-                    });
+                    return o.getItems().stream()
+                            .anyMatch(item -> orderItemBelongsToStore(item, storeId));
                 })
                 .toList();
+    }
+
+    /**
+     * Determina de forma segura si un ítem del pedido pertenece a la tienda.
+     * Tolera datos históricos inconsistentes (variante, producto o tienda en null)
+     * sin lanzar NullPointerException.
+     */
+    private boolean orderItemBelongsToStore(OrderItem item, Integer storeId) {
+        if (item == null || item.getProductVariant() == null) {
+            return false;
+        }
+        var product = item.getProductVariant().getProduct();
+        if (product == null || product.getStore() == null) {
+            return false;
+        }
+        return Objects.equals(product.getStore().getId(), storeId);
     }
 
     /**
