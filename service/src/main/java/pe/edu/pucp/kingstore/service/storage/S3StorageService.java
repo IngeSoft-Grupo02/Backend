@@ -1,7 +1,7 @@
 package pe.edu.pucp.kingstore.service.storage;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Profile;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -9,11 +9,11 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 /**
  * ImplementaciÃ³n PRODUCCIÃ“N de StorageService.
- * Activa solo con el perfil Spring "prod".
+ * Activa cuando kingstore.storage.provider=s3.
  * Sube archivos al bucket S3 configurado en application-prod.properties.
  */
 @Service
-@Profile("prod")
+@ConditionalOnProperty(name = "kingstore.storage.provider", havingValue = "s3")
 public class S3StorageService implements StorageService {
 
     private final S3Client s3Client;

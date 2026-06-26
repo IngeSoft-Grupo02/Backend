@@ -3,6 +3,7 @@ package pe.edu.pucp.kingstore.api.controller.merchant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
@@ -40,7 +41,7 @@ import static org.mockito.Mockito.when;
  *  - GET /merchant/categories (sin y con search)
  *  - POST /merchant/stores/logo (validaciones y caso exitoso)
  *  - POST /merchant/stores
- *  - PUT /merchant/stores/{id}
+ *  - PUT /merchant/stores/{id} JSON y multipart
  *  - DELETE /merchant/stores/{id}
  *  - GET /merchant/dashboard
  *  - manejo genérico de errores vía handle()
@@ -198,14 +199,19 @@ class MerchantStoreControllerTest {
         when(merchantContext.merchant(authentication)).thenReturn(merchant);
         MockMultipartFile file = new MockMultipartFile("logo", "logo.png", "image/png", "data".getBytes());
         when(storageService.uploadBytes(anyString(), any(), anyString()))
-                .thenReturn("https://bucket.s3.amazonaws.com/logos/merchants/1/uuid.png");
+                .thenReturn("https://bucket.s3.amazonaws.com/logos/uuid-logo.png");
 
         var result = controller.uploadStoreLogo(authentication, file);
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
         @SuppressWarnings("unchecked")
         Map<String, String> body = (Map<String, String>) result.getBody();
-        assertThat(body.get("logoUrl")).isEqualTo("https://bucket.s3.amazonaws.com/logos/merchants/1/uuid.png");
+        assertThat(body.get("logoUrl")).isEqualTo("https://bucket.s3.amazonaws.com/logos/uuid-logo.png");
+
+        ArgumentCaptor<String> keyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(storageService).uploadBytes(keyCaptor.capture(), any(), anyString());
+        assertThat(keyCaptor.getValue()).startsWith("logos/");
+        assertThat(keyCaptor.getValue()).endsWith("-logo.png");
     }
 
     // =========================================================================
@@ -243,6 +249,51 @@ class MerchantStoreControllerTest {
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
         verify(storeService).updateForMerchant(store, request);
+    }
+
+    @Test
+    void updateStoreWithLogoUploadsAndUpdatesStoreOnce() {
+        when(merchantContext.storeById(authentication, 10)).thenReturn(store);
+        MerchantStoreRequestDTO request = new MerchantStoreRequestDTO();
+        request.setName("Street Kings");
+        MockMultipartFile file = new MockMultipartFile("logo", "logo nuevo.png", "image/png", "data".getBytes());
+        when(storageService.uploadBytes(anyString(), any(), anyString()))
+                .thenReturn("https://bucket.s3.amazonaws.com/logos/street-kings.png");
+        when(storeService.updateForMerchant(store, request)).thenReturn(store);
+        when(storeService.toResponseDTO(store)).thenReturn(responseDTO(10));
+
+        var result = controller.updateStoreWithLogo(authentication, 10, request, file);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(request.getLogoUrl()).isEqualTo("https://bucket.s3.amazonaws.com/logos/street-kings.png");
+        verify(storeService).updateForMerchant(store, request);
+
+        ArgumentCaptor<String> keyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(storageService).uploadBytes(keyCaptor.capture(), any(), anyString());
+        assertThat(keyCaptor.getValue()).isEqualTo("logos/street-kings.png");
+    }
+
+    @Test
+    void updateStoreWithLogoRejectsInvalidExtension() {
+        when(merchantContext.storeById(authentication, 10)).thenReturn(store);
+        MerchantStoreRequestDTO request = new MerchantStoreRequestDTO();
+        MockMultipartFile file = new MockMultipartFile("logo", "logo.pdf", "application/pdf", "data".getBytes());
+
+        var result = controller.updateStoreWithLogo(authentication, 10, request, file);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    void updateStoreWithLogoRejectsTooLargeFile() {
+        when(merchantContext.storeById(authentication, 10)).thenReturn(store);
+        MerchantStoreRequestDTO request = new MerchantStoreRequestDTO();
+        byte[] tooBig = new byte[(int) (2L * 1024 * 1024 + 1)];
+        MockMultipartFile file = new MockMultipartFile("logo", "logo.png", "image/png", tooBig);
+
+        var result = controller.updateStoreWithLogo(authentication, 10, request, file);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 
     // =========================================================================
