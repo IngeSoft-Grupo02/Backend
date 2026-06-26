@@ -94,7 +94,10 @@ public class UserAccountService extends AbstractCrudService<UserAccount> {
     }
 
     private Role resolveRole(Integer userAccountId) {
-        if (customerRepository.findByUserAccountId(userAccountId).isPresent()) {
+        // Un UserAccount cliente puede tener varios Customer (uno por tienda): basta con
+        // que exista alguno para resolver el rol CUSTOMER (no usar findByUserAccountId,
+        // que asume un único perfil y lanzaría con múltiples membresías).
+        if (customerRepository.existsByUserAccountId(userAccountId)) {
             return Role.CUSTOMER;
         }
         var merchant = merchantRepository.findByUserAccountId(userAccountId);
@@ -205,15 +208,13 @@ public class UserAccountService extends AbstractCrudService<UserAccount> {
                 .filter(user -> user.getPassword().equals(request.getPassword()))
                 .orElseThrow(() -> new BusinessRuleException("Invalid credentials"));
 
-        // Verificar que es cliente
-        Customer customer = customerRepository.findByUserAccountId(account.getId())
-                .orElseThrow(() -> new BusinessRuleException("User is not a customer"));
+        // El correo es identidad global; la membresía es por tienda. Buscar el Customer de
+        // ESTA tienda para este UserAccount (login scopeado por tienda).
+        Customer customer = customerRepository
+                .findByUserAccountIdAndStore_Slug(account.getId(), storeSlug.trim())
+                .orElseThrow(() -> new BusinessRuleException("Customer does not belong to this store"));
 
-        // Verificar que el cliente pertenece a la tienda solicitada
         String customerStoreSlug = customer.getStore() != null ? customer.getStore().getSlug() : null;
-        if (customerStoreSlug == null || !customerStoreSlug.equalsIgnoreCase(storeSlug.trim())) {
-            throw new BusinessRuleException("Customer does not belong to this store");
-        }
 
         LoginResponseDTO response = new LoginResponseDTO();
         response.setId(account.getId());
@@ -229,13 +230,12 @@ public class UserAccountService extends AbstractCrudService<UserAccount> {
     public CustomerProfileDTO getCustomerProfile(Integer userAccountId, String storeSlug) {
         requireText(storeSlug, "Store slug");
 
-        Customer customer = customerRepository.findByUserAccountId(userAccountId)
-                .orElseThrow(() -> new BusinessRuleException("User is not a customer"));
+        // Perfil del cliente para ESTA tienda (un UserAccount puede tener varias membresías).
+        Customer customer = customerRepository
+                .findByUserAccountIdAndStore_Slug(userAccountId, storeSlug.trim())
+                .orElseThrow(() -> new BusinessRuleException("Customer does not belong to this store"));
 
         String customerStoreSlug = customer.getStore() != null ? customer.getStore().getSlug() : null;
-        if (customerStoreSlug == null || !customerStoreSlug.equalsIgnoreCase(storeSlug.trim())) {
-            throw new BusinessRuleException("Customer does not belong to this store");
-        }
 
         UserAccount account = customer.getUserAccount();
 
@@ -272,7 +272,7 @@ public class UserAccountService extends AbstractCrudService<UserAccount> {
                 m.setPhone(dto.getPhone());
                 merchantRepository.save(m);
             });
-            customerRepository.findByUserAccountId(id).ifPresent(c -> {
+            customerRepository.findAllByUserAccountId(id).forEach(c -> {
                 c.setPhone(dto.getPhone());
                 customerRepository.save(c);
             });
@@ -294,25 +294,63 @@ public class UserAccountService extends AbstractCrudService<UserAccount> {
         return createWithRole(dto);
     }
 
-    // Cliente-04: Registro publico de clientes, con validacion dedicada (no afecta CreateUserDTO)
+    // Cliente-04: Registro publico de clientes con unicidad POR TIENDA (no global).
+    // Regla de negocio: un mismo cliente (correo+DNI) puede registrarse en varias tiendas,
+    // pero no duplicarse dentro de la misma tienda. El correo es identidad global
+    // (user_account.email único): si ya existe y la contraseña coincide, se reutiliza la
+    // cuenta y se crea la membresía (Customer) de esta tienda; si no existe, se crea cuenta.
     @Transactional
     public UserAccount registerCustomer(RegisterCustomerDTO dto, String slug) {
         validateCustomerRegistration(dto);
 
-        CreateUserDTO createDto = new CreateUserDTO();
-        createDto.setEmail(dto.getEmail());
-        createDto.setPassword(dto.getPassword());
-        createDto.setDocumentNumber(dto.getDocumentNumber());
-        createDto.setDocumentType(dto.getDocumentType());
-        createDto.setFirstName(dto.getFirstName());
-        createDto.setPaternalSurname(dto.getPaternalSurname());
-        createDto.setMaternalSurname(dto.getMaternalSurname());
-        createDto.setBirthDate(dto.getBirthDate());
-        createDto.setPhone(dto.getPhone());
-        createDto.setGender(dto.getGender());
-        createDto.setRole(Role.CUSTOMER);
+        Store store = storeRepository.findBySlug(slug)
+                .filter(s -> s.getStoreStatus() == StoreStatus.ACTIVE)
+                .orElseThrow(() -> new BusinessRuleException("Store not found or inactive"));
 
-        return createWithRole(createDto, slug);
+        String email = normalizeEmail(dto.getEmail());
+        String documentNumber = dto.getDocumentNumber();
+
+        // Unicidad por tienda: solo correo y DNI. Teléfono/nombres/fecha/género/contraseña NO bloquean.
+        if (customerRepository.existsByStore_IdAndUserAccount_Email(store.getId(), email)) {
+            throw new BusinessRuleException("El correo ya está registrado en esta tienda.");
+        }
+        if (customerRepository.existsByStore_IdAndDocumentNumber(store.getId(), documentNumber)) {
+            throw new BusinessRuleException("El DNI ya está registrado en esta tienda.");
+        }
+
+        // Identidad global por correo: reutilizar la cuenta existente o crear una nueva.
+        UserAccount account = userAccountRepository.findByEmail(email).orElse(null);
+        if (account != null) {
+            if (!customerRepository.existsByUserAccountId(account.getId())) {
+                // El correo pertenece a una cuenta de otro rol (Comerciante/Admin).
+                throw new BusinessRuleException("Este correo pertenece a otro tipo de cuenta.");
+            }
+            if (!account.getPassword().equals(dto.getPassword())) {
+                throw new BusinessRuleException("La contraseña no coincide con la cuenta existente para este correo.");
+            }
+        } else {
+            UserAccount nuevo = new UserAccount();
+            nuevo.setEmail(email);
+            nuevo.setPassword(dto.getPassword());
+            account = create(nuevo); // valida formato y unicidad global de email (no existe → OK)
+        }
+
+        // Crear la membresía (Customer) de esta tienda para la cuenta global.
+        Customer customer = new Customer();
+        customer.setUserAccount(account);
+        customer.setStore(store);
+        customer.setDocumentNumber(documentNumber);
+        customer.setDocumentType(dto.getDocumentType());
+        customer.setFirstName(dto.getFirstName());
+        customer.setPaternalSurname(dto.getPaternalSurname());
+        customer.setMaternalSurname(dto.getMaternalSurname());
+        customer.setBirthDate(dto.getBirthDate());
+        customer.setPhone(dto.getPhone());
+        customer.setGender(dto.getGender());
+        customer.setActive(true);
+        customerRepository.save(customer);
+
+        return account;
     }
 
     private void validateCustomerRegistration(RegisterCustomerDTO dto) {

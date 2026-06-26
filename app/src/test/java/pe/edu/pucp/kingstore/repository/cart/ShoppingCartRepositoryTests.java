@@ -168,4 +168,38 @@ public class ShoppingCartRepositoryTests {
                 .extracting(ShoppingCart::getId)
                 .doesNotContain(inactiveCart.getId());
     }
+
+    @Test
+    public void findByCustomerIdIsolatesCartBetweenStoresOfSameAccount() {
+        // Mismo UserAccount con membresía (Customer) en dos tiendas: el carrito de una
+        // tienda no aparece al consultar por el Customer de la otra (la query va por Customer.id).
+        UserAccount account = userAccountRepository.save(CartTestDataUtil.createUserAccountA());
+
+        Store storeA = storeRepository.save(CartTestDataUtil.createTestStore());
+        Store storeBSeed = CartTestDataUtil.createTestStore();
+        storeBSeed.setStoreName("Urban Threads");
+        storeBSeed.setSlug("urban-threads-iso");
+        storeBSeed.setCategory(storeA.getCategory());
+        Store storeB = storeRepository.save(storeBSeed);
+
+        Customer customerA = CartTestDataUtil.createCustomerA(account);
+        customerA.setStore(storeA);
+        customerA = customerRepository.save(customerA);
+
+        Customer customerB = CartTestDataUtil.createCustomerA(account);
+        customerB.setStore(storeB);
+        customerB = customerRepository.save(customerB);
+
+        Product product = productRepository.save(CartTestDataUtil.createTestProduct(storeA));
+        ShoppingCart cartA = underTest.save(CartTestDataUtil.createShoppingCartA(customerA, product));
+
+        // El carrito de storeA solo lo ve el Customer de storeA.
+        assertThat(underTest.findByCustomerIdAndActiveTrueOrderByIdDesc(customerA.getId()))
+                .extracting(ShoppingCart::getId)
+                .containsExactly(cartA.getId());
+
+        // El mismo UserAccount en storeB (otro Customer.id) tiene carrito aislado (vacío).
+        assertThat(underTest.findByCustomerIdAndActiveTrueOrderByIdDesc(customerB.getId()))
+                .isEmpty();
+    }
 }

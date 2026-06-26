@@ -210,4 +210,40 @@ public class OrderRepositoryTests {
                         orderB.getId()
                 );
     }
+
+    @Test
+    public void findByCustomerIsolatesOrdersBetweenStoresOfSameAccount(){
+        // Mismo UserAccount con membresía (Customer) en dos tiendas: la actividad de
+        // pedidos no debe mezclarse (la query va por el Customer.id, que es por tienda).
+        UserAccount account = userAccountRepository.save(OrderTestDataUtil.createUserAccountA());
+
+        Store storeA = storeRepository.save(OrderTestDataUtil.createTestStore());
+        Store storeBSeed = OrderTestDataUtil.createTestStore();
+        storeBSeed.setStoreName("Urban Threads");
+        storeBSeed.setSlug("urban-threads-iso");
+        storeBSeed.setCategory(storeA.getCategory());
+        Store storeB = storeRepository.save(storeBSeed);
+
+        Customer customerA = OrderTestDataUtil.createCustomerA(account);
+        customerA.setStore(storeA);
+        customerA = customerRepository.save(customerA);
+
+        Customer customerB = OrderTestDataUtil.createCustomerA(account);
+        customerB.setStore(storeB);
+        customerB = customerRepository.save(customerB);
+
+        Product product = productRepository.save(OrderTestDataUtil.createTestProduct(storeA));
+        ShoppingCart cartA = shoppingCartRepository.save(OrderTestDataUtil.createShoppingCartA(customerA, product));
+        Quotation quotationA = quotationRepository.save(OrderTestDataUtil.createQuotationA(cartA, product));
+        Order orderA = underTest.save(OrderTestDataUtil.createOrderA(quotationA, product));
+
+        // Pedido de storeA visible solo para el Customer de storeA.
+        assertThat(underTest.findByQuotation_ShoppingCart_Customer_Id(customerA.getId()))
+                .extracting(Order::getId)
+                .containsExactly(orderA.getId());
+
+        // El mismo UserAccount en storeB (otro Customer.id) no ve el pedido de storeA.
+        assertThat(underTest.findByQuotation_ShoppingCart_Customer_Id(customerB.getId()))
+                .isEmpty();
+    }
 }

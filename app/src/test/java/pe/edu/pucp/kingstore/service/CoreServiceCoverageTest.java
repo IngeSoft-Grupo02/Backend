@@ -170,7 +170,7 @@ class CoreServiceCoverageTest {
         variant.setStock(-1);
         assertThatThrownBy(() -> variantService.create(variant)).isInstanceOf(BusinessRuleException.class);
 
-        ShoppingCartService cartService = new ShoppingCartService(shoppingCartRepository, discountRepository);
+        ShoppingCartService cartService = new ShoppingCartService(shoppingCartRepository, discountRepository, quotationRepository);
         ShoppingCart cart = cart();
         when(shoppingCartRepository.save(any(ShoppingCart.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(shoppingCartRepository.findByCustomerIdAndActiveTrueOrderByIdDesc(10)).thenReturn(List.of(cart));
@@ -282,7 +282,7 @@ class CoreServiceCoverageTest {
                 userAccountRepository, customerRepository, merchantRepository, administratorRepository, storeRepository);
         UserAccount account = account(5, "user@kingstore.pe", "secret");
         when(userAccountRepository.findByEmail("user@kingstore.pe")).thenReturn(Optional.of(account));
-        when(customerRepository.findByUserAccountId(5)).thenReturn(Optional.of(customerProfile()));
+        when(customerRepository.existsByUserAccountId(5)).thenReturn(true);
         LoginRequestDTO login = new LoginRequestDTO();
         login.setEmail(" User@Kingstore.pe ");
         login.setPassword("secret");
@@ -353,7 +353,6 @@ class CoreServiceCoverageTest {
                 userAccountRepository, customerRepository, merchantRepository, administratorRepository, storeRepository);
 
         when(storeRepository.findBySlug("store")).thenReturn(Optional.of(store()));
-        when(storeRepository.findById(2)).thenReturn(Optional.of(store()));
         when(userAccountRepository.save(any(UserAccount.class))).thenAnswer(invocation -> {
             UserAccount saved = invocation.getArgument(0);
             if (saved.getId() == null) saved.setId(200);
@@ -411,6 +410,103 @@ class CoreServiceCoverageTest {
         assertThatThrownBy(() -> service.registerCustomer(futureBirthDate, "store"))
                 .isInstanceOf(BusinessRuleException.class)
                 .hasMessage("La fecha de nacimiento no puede ser una fecha futura");
+    }
+
+    // ── Unicidad de cliente POR TIENDA (correo + DNI), no global ───────────────────
+
+    @Test
+    void registerSameEmailAndDniInDifferentStoreSucceedsReusingAccount() {
+        UserAccountService service = new UserAccountService(
+                userAccountRepository, customerRepository, merchantRepository, administratorRepository, storeRepository);
+
+        Store urban = store();
+        urban.setId(3);
+        urban.setSlug("urban");
+        when(storeRepository.findBySlug("urban")).thenReturn(Optional.of(urban));
+        // El correo ya existe globalmente (registrado en otra tienda) y pertenece a un cliente.
+        UserAccount existing = account(500, "new-customer@kingstore.pe", "Password123!");
+        when(userAccountRepository.findByEmail("new-customer@kingstore.pe")).thenReturn(Optional.of(existing));
+        when(customerRepository.existsByUserAccountId(500)).thenReturn(true);
+        when(customerRepository.save(any(Customer.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        // Mismo correo y mismo DNI, distinta tienda, contraseña coincide -> reutiliza la cuenta global.
+        UserAccount result = service.registerCustomer(registerCustomerDTO(), "urban");
+        assertThat(result.getId()).isEqualTo(500);
+        verify(customerRepository).save(any(Customer.class));
+    }
+
+    @Test
+    void registerSameEmailInSameStoreFails() {
+        UserAccountService service = new UserAccountService(
+                userAccountRepository, customerRepository, merchantRepository, administratorRepository, storeRepository);
+
+        Store urban = store();
+        urban.setId(3);
+        urban.setSlug("urban");
+        when(storeRepository.findBySlug("urban")).thenReturn(Optional.of(urban));
+        when(customerRepository.existsByStore_IdAndUserAccount_Email(3, "new-customer@kingstore.pe")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.registerCustomer(registerCustomerDTO(), "urban"))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessage("El correo ya está registrado en esta tienda.");
+    }
+
+    @Test
+    void registerSameDniInSameStoreFails() {
+        UserAccountService service = new UserAccountService(
+                userAccountRepository, customerRepository, merchantRepository, administratorRepository, storeRepository);
+
+        Store urban = store();
+        urban.setId(3);
+        urban.setSlug("urban");
+        when(storeRepository.findBySlug("urban")).thenReturn(Optional.of(urban));
+        when(customerRepository.existsByStore_IdAndDocumentNumber(3, "12345678")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.registerCustomer(registerCustomerDTO(), "urban"))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessage("El DNI ya está registrado en esta tienda.");
+    }
+
+    @Test
+    void registerExistingEmailWithWrongPasswordFails() {
+        UserAccountService service = new UserAccountService(
+                userAccountRepository, customerRepository, merchantRepository, administratorRepository, storeRepository);
+
+        Store urban = store();
+        urban.setId(3);
+        urban.setSlug("urban");
+        when(storeRepository.findBySlug("urban")).thenReturn(Optional.of(urban));
+        UserAccount existing = account(500, "new-customer@kingstore.pe", "OtraClave999!");
+        when(userAccountRepository.findByEmail("new-customer@kingstore.pe")).thenReturn(Optional.of(existing));
+        when(customerRepository.existsByUserAccountId(500)).thenReturn(true);
+
+        // registerCustomerDTO trae "Password123!", que NO coincide con la cuenta existente.
+        assertThatThrownBy(() -> service.registerCustomer(registerCustomerDTO(), "urban"))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessage("La contraseña no coincide con la cuenta existente para este correo.");
+    }
+
+    @Test
+    void loginSameEmailResolvesStoreScopedMembership() {
+        UserAccountService service = new UserAccountService(
+                userAccountRepository, customerRepository, merchantRepository, administratorRepository, storeRepository);
+
+        UserAccount shared = account(500, "shared@kingstore.pe", "secret");
+        when(userAccountRepository.findByEmail("shared@kingstore.pe")).thenReturn(Optional.of(shared));
+
+        Customer inStore = customerProfile(); // store slug "store"
+        Customer inUrban = customerProfile();
+        Store urban = store();
+        urban.setId(3);
+        urban.setSlug("urban");
+        inUrban.setStore(urban);
+        when(customerRepository.findByUserAccountIdAndStore_Slug(500, "store")).thenReturn(Optional.of(inStore));
+        when(customerRepository.findByUserAccountIdAndStore_Slug(500, "urban")).thenReturn(Optional.of(inUrban));
+
+        LoginRequestDTO request = login("shared@kingstore.pe", "secret");
+        // Un mismo correo (cuenta global) resuelve la membresía de la tienda del slug.
+        assertThat(service.authenticateCustomer("store", request).getStoreSlug()).isEqualTo("store");
+        assertThat(service.authenticateCustomer("urban", request).getStoreSlug()).isEqualTo("urban");
     }
 
     @Test
@@ -471,14 +567,12 @@ class CoreServiceCoverageTest {
         Merchant inactiveMerchant = merchantProfile();
         inactiveMerchant.setActive(false);
         when(userAccountRepository.findByEmail("inactive-merchant@kingstore.pe")).thenReturn(Optional.of(inactiveMerchantAccount));
-        when(customerRepository.findByUserAccountId(32)).thenReturn(Optional.empty());
         when(merchantRepository.findByUserAccountId(32)).thenReturn(Optional.of(inactiveMerchant));
         assertThatThrownBy(() -> service.authenticate(inactiveMerchantLogin)).isInstanceOf(BusinessRuleException.class);
 
         LoginRequestDTO adminLogin = login("admin-login@kingstore.pe", "secret");
         UserAccount adminAccount = account(33, "admin-login@kingstore.pe", "secret");
         when(userAccountRepository.findByEmail("admin-login@kingstore.pe")).thenReturn(Optional.of(adminAccount));
-        when(customerRepository.findByUserAccountId(33)).thenReturn(Optional.empty());
         when(merchantRepository.findByUserAccountId(33)).thenReturn(Optional.empty());
         when(administratorRepository.findByUserAccountId(33)).thenReturn(Optional.of(adminProfile()));
         assertThat(service.authenticate(adminLogin).getRole()).isEqualTo(Role.SYSTEM_ADMIN);
@@ -486,7 +580,6 @@ class CoreServiceCoverageTest {
         LoginRequestDTO noRoleLogin = login("norole@kingstore.pe", "secret");
         UserAccount noRoleAccount = account(34, "norole@kingstore.pe", "secret");
         when(userAccountRepository.findByEmail("norole@kingstore.pe")).thenReturn(Optional.of(noRoleAccount));
-        when(customerRepository.findByUserAccountId(34)).thenReturn(Optional.empty());
         when(merchantRepository.findByUserAccountId(34)).thenReturn(Optional.empty());
         when(administratorRepository.findByUserAccountId(34)).thenReturn(Optional.empty());
         assertThatThrownBy(() -> service.authenticate(noRoleLogin)).isInstanceOf(BusinessRuleException.class);
@@ -528,7 +621,8 @@ class CoreServiceCoverageTest {
         LoginRequestDTO nonCustomerLogin = login("not-customer@kingstore.pe", "secret");
         UserAccount nonCustomer = account(35, "not-customer@kingstore.pe", "secret");
         when(userAccountRepository.findByEmail("not-customer@kingstore.pe")).thenReturn(Optional.of(nonCustomer));
-        when(customerRepository.findByUserAccountId(35)).thenReturn(Optional.empty());
+        // authenticateCustomer ahora busca el Customer por cuenta+tienda; sin membresía en
+        // "store" (findByUserAccountIdAndStore_Slug -> vacío por defecto) lanza el error.
         assertThatThrownBy(() -> service.authenticateCustomer("store", nonCustomerLogin))
                 .isInstanceOf(BusinessRuleException.class);
     }
@@ -546,7 +640,7 @@ class CoreServiceCoverageTest {
         when(userAccountRepository.findByEmail("phone@kingstore.pe")).thenReturn(Optional.of(phoneAccount));
         when(userAccountRepository.save(any(UserAccount.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(merchantRepository.findByUserAccountId(40)).thenReturn(Optional.of(merchant));
-        when(customerRepository.findByUserAccountId(40)).thenReturn(Optional.of(customer));
+        when(customerRepository.findAllByUserAccountId(40)).thenReturn(List.of(customer));
         when(administratorRepository.findByUserAccountId(40)).thenReturn(Optional.of(admin));
         when(merchantRepository.save(any(Merchant.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(customerRepository.save(any(Customer.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -608,7 +702,8 @@ class CoreServiceCoverageTest {
         Customer customer = customerProfile();
         customer.setId(99);
         when(userAccountRepository.findByEmail("customer-store@kingstore.pe")).thenReturn(Optional.of(account));
-        when(customerRepository.findByUserAccountId(50)).thenReturn(Optional.of(customer));
+        // Membresía del cliente SOLO en "store" (no en "other-store").
+        when(customerRepository.findByUserAccountIdAndStore_Slug(50, "store")).thenReturn(Optional.of(customer));
 
         LoginRequestDTO request = login("customer-store@kingstore.pe", "secret");
 

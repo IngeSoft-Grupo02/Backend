@@ -14,15 +14,18 @@ import pe.edu.pucp.kingstore.domain.model.product.Product;
 import pe.edu.pucp.kingstore.domain.model.product.ProductVariant;
 import pe.edu.pucp.kingstore.domain.model.product.enums.Color;
 import pe.edu.pucp.kingstore.domain.model.product.enums.VolumeType;
+import pe.edu.pucp.kingstore.domain.model.quotation.Quotation;
 import pe.edu.pucp.kingstore.domain.model.store.Store;
 import pe.edu.pucp.kingstore.domain.model.user.Customer;
 import pe.edu.pucp.kingstore.repository.cart.ShoppingCartRepository;
 import pe.edu.pucp.kingstore.repository.product.DiscountRepository;
+import pe.edu.pucp.kingstore.repository.quotation.QuotationRepository;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
 import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -33,12 +36,13 @@ class ShoppingCartServiceTest {
 
     @Mock private ShoppingCartRepository shoppingCartRepository;
     @Mock private DiscountRepository discountRepository;
+    @Mock private QuotationRepository quotationRepository;
 
     private ShoppingCartService service;
 
     @BeforeEach
     void setUp() {
-        service = new ShoppingCartService(shoppingCartRepository, discountRepository);
+        service = new ShoppingCartService(shoppingCartRepository, discountRepository, quotationRepository);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -92,6 +96,7 @@ class ShoppingCartServiceTest {
         Customer customer = customer(1);
         ShoppingCart existing = emptyCart(customer);
         when(shoppingCartRepository.findByCustomerIdAndActiveTrueOrderByIdDesc(1)).thenReturn(List.of(existing));
+        when(quotationRepository.findByShoppingCartId(1)).thenReturn(Optional.empty());
 
         ShoppingCart result = service.getOrCreateCart(customer);
 
@@ -121,10 +126,56 @@ class ShoppingCartServiceTest {
         latest.setId(12);
         when(shoppingCartRepository.findByCustomerIdAndActiveTrueOrderByIdDesc(1))
                 .thenReturn(List.of(latest, older));
+        when(quotationRepository.findByShoppingCartId(12)).thenReturn(Optional.empty());
 
         ShoppingCart result = service.getOrCreateCart(customer);
 
         assertThat(result).isSameAs(latest);
+    }
+
+    @Test
+    void getOrCreateCartDeactivatesQuotedActiveCartAndCreatesNew() {
+        // Carrito activo PERO ya cotizado (estado inconsistente histórico): debe
+        // desactivarse y devolverse uno nuevo y vacío. El cliente no queda atrapado.
+        Customer customer = customer(1);
+        ShoppingCart quoted = emptyCart(customer);
+        quoted.setId(5);
+        quoted.setActive(true);
+        when(shoppingCartRepository.findByCustomerIdAndActiveTrueOrderByIdDesc(1))
+                .thenReturn(List.of(quoted));
+        when(quotationRepository.findByShoppingCartId(5)).thenReturn(Optional.of(new Quotation()));
+        when(shoppingCartRepository.save(any(ShoppingCart.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ShoppingCart result = service.getOrCreateCart(customer);
+
+        assertThat(quoted.getActive()).isFalse();
+        assertThat(result).isNotSameAs(quoted);
+        assertThat(result.getItems()).isEmpty();
+        assertThat(result.getCustomer()).isEqualTo(customer);
+    }
+
+    @Test
+    void getOrCreateCartSkipsQuotedCartAndReturnsCleanActiveOne() {
+        // Con varios carritos activos históricos: salta el ya cotizado (desactivándolo)
+        // y devuelve el primero válido sin cotización, sin crear uno innecesario.
+        Customer customer = customer(1);
+        ShoppingCart quoted = emptyCart(customer);
+        quoted.setId(12);
+        quoted.setActive(true);
+        ShoppingCart clean = emptyCart(customer);
+        clean.setId(10);
+        when(shoppingCartRepository.findByCustomerIdAndActiveTrueOrderByIdDesc(1))
+                .thenReturn(List.of(quoted, clean));
+        when(quotationRepository.findByShoppingCartId(12)).thenReturn(Optional.of(new Quotation()));
+        when(quotationRepository.findByShoppingCartId(10)).thenReturn(Optional.empty());
+        when(shoppingCartRepository.save(any(ShoppingCart.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ShoppingCart result = service.getOrCreateCart(customer);
+
+        assertThat(result).isSameAs(clean);
+        assertThat(quoted.getActive()).isFalse();
     }
 
     // ── addItem ───────────────────────────────────────────────────────────────

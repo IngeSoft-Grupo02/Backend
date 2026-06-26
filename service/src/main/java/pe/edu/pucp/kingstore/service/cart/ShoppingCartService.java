@@ -5,6 +5,7 @@ import org.springframework.transaction.annotation.Transactional;
 import pe.edu.pucp.kingstore.domain.model.cart.CartItem;
 import pe.edu.pucp.kingstore.domain.model.cart.ShoppingCart;
 import pe.edu.pucp.kingstore.repository.cart.ShoppingCartRepository;
+import pe.edu.pucp.kingstore.repository.quotation.QuotationRepository;
 import pe.edu.pucp.kingstore.service.common.AbstractCrudService;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
 import pe.edu.pucp.kingstore.domain.dto.cart.CartResponseDTO;
@@ -26,12 +27,15 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
 
     private final ShoppingCartRepository shoppingCartRepository;
     private final DiscountRepository discountRepository;
+    private final QuotationRepository quotationRepository;
 
     public ShoppingCartService(ShoppingCartRepository shoppingCartRepository,
-                               DiscountRepository discountRepository) {
+                               DiscountRepository discountRepository,
+                               QuotationRepository quotationRepository) {
         super(shoppingCartRepository, "Shopping cart");
         this.shoppingCartRepository = shoppingCartRepository;
         this.discountRepository = discountRepository;
+        this.quotationRepository = quotationRepository;
     }
 
     @Transactional(readOnly = true)
@@ -44,22 +48,37 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
     // ── Operaciones del cliente ───────────────────────────────────────────────────
 
     /**
-     * Obtiene el carrito activo del cliente o crea uno vacío si no existe.
+     * Obtiene un carrito activo del cliente APTO para seguir comprando/cotizando,
+     * o crea uno vacío si no hay ninguno.
+     *
+     * Garantiza el invariante "un carrito ya cotizado no permanece activo":
+     * recorre los carritos activos (del más reciente al más antiguo) y
+     *   - devuelve el primero que NO tenga cotización asociada;
+     *   - desactiva los que ya tengan cotización (estado inconsistente que arrastra
+     *     la BD histórica) para que no vuelvan a aparecer como activos.
+     * Si no queda ninguno reutilizable, crea un carrito nuevo y vacío.
+     *
+     * Así nunca se devuelve un carrito "gastado": ni addItem agrega productos sobre
+     * un carrito ya cotizado, ni createFromCart intenta recotizarlo, evitando que el
+     * cliente quede atrapado y que el carrito se vacíe sin generar cotización.
      */
     @Transactional
     public ShoppingCart getOrCreateCart(Customer customer) {
-        return shoppingCartRepository.findByCustomerIdAndActiveTrueOrderByIdDesc(customer.getId())
-                .stream()
-                .findFirst()
-                .orElseGet(() -> {
-                    ShoppingCart cart = new ShoppingCart();
-                    cart.setCustomer(customer);
-                    cart.setItems(new ArrayList<>());
-                    cart.setSubTotal(0);
-                    cart.setDiscount(0);
-                    cart.setTotalAmount(0);
-                    return shoppingCartRepository.save(cart);
-                });
+        for (ShoppingCart cart : shoppingCartRepository
+                .findByCustomerIdAndActiveTrueOrderByIdDesc(customer.getId())) {
+            if (quotationRepository.findByShoppingCartId(cart.getId()).isEmpty()) {
+                return cart;
+            }
+            cart.setActive(false);
+            shoppingCartRepository.save(cart);
+        }
+        ShoppingCart cart = new ShoppingCart();
+        cart.setCustomer(customer);
+        cart.setItems(new ArrayList<>());
+        cart.setSubTotal(0);
+        cart.setDiscount(0);
+        cart.setTotalAmount(0);
+        return shoppingCartRepository.save(cart);
     }
 
     /**

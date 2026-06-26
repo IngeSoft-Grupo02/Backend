@@ -65,25 +65,20 @@ public class QuotationService extends AbstractCrudService<Quotation> {
 
     /**
      * Devuelve todas las cotizaciones del cliente en una tienda específica.
+     *
+     * La pertenencia a la tienda se determina por el cliente dueño del carrito
+     * (customer.store, dato NOT NULL y fiable), NO por los items del carrito.
+     * Antes se recorría shopping_cart.items y se exigía product.store == storeId,
+     * lo que ocultaba cotizaciones válidas cuando el carrito quedaba vacío o con
+     * items históricos inconsistentes — y divergía del criterio del Comerciante,
+     * que lista por quotation_item. Ahora ambos ven las mismas cotizaciones
+     * válidas del mismo cliente/tienda.
      */
     @Transactional(readOnly = true)
     public List<Quotation> findByCustomerAndStore(Integer customerId, Integer storeId) {
         requireId(customerId);
         requireId(storeId);
-        return quotationRepository.findByShoppingCart_Customer_Id(customerId).stream()
-                .filter(q -> {
-                    var cart = q.getShoppingCart();
-                    if (cart == null || cart.getItems() == null || cart.getItems().isEmpty()) {
-                        return false;
-                    }
-                    return cart.getItems().stream().anyMatch(item -> {
-                        var product = item.getProductVariant() != null
-                                ? item.getProductVariant().getProduct() : null;
-                        return product != null
-                                && Objects.equals(product.getStore().getId(), storeId);
-                    });
-                })
-                .toList();
+        return quotationRepository.findByCustomerIdAndStoreId(customerId, storeId);
     }
 
     /**

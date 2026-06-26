@@ -417,6 +417,55 @@ class OrderServiceTest {
         assertThat(dto.getStatusLabel()).isEqualTo("Enviado");
     }
 
+    // =========================================================================
+    // findByCustomerAndStore (null-safe ante datos históricos inconsistentes)
+    // =========================================================================
+
+    @Test
+    void findByCustomerAndStoreReturnsOrdersMatchingStore() {
+        pe.edu.pucp.kingstore.domain.model.store.Store store =
+                new pe.edu.pucp.kingstore.domain.model.store.Store();
+        store.setId(10);
+        pe.edu.pucp.kingstore.domain.model.product.Product product =
+                new pe.edu.pucp.kingstore.domain.model.product.Product();
+        product.setStore(store);
+        ProductVariant variant = new ProductVariant();
+        variant.setProduct(product);
+
+        OrderItem item = new OrderItem();
+        item.setProductVariant(variant);
+
+        Order order = order(1, quotation(5), OrderStatus.PAYMENT_CONFIRMED);
+        order.setItems(new ArrayList<>(List.of(item)));
+
+        when(orderRepository.findByQuotation_ShoppingCart_Customer_Id(1))
+                .thenReturn(List.of(order));
+
+        assertThat(service.findByCustomerAndStore(1, 10)).containsExactly(order);
+    }
+
+    @Test
+    void findByCustomerAndStoreSkipsOrdersWithNullProductStoreWithoutError() {
+        // Dato histórico inconsistente: el producto no tiene tienda asociada.
+        // No debe lanzar NullPointerException; simplemente se omite el pedido.
+        pe.edu.pucp.kingstore.domain.model.product.Product product =
+                new pe.edu.pucp.kingstore.domain.model.product.Product();
+        product.setStore(null);
+        ProductVariant variant = new ProductVariant();
+        variant.setProduct(product);
+
+        OrderItem item = new OrderItem();
+        item.setProductVariant(variant);
+
+        Order order = order(1, quotation(5), OrderStatus.PAYMENT_CONFIRMED);
+        order.setItems(new ArrayList<>(List.of(item)));
+
+        when(orderRepository.findByQuotation_ShoppingCart_Customer_Id(1))
+                .thenReturn(List.of(order));
+
+        assertThat(service.findByCustomerAndStore(1, 10)).isEmpty();
+    }
+
     @Test
     void toResponseDTOStatusLabelPaymentConfirmedAndDelivered() {
         Order confirmed = order(5, quotation(5), OrderStatus.PAYMENT_CONFIRMED);
