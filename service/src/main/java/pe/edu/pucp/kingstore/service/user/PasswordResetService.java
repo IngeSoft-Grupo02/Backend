@@ -8,8 +8,11 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pe.edu.pucp.kingstore.domain.dto.user.PasswordResetConfirmDTO;
+import pe.edu.pucp.kingstore.domain.model.store.Store;
+import pe.edu.pucp.kingstore.domain.model.user.Customer;
 import pe.edu.pucp.kingstore.domain.model.user.PasswordResetToken;
 import pe.edu.pucp.kingstore.domain.model.user.UserAccount;
+import pe.edu.pucp.kingstore.repository.store.StoreRepository;
 import pe.edu.pucp.kingstore.repository.user.CustomerRepository;
 import pe.edu.pucp.kingstore.repository.user.MerchantRepository;
 import pe.edu.pucp.kingstore.repository.user.PasswordResetTokenRepository;
@@ -41,10 +44,12 @@ public class PasswordResetService {
     private final CustomerRepository customerRepository;
     private final MerchantRepository merchantRepository;
     private final SystemAdministratorRepository administratorRepository;
+    private final StoreRepository storeRepository;
     private final JavaMailSender mailSender;
     private final String frontendBaseUrl;
     private final String mailFrom;
     private final long expirationMinutes;
+    private final PasswordHashService passwordHashService = new PasswordHashService();
 
     public PasswordResetService(
             UserAccountRepository userAccountRepository,
@@ -52,6 +57,7 @@ public class PasswordResetService {
             CustomerRepository customerRepository,
             MerchantRepository merchantRepository,
             SystemAdministratorRepository administratorRepository,
+            StoreRepository storeRepository,
             JavaMailSender mailSender,
             @Value("${kingstore.password-reset.frontend-base-url:http://localhost:3000}") String frontendBaseUrl,
             @Value("${spring.mail.username:}") String mailFrom,
@@ -62,6 +68,7 @@ public class PasswordResetService {
         this.customerRepository = customerRepository;
         this.merchantRepository = merchantRepository;
         this.administratorRepository = administratorRepository;
+        this.storeRepository = storeRepository;
         this.mailSender = mailSender;
         this.frontendBaseUrl = trimTrailingSlash(frontendBaseUrl);
         this.mailFrom = mailFrom;
@@ -70,6 +77,11 @@ public class PasswordResetService {
 
     @Transactional
     public void requestReset(String rawEmail) {
+        requestReset(rawEmail, null);
+    }
+
+    @Transactional
+    public void requestReset(String rawEmail, String rawStoreSlug) {
         if (rawEmail == null || rawEmail.isBlank()) {
             return;
         }
@@ -82,8 +94,8 @@ public class PasswordResetService {
         }
 
         UserAccount account = accountResult.get();
-        String resetPath = resolveResetPath(account.getId());
-        if (resetPath == null) {
+        ResetTarget resetTarget = resolveResetTarget(account.getId(), rawStoreSlug);
+        if (resetTarget == null) {
             LOGGER.warn("Password reset requested for account {} without an assigned role", account.getId());
             return;
         }
@@ -99,7 +111,7 @@ public class PasswordResetService {
         token.setExpiresAt(now.plusMinutes(expirationMinutes));
         tokenRepository.save(token);
 
-        sendResetEmail(account.getEmail(), resetPath, rawToken);
+        sendResetEmail(account.getEmail(), resetTarget.resetPath, resetTarget.brandName, rawToken);
     }
 
     @Transactional(readOnly = true)
@@ -127,7 +139,7 @@ public class PasswordResetService {
                 .orElseThrow(() -> new BusinessRuleException("RESET_TOKEN_INVALID"));
 
         UserAccount account = token.getUserAccount();
-        account.setPassword(request.getNewPassword());
+        account.setPassword(passwordHashService.hash(request.getNewPassword()));
         userAccountRepository.save(account);
 
         LocalDateTime usedAt = LocalDateTime.now();
@@ -153,20 +165,40 @@ public class PasswordResetService {
         tokenRepository.saveAll(activeTokens);
     }
 
-    private String resolveResetPath(Integer userAccountId) {
+    private ResetTarget resolveResetTarget(Integer userAccountId, String rawStoreSlug) {
+        String storeSlug = rawStoreSlug != null ? rawStoreSlug.trim() : "";
+        if (!storeSlug.isBlank()) {
+            Optional<Customer> customer = customerRepository.findByUserAccountIdAndStore_Slug(userAccountId, storeSlug);
+            if (customer.isPresent()) {
+                return new ResetTarget("/recuperacion", resolveStoreName(customer.get().getStore()));
+            }
+            if (customerRepository.existsByUserAccountId(userAccountId)) {
+                return null;
+            }
+        }
         if (customerRepository.existsByUserAccountId(userAccountId)) {
-            return "/recuperacion";
+            return new ResetTarget("/recuperacion", "Kingstore");
         }
         if (merchantRepository.findByUserAccountId(userAccountId).isPresent()) {
-            return "/comerciante/recovery";
+            if (storeRepository.findAllByMerchant_UserAccount_Id(userAccountId).isEmpty()) {
+                throw new BusinessRuleException("MERCHANT_WITHOUT_STORE");
+            }
+            return new ResetTarget("/comerciante/recovery", "Kingstore");
         }
         if (administratorRepository.findByUserAccountId(userAccountId).isPresent()) {
-            return "/admin/recuperar-contrasena";
+            return new ResetTarget("/admin/recuperar-contrasena", "Kingstore");
         }
         return null;
     }
 
-    private void sendResetEmail(String recipient, String resetPath, String rawToken) {
+    private String resolveStoreName(Store store) {
+        if (store == null || store.getStoreName() == null || store.getStoreName().isBlank()) {
+            return "Kingstore";
+        }
+        return store.getStoreName().trim();
+    }
+
+    private void sendResetEmail(String recipient, String resetPath, String brandName, String rawToken) {
         if (mailFrom == null || mailFrom.isBlank()) {
             throw new IllegalStateException("MAIL_USERNAME must be configured to send password reset emails");
         }
@@ -175,17 +207,27 @@ public class PasswordResetService {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(mailFrom);
         message.setTo(recipient);
-        message.setSubject("Kingstore - Recuperación de contraseña");
+        message.setSubject("%s - Recuperación de contraseña".formatted(brandName));
         message.setText("""
-                Recibimos una solicitud para cambiar tu contraseña de Kingstore.
+                Recibimos una solicitud para cambiar tu contraseña de %s.
 
                 Abre este enlace para crear una nueva contraseña:
                 %s
 
                 El enlace vence en %d minutos y solo puede utilizarse una vez.
                 Si no solicitaste este cambio, ignora este mensaje.
-                """.formatted(resetUrl, expirationMinutes));
+                """.formatted(brandName, resetUrl, expirationMinutes));
         mailSender.send(message);
+    }
+
+    private static final class ResetTarget {
+        private final String resetPath;
+        private final String brandName;
+
+        private ResetTarget(String resetPath, String brandName) {
+            this.resetPath = resetPath;
+            this.brandName = brandName;
+        }
     }
 
     private String generateToken() {

@@ -33,7 +33,18 @@ public class PasswordResetController {
     @PostMapping("/forgot")
     public ResponseEntity<Map<String, String>> forgotPassword(@RequestBody PasswordResetRequestDTO request) {
         try {
-            passwordResetService.requestReset(request != null ? request.getEmail() : null);
+            passwordResetService.requestReset(
+                    request != null ? request.getEmail() : null,
+                    request != null ? request.getStoreSlug() : null
+            );
+        } catch (BusinessRuleException exception) {
+            if ("MERCHANT_WITHOUT_STORE".equals(exception.getMessage())) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "code", "MERCHANT_WITHOUT_STORE",
+                        "message", "Tu cuenta de comerciante aún no tiene una tienda asignada. No puedes recuperar la contraseña hasta que se asocie una tienda."
+                ));
+            }
+            LOGGER.error("Password reset request could not be processed", exception);
         } catch (RuntimeException exception) {
             LOGGER.error("Password reset email could not be sent", exception);
         }

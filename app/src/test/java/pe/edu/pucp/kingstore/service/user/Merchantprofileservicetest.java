@@ -272,7 +272,9 @@ class MerchantProfileServiceTest {
 
         service.updatePassword(merchant, passwordRequest("old", "NewPass1", "NewPass1"));
 
-        assertThat(account.getPassword()).isEqualTo("NewPass1");
+        assertThat(account.getPassword())
+                .startsWith("$2")
+                .isNotEqualTo("NewPass1");
         verify(userAccountRepository).save(account);
         verify(merchantRepository, never()).save(any());
     }

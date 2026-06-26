@@ -9,10 +9,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import pe.edu.pucp.kingstore.domain.dto.user.PasswordResetConfirmDTO;
+import pe.edu.pucp.kingstore.domain.model.store.Store;
+import pe.edu.pucp.kingstore.domain.model.user.Customer;
 import pe.edu.pucp.kingstore.domain.model.user.Merchant;
 import pe.edu.pucp.kingstore.domain.model.user.PasswordResetToken;
 import pe.edu.pucp.kingstore.domain.model.user.SystemAdministrator;
 import pe.edu.pucp.kingstore.domain.model.user.UserAccount;
+import pe.edu.pucp.kingstore.repository.store.StoreRepository;
 import pe.edu.pucp.kingstore.repository.user.CustomerRepository;
 import pe.edu.pucp.kingstore.repository.user.MerchantRepository;
 import pe.edu.pucp.kingstore.repository.user.PasswordResetTokenRepository;
@@ -39,6 +42,7 @@ class PasswordResetServiceTest {
     @Mock private CustomerRepository customerRepository;
     @Mock private MerchantRepository merchantRepository;
     @Mock private SystemAdministratorRepository administratorRepository;
+    @Mock private StoreRepository storeRepository;
     @Mock private JavaMailSender mailSender;
 
     private PasswordResetService service;
@@ -51,6 +55,7 @@ class PasswordResetServiceTest {
                 customerRepository,
                 merchantRepository,
                 administratorRepository,
+                storeRepository,
                 mailSender,
                 "http://localhost:3000/",
                 "kingstore.test@gmail.com",
@@ -102,14 +107,38 @@ class PasswordResetServiceTest {
         when(userAccountRepository.findByEmail(account.getEmail())).thenReturn(Optional.of(account));
         when(customerRepository.existsByUserAccountId(7)).thenReturn(false);
         when(merchantRepository.findByUserAccountId(7)).thenReturn(Optional.of(merchant));
+        Store store = new Store();
+        store.setStoreName("Tienda Luna");
+        when(storeRepository.findAllByMerchant_UserAccount_Id(7)).thenReturn(List.of(store));
         when(tokenRepository.findAllByUserAccountIdAndActiveTrue(7)).thenReturn(List.of());
 
         service.requestReset(account.getEmail());
 
         ArgumentCaptor<SimpleMailMessage> mailCaptor = ArgumentCaptor.forClass(SimpleMailMessage.class);
         verify(mailSender).send(mailCaptor.capture());
+        assertThat(mailCaptor.getValue().getSubject())
+                .isEqualTo("Kingstore - Recuperación de contraseña");
         assertThat(mailCaptor.getValue().getText())
+                .contains("cambiar tu contraseña de Kingstore")
                 .contains("http://localhost:3000/comerciante/recovery?token=");
+    }
+
+    @Test
+    void rejectsMerchantPasswordResetWhenMerchantHasNoStores() {
+        UserAccount account = activeAccount();
+        Merchant merchant = new Merchant();
+        merchant.setUserAccount(account);
+        when(userAccountRepository.findByEmail(account.getEmail())).thenReturn(Optional.of(account));
+        when(customerRepository.existsByUserAccountId(7)).thenReturn(false);
+        when(merchantRepository.findByUserAccountId(7)).thenReturn(Optional.of(merchant));
+        when(storeRepository.findAllByMerchant_UserAccount_Id(7)).thenReturn(List.of());
+
+        assertThatThrownBy(() -> service.requestReset(account.getEmail()))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessage("MERCHANT_WITHOUT_STORE");
+
+        verify(tokenRepository, never()).save(any());
+        verify(mailSender, never()).send(any(SimpleMailMessage.class));
     }
 
     @Test
@@ -124,6 +153,30 @@ class PasswordResetServiceTest {
         ArgumentCaptor<SimpleMailMessage> mailCaptor = ArgumentCaptor.forClass(SimpleMailMessage.class);
         verify(mailSender).send(mailCaptor.capture());
         assertThat(mailCaptor.getValue().getText())
+                .contains("http://localhost:3000/recuperacion?token=");
+    }
+
+    @Test
+    void sendsCustomerStoreNameWhenStoreSlugIsProvided() {
+        UserAccount account = activeAccount();
+        Store store = new Store();
+        store.setStoreName("Tienda Luna");
+        store.setSlug("tienda-luna");
+        Customer customer = new Customer();
+        customer.setUserAccount(account);
+        customer.setStore(store);
+        when(userAccountRepository.findByEmail(account.getEmail())).thenReturn(Optional.of(account));
+        when(customerRepository.findByUserAccountIdAndStore_Slug(7, "tienda-luna")).thenReturn(Optional.of(customer));
+        when(tokenRepository.findAllByUserAccountIdAndActiveTrue(7)).thenReturn(List.of());
+
+        service.requestReset(account.getEmail(), " tienda-luna ");
+
+        ArgumentCaptor<SimpleMailMessage> mailCaptor = ArgumentCaptor.forClass(SimpleMailMessage.class);
+        verify(mailSender).send(mailCaptor.capture());
+        assertThat(mailCaptor.getValue().getSubject())
+                .isEqualTo("Tienda Luna - Recuperación de contraseña");
+        assertThat(mailCaptor.getValue().getText())
+                .contains("cambiar tu contraseña de Tienda Luna")
                 .contains("http://localhost:3000/recuperacion?token=");
     }
 
@@ -145,7 +198,9 @@ class PasswordResetServiceTest {
         request.setNewPassword("NuevaClave1*");
         service.resetPassword(request);
 
-        assertThat(account.getPassword()).isEqualTo("NuevaClave1*");
+        assertThat(account.getPassword())
+                .startsWith("$2")
+                .isNotEqualTo("NuevaClave1*");
         assertThat(token.getActive()).isFalse();
         assertThat(token.getUsedAt()).isNotNull();
         verify(userAccountRepository).save(account);
@@ -181,5 +236,11 @@ class PasswordResetServiceTest {
         account.setPassword("old-password");
         account.setActive(true);
         return account;
+    }
+
+    private Store store(String storeName) {
+        Store store = new Store();
+        store.setStoreName(storeName);
+        return store;
     }
 }

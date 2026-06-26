@@ -40,6 +40,7 @@ public class UserAccountService extends AbstractCrudService<UserAccount> {
     private final MerchantRepository merchantRepository;
     private final SystemAdministratorRepository administratorRepository;
     private final StoreRepository storeRepository;
+    private final PasswordHashService passwordHashService = new PasswordHashService();
 
     public UserAccountService(
             UserAccountRepository userAccountRepository,
@@ -69,7 +70,7 @@ public class UserAccountService extends AbstractCrudService<UserAccount> {
         if (!Boolean.TRUE.equals(account.getActive())) {
             throw new BusinessRuleException("ACCOUNT_INACTIVE");
         }
-        if (!account.getPassword().equals(request.getPassword())) {
+        if (!passwordHashService.matches(request.getPassword(), account.getPassword())) {
             throw new BusinessRuleException("BAD_CREDENTIALS");
         }
 
@@ -85,6 +86,7 @@ public class UserAccountService extends AbstractCrudService<UserAccount> {
         requireText(account.getEmail(), "Email");
         requireText(account.getPassword(), "Password");
         account.setEmail(normalizeEmail(account.getEmail()));
+        account.setPassword(passwordHashService.hash(account.getPassword()));
 
         userAccountRepository.findByEmail(account.getEmail())
                 .filter(existing -> !existing.getId().equals(account.getId()))
@@ -205,7 +207,7 @@ public class UserAccountService extends AbstractCrudService<UserAccount> {
 
         UserAccount account = userAccountRepository.findByEmail(normalizeEmail(request.getEmail()))
                 .filter(user -> Boolean.TRUE.equals(user.getActive()))
-                .filter(user -> user.getPassword().equals(request.getPassword()))
+                .filter(user -> passwordHashService.matches(request.getPassword(), user.getPassword()))
                 .orElseThrow(() -> new BusinessRuleException("Invalid credentials"));
 
         // El correo es identidad global; la membresía es por tienda. Buscar el Customer de
@@ -261,7 +263,7 @@ public class UserAccountService extends AbstractCrudService<UserAccount> {
             account.setEmail(normalizeEmail(dto.getEmail()));
         }
         if (dto.getPassword() != null && !dto.getPassword().isBlank()) {
-            account.setPassword(dto.getPassword());
+            account.setPassword(passwordHashService.hash(dto.getPassword()));
         }
         validateForSave(account);
         userAccountRepository.save(account);
@@ -325,13 +327,13 @@ public class UserAccountService extends AbstractCrudService<UserAccount> {
                 // El correo pertenece a una cuenta de otro rol (Comerciante/Admin).
                 throw new BusinessRuleException("Este correo pertenece a otro tipo de cuenta.");
             }
-            if (!account.getPassword().equals(dto.getPassword())) {
+            if (!passwordHashService.matches(dto.getPassword(), account.getPassword())) {
                 throw new BusinessRuleException("La contraseña no coincide con la cuenta existente para este correo.");
             }
         } else {
             UserAccount nuevo = new UserAccount();
             nuevo.setEmail(email);
-            nuevo.setPassword(dto.getPassword());
+            nuevo.setPassword(passwordHashService.hash(dto.getPassword()));
             account = create(nuevo); // valida formato y unicidad global de email (no existe → OK)
         }
 
