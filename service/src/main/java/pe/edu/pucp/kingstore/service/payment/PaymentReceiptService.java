@@ -32,14 +32,15 @@ public class PaymentReceiptService extends AbstractCrudService<PaymentReceipt> {
         return paymentReceiptRepository.findByOrderId(orderId);
     }
 
-    /*/**
+    /**
      * Pago simulado con tarjeta.
      * Valida los datos de tarjeta pero NO los persiste.
      * Si el número termina en 0000 → simula tarjeta declinada.
      */
     @Transactional
     public PaymentReceipt simulatePayment(Order order, String ruc,
-                                          pe.edu.pucp.kingstore.domain.model.payment.enums.PaymentMethod paymentMethod,
+                                          PaymentMethod paymentMethod,
+                                          String receiptType,
                                           String cardNumber, String cardHolder,
                                           String expiryDate, String cvv) {
         if (order.getStatus() != OrderStatus.PAYMENT_CONFIRMED) {
@@ -51,54 +52,13 @@ public class PaymentReceiptService extends AbstractCrudService<PaymentReceipt> {
                     "Order already has a payment receipt");
         });
 
-        // Validar campos de tarjeta
-        validateCard(cardNumber, cardHolder, expiryDate, cvv);
-
-        // Simular tarjeta declinada
-        if (cardNumber != null && cardNumber.replaceAll("\\s", "").endsWith("0000")) {
-            throw new pe.edu.pucp.kingstore.service.common.BusinessRuleException(
-                    "Payment declined — card rejected by issuer");
-        }
-
-        PaymentReceipt receipt = new PaymentReceipt();
-        receipt.setOrder(order);
-        receipt.setRuc(ruc != null ? ruc : "00000000000");
-        receipt.setPaymentMethod(paymentMethod != null ? paymentMethod
-                : pe.edu.pucp.kingstore.domain.model.payment.enums.PaymentMethod.VIRTUAL);
-        receipt.setFinalTotal(order.getFinalTotal());
-
-        order.setStatus(OrderStatus.PAYMENT_CONFIRMED);
-        orderRepository.save(order);
-
-        return create(receipt);
-    }
-
-    // Agrega el parámetro receiptType:
-    @Transactional
-    public PaymentReceipt simulatePayment(Order order, String ruc,
-                                          PaymentMethod paymentMethod,
-                                          String cardNumber, String cardHolder,
-                                          String expiryDate, String cvv,
-                                          ReceiptType receiptType) {
-        if (order.getStatus() != OrderStatus.PAYMENT_CONFIRMED) {
-            throw new pe.edu.pucp.kingstore.service.common.BusinessRuleException(
-                    "Only confirmed orders can be paid");
-        }
-        paymentReceiptRepository.findByOrderId(order.getId()).ifPresent(existing -> {
-            throw new pe.edu.pucp.kingstore.service.common.BusinessRuleException(
-                    "Order already has a payment receipt");
-        });
-
-        // Validar RUC si es factura
-        ReceiptType type = receiptType != null ? receiptType : ReceiptType.BOLETA;
+        ReceiptType type = parseReceiptType(receiptType);
         if (type == ReceiptType.FACTURA) {
             validateRuc(ruc);
         }
 
-        // Validar tarjeta
         validateCard(cardNumber, cardHolder, expiryDate, cvv);
 
-        // Simular tarjeta declinada
         if (cardNumber != null && cardNumber.replaceAll("\\s", "").endsWith("0000")) {
             throw new pe.edu.pucp.kingstore.service.common.BusinessRuleException(
                     "Payment declined — card rejected by issuer");
@@ -106,9 +66,11 @@ public class PaymentReceiptService extends AbstractCrudService<PaymentReceipt> {
 
         PaymentReceipt receipt = new PaymentReceipt();
         receipt.setOrder(order);
-        receipt.setRuc(ruc);
+        receipt.setRuc(type == ReceiptType.FACTURA
+                ? ruc.trim()
+                : (ruc == null || ruc.isBlank() ? "00000000000" : ruc.trim()));
         receipt.setPaymentMethod(paymentMethod != null ? paymentMethod
-                : pe.edu.pucp.kingstore.domain.model.payment.enums.PaymentMethod.VIRTUAL);
+                : PaymentMethod.VIRTUAL);
         receipt.setReceiptType(type);
         receipt.setFinalTotal(order.getFinalTotal());
 
@@ -118,7 +80,17 @@ public class PaymentReceiptService extends AbstractCrudService<PaymentReceipt> {
         return create(receipt);
     }
 
-    // Agrega el método validateRuc:
+    private ReceiptType parseReceiptType(String receiptType) {
+        if (receiptType == null || receiptType.isBlank()) {
+            throw new BusinessRuleException("Receipt type is required (BOLETA or FACTURA)");
+        }
+        try {
+            return ReceiptType.valueOf(receiptType.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw new BusinessRuleException("Receipt type is required (BOLETA or FACTURA)");
+        }
+    }
+
     private void validateRuc(String ruc) {
         if (ruc == null || ruc.isBlank()) {
             throw new pe.edu.pucp.kingstore.service.common.BusinessRuleException(

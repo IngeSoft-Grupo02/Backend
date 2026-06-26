@@ -4,6 +4,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import pe.edu.pucp.kingstore.api.context.CustomerContext;
+import pe.edu.pucp.kingstore.domain.dto.quotation.QuotationCreateRequestDTO;
 import pe.edu.pucp.kingstore.domain.model.cart.ShoppingCart;
 import pe.edu.pucp.kingstore.domain.model.quotation.Quotation;
 import pe.edu.pucp.kingstore.domain.model.store.Store;
@@ -40,7 +41,8 @@ public class CustomerQuotationController {
     // POST /stores/{slug}/quotations
     @PostMapping
     public ResponseEntity<?> create(@PathVariable String slug,
-                                    Authentication authentication) {
+                                    Authentication authentication,
+                                    @RequestBody(required = false) QuotationCreateRequestDTO request) {
         try {
             Store store       = customerContext.store(slug);
             Customer customer = customerContext.customer(authentication, store);
@@ -48,7 +50,8 @@ public class CustomerQuotationController {
             // cotizado), por lo que aquí solo hay que crear la cotización y desactivar.
             ShoppingCart cart = shoppingCartService.getOrCreateCart(customer);
 
-            Quotation quotation = quotationService.createFromCart(cart);
+            String description = request != null ? request.getDescription() : null;
+            Quotation quotation = quotationService.createFromCart(cart, description);
             // Desactivar el carrito SOLO tras crear la cotización con éxito, para que
             // el próximo GET /cart devuelva un carrito nuevo y vacío. Si createFromCart
             // lanza (carrito vacío o, en una carrera, ya cotizado), el carrito NO se

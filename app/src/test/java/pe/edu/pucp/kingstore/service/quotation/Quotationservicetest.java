@@ -206,6 +206,20 @@ class QuotationServiceTest {
     }
 
     @Test
+    void approveOrRejectQuotation_shouldNotOverwriteCustomerDescriptionWithObservations() {
+        Quotation quotation = quotation(1, cart(5), List.of(), 0);
+        quotation.setStatus(QuotationStatus.PENDING);
+        quotation.setDescription("Necesito polos para evento corporativo");
+        when(quotationRepository.findById(1)).thenReturn(Optional.of(quotation));
+        when(quotationRepository.save(any(Quotation.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Quotation result = service.respond(1, QuotationStatus.APPROVED, "Aprobado para entrega el viernes");
+
+        assertThat(result.getDescription()).isEqualTo("Necesito polos para evento corporativo");
+        assertThat(result.getObservations()).isEqualTo("Aprobado para entrega el viernes");
+    }
+
+    @Test
     void respondThrowsResourceNotFoundWhenQuotationMissing() {
         when(quotationRepository.findById(1)).thenReturn(Optional.empty());
 
@@ -314,6 +328,8 @@ class QuotationServiceTest {
         quotation.setStatus(QuotationStatus.APPROVED);
         quotation.setSubTotal(30.0);
         quotation.setTotalAmount(25.0);
+        quotation.setDescription("Necesito polos para evento corporativo");
+        quotation.setObservations("Aprobado con stock disponible");
 
         var dto = service.toResponseDTO(quotation, 10);
 
@@ -322,6 +338,8 @@ class QuotationServiceTest {
         assertThat(dto.getStatus()).isEqualTo(QuotationStatus.APPROVED);
         assertThat(dto.getStatusLabel()).isEqualTo("Aprobada");
         assertThat(dto.getStoreId()).isEqualTo(10);
+        assertThat(dto.getDescription()).isEqualTo("Necesito polos para evento corporativo");
+        assertThat(dto.getObservations()).isEqualTo("Aprobado con stock disponible");
         assertThat(dto.getItems()).hasSize(1);
         assertThat(dto.getItems().get(0).getVariant()).isEqualTo("M / BLACK");
         assertThat(dto.getItems().get(0).getSubTotal()).isEqualTo(30.0);
@@ -393,6 +411,65 @@ class QuotationServiceTest {
         assertThat(result.getStatus()).isEqualTo(QuotationStatus.PENDING);
         assertThat(result.getItems()).hasSize(1);
         assertThat(result.getItems().get(0).getQuantity()).isEqualTo(2);
+    }
+
+    @Test
+    void createQuotation_withDescription_shouldPersistDescription() {
+        pe.edu.pucp.kingstore.domain.model.product.Product product =
+                new pe.edu.pucp.kingstore.domain.model.product.Product();
+        product.setId(1);
+
+        ProductVariant variant = new ProductVariant();
+        variant.setId(1);
+        variant.setProduct(product);
+
+        pe.edu.pucp.kingstore.domain.model.cart.CartItem cartItem =
+                new pe.edu.pucp.kingstore.domain.model.cart.CartItem();
+        cartItem.setId(1);
+        cartItem.setProductVariant(variant);
+        cartItem.setQuantity(2);
+        cartItem.setPrice(100.0);
+        cartItem.setSubtotal(200.0);
+
+        ShoppingCart cart = cart(1);
+        cart.setItems(new java.util.ArrayList<>(List.of(cartItem)));
+        cart.setDiscount(0.0);
+
+        when(quotationRepository.findByShoppingCartId(1)).thenReturn(Optional.empty());
+        when(quotationRepository.save(any(Quotation.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Quotation result = service.createFromCart(cart, "  Necesito polos para evento corporativo  ");
+
+        assertThat(result.getDescription()).isEqualTo("Necesito polos para evento corporativo");
+    }
+
+    @Test
+    void createQuotation_withoutDescription_shouldStillWork() {
+        pe.edu.pucp.kingstore.domain.model.product.Product product =
+                new pe.edu.pucp.kingstore.domain.model.product.Product();
+        ProductVariant variant = new ProductVariant();
+        variant.setProduct(product);
+
+        pe.edu.pucp.kingstore.domain.model.cart.CartItem cartItem =
+                new pe.edu.pucp.kingstore.domain.model.cart.CartItem();
+        cartItem.setProductVariant(variant);
+        cartItem.setQuantity(1);
+        cartItem.setPrice(50.0);
+        cartItem.setSubtotal(50.0);
+
+        ShoppingCart cart = cart(1);
+        cart.setItems(new java.util.ArrayList<>(List.of(cartItem)));
+        cart.setDiscount(0.0);
+
+        when(quotationRepository.findByShoppingCartId(1)).thenReturn(Optional.empty());
+        when(quotationRepository.save(any(Quotation.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Quotation result = service.createFromCart(cart, "   ");
+
+        assertThat(result.getDescription()).isNull();
+        assertThat(result.getStatus()).isEqualTo(QuotationStatus.PENDING);
     }
 
     @Test

@@ -36,6 +36,11 @@ public class QuotationService extends AbstractCrudService<Quotation> {
      */
     @Transactional
     public Quotation createFromCart(ShoppingCart cart) {
+        return createFromCart(cart, null);
+    }
+
+    @Transactional
+    public Quotation createFromCart(ShoppingCart cart, String description) {
         if (cart.getItems() == null || cart.getItems().isEmpty()) {
             throw new BusinessRuleException("Cart must have at least one item to create a quotation");
         }
@@ -49,6 +54,7 @@ public class QuotationService extends AbstractCrudService<Quotation> {
         quotation.setShoppingCart(cart);
         quotation.setStatus(QuotationStatus.PENDING);
         quotation.setDiscount(cart.getDiscount());
+        quotation.setDescription(normalizeDescription(description));
 
         List<QuotationItem> items = cart.getItems().stream().map(cartItem -> {
             QuotationItem qi = new QuotationItem();
@@ -61,6 +67,13 @@ public class QuotationService extends AbstractCrudService<Quotation> {
 
         quotation.setItems(new java.util.ArrayList<>(items));
         return create(quotation);
+    }
+
+    private String normalizeDescription(String description) {
+        if (description == null || description.isBlank()) {
+            return null;
+        }
+        return description.trim();
     }
 
     /**

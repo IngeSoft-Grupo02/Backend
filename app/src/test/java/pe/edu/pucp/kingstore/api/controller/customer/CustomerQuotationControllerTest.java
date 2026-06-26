@@ -8,6 +8,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import pe.edu.pucp.kingstore.api.context.CustomerContext;
+import pe.edu.pucp.kingstore.domain.dto.quotation.QuotationCreateRequestDTO;
 import pe.edu.pucp.kingstore.domain.dto.quotation.QuotationResponseDTO;
 import pe.edu.pucp.kingstore.domain.model.cart.ShoppingCart;
 import pe.edu.pucp.kingstore.domain.model.quotation.Quotation;
@@ -72,13 +73,32 @@ class CustomerQuotationControllerTest {
         when(customerContext.store("tienda-luna")).thenReturn(store);
         when(customerContext.customer(authentication, store)).thenReturn(customer);
         when(shoppingCartService.getOrCreateCart(customer)).thenReturn(cart);
-        when(quotationService.createFromCart(cart)).thenReturn(quotation);
+        when(quotationService.createFromCart(cart, null)).thenReturn(quotation);
         when(quotationService.toResponseDTO(quotation, 10)).thenReturn(responseDTO);
 
-        var result = controller.create("tienda-luna", authentication);
+        var result = controller.create("tienda-luna", authentication, null);
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(((QuotationResponseDTO) result.getBody()).getId()).isEqualTo(1);
+    }
+
+    @Test
+    void createQuotation_withDescription_shouldPersistDescription() {
+        QuotationCreateRequestDTO request = new QuotationCreateRequestDTO();
+        request.setDescription("Necesito polos para evento corporativo");
+        responseDTO.setDescription("Necesito polos para evento corporativo");
+
+        when(customerContext.store("tienda-luna")).thenReturn(store);
+        when(customerContext.customer(authentication, store)).thenReturn(customer);
+        when(shoppingCartService.getOrCreateCart(customer)).thenReturn(cart);
+        when(quotationService.createFromCart(cart, "Necesito polos para evento corporativo")).thenReturn(quotation);
+        when(quotationService.toResponseDTO(quotation, 10)).thenReturn(responseDTO);
+
+        var result = controller.create("tienda-luna", authentication, request);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(((QuotationResponseDTO) result.getBody()).getDescription())
+                .isEqualTo("Necesito polos para evento corporativo");
     }
 
     @Test
@@ -86,10 +106,10 @@ class CustomerQuotationControllerTest {
         when(customerContext.store("tienda-luna")).thenReturn(store);
         when(customerContext.customer(authentication, store)).thenReturn(customer);
         when(shoppingCartService.getOrCreateCart(customer)).thenReturn(cart);
-        when(quotationService.createFromCart(cart))
+        when(quotationService.createFromCart(cart, null))
                 .thenThrow(new BusinessRuleException("Cart must have at least one item"));
 
-        var result = controller.create("tienda-luna", authentication);
+        var result = controller.create("tienda-luna", authentication, null);
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
@@ -102,10 +122,10 @@ class CustomerQuotationControllerTest {
         when(customerContext.store("tienda-luna")).thenReturn(store);
         when(customerContext.customer(authentication, store)).thenReturn(customer);
         when(shoppingCartService.getOrCreateCart(customer)).thenReturn(cart);
-        when(quotationService.createFromCart(cart))
+        when(quotationService.createFromCart(cart, null))
                 .thenThrow(new BusinessRuleException("Cart already has a quotation"));
 
-        var result = controller.create("tienda-luna", authentication);
+        var result = controller.create("tienda-luna", authentication, null);
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         verify(shoppingCartService, never()).deactivate(anyInt());
@@ -116,10 +136,10 @@ class CustomerQuotationControllerTest {
         when(customerContext.store("tienda-luna")).thenReturn(store);
         when(customerContext.customer(authentication, store)).thenReturn(customer);
         when(shoppingCartService.getOrCreateCart(customer)).thenReturn(cart);
-        when(quotationService.createFromCart(cart)).thenReturn(quotation);
+        when(quotationService.createFromCart(cart, null)).thenReturn(quotation);
         when(quotationService.toResponseDTO(quotation, 10)).thenReturn(responseDTO);
 
-        controller.create("tienda-luna", authentication);
+        controller.create("tienda-luna", authentication, null);
 
         verify(shoppingCartService).deactivate(1);
     }
@@ -159,6 +179,7 @@ class CustomerQuotationControllerTest {
 
     @Test
     void findByIdReturnsQuotation() {
+        responseDTO.setDescription("Necesito polos para evento corporativo");
         when(customerContext.store("tienda-luna")).thenReturn(store);
         when(customerContext.customer(authentication, store)).thenReturn(customer);
         when(quotationService.findByCustomerInStore(1, 1, 10)).thenReturn(quotation);
@@ -167,6 +188,8 @@ class CustomerQuotationControllerTest {
         var result = controller.findById("tienda-luna", 1, authentication);
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(((QuotationResponseDTO) result.getBody()).getDescription())
+                .isEqualTo("Necesito polos para evento corporativo");
     }
 
     @Test

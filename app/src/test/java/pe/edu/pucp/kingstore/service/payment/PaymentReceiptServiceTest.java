@@ -48,6 +48,7 @@ class PaymentReceiptServiceTest {
                 order,
                 null,
                 null,
+                "BOLETA",
                 "4111 1111 1111 1111",
                 "Ana Perez",
                 futureExpiry(),
@@ -55,6 +56,7 @@ class PaymentReceiptServiceTest {
         );
 
         assertThat(receipt.getOrder()).isSameAs(order);
+        assertThat(receipt.getReceiptType()).isEqualTo(ReceiptType.BOLETA);
         assertThat(receipt.getRuc()).isEqualTo("00000000000");
         assertThat(receipt.getPaymentMethod()).isEqualTo(PaymentMethod.VIRTUAL);
         assertThat(receipt.getFinalTotal()).isEqualTo(118.0);
@@ -72,11 +74,11 @@ class PaymentReceiptServiceTest {
                 order,
                 "20123456789",
                 PaymentMethod.CASH_ON_DELIVERY,
+                "FACTURA",
                 "4111111111111111",
                 "Ana Perez",
                 futureExpiry(),
-                "123",
-                ReceiptType.FACTURA
+                "123"
         );
 
         assertThat(receipt.getReceiptType()).isEqualTo(ReceiptType.FACTURA);
@@ -86,11 +88,27 @@ class PaymentReceiptServiceTest {
     }
 
     @Test
+    void simulatePaymentRejectsMissingOrInvalidReceiptType() {
+        Order order = order(OrderStatus.PAYMENT_CONFIRMED);
+        when(paymentReceiptRepository.findByOrderId(77)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.simulatePayment(
+                order, null, PaymentMethod.VIRTUAL, null, "4111111111111111", "Ana Perez", futureExpiry(), "123"
+        )).isInstanceOf(BusinessRuleException.class)
+                .hasMessage("Receipt type is required (BOLETA or FACTURA)");
+
+        assertThatThrownBy(() -> service.simulatePayment(
+                order, null, PaymentMethod.VIRTUAL, "TICKET", "4111111111111111", "Ana Perez", futureExpiry(), "123"
+        )).isInstanceOf(BusinessRuleException.class)
+                .hasMessage("Receipt type is required (BOLETA or FACTURA)");
+    }
+
+    @Test
     void simulatePaymentRejectsInvalidOrderAndExistingReceipt() {
         Order pending = order(OrderStatus.IN_PREPARATION);
 
         assertThatThrownBy(() -> service.simulatePayment(
-                pending, null, null, "4111111111111111", "Ana Perez", futureExpiry(), "123"
+                pending, null, null, "BOLETA", "4111111111111111", "Ana Perez", futureExpiry(), "123"
         )).isInstanceOf(BusinessRuleException.class)
                 .hasMessage("Only confirmed orders can be paid");
 
@@ -98,7 +116,7 @@ class PaymentReceiptServiceTest {
         when(paymentReceiptRepository.findByOrderId(77)).thenReturn(Optional.of(new PaymentReceipt()));
 
         assertThatThrownBy(() -> service.simulatePayment(
-                confirmed, null, null, "4111111111111111", "Ana Perez", futureExpiry(), "123"
+                confirmed, null, null, "BOLETA", "4111111111111111", "Ana Perez", futureExpiry(), "123"
         )).isInstanceOf(BusinessRuleException.class)
                 .hasMessage("Order already has a payment receipt");
     }
@@ -109,22 +127,22 @@ class PaymentReceiptServiceTest {
         when(paymentReceiptRepository.findByOrderId(77)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.simulatePayment(
-                order, null, null, "4111", "Ana Perez", futureExpiry(), "123"
+                order, null, null, "BOLETA", "4111", "Ana Perez", futureExpiry(), "123"
         )).isInstanceOf(BusinessRuleException.class)
                 .hasMessage("Card number must have 16 digits");
 
         assertThatThrownBy(() -> service.simulatePayment(
-                order, null, null, "411111111111111A", "Ana Perez", futureExpiry(), "123"
+                order, null, null, "BOLETA", "411111111111111A", "Ana Perez", futureExpiry(), "123"
         )).isInstanceOf(BusinessRuleException.class)
                 .hasMessage("Card number must contain only digits");
 
         assertThatThrownBy(() -> service.simulatePayment(
-                order, null, null, "4111111111111111", " ", futureExpiry(), "123"
+                order, null, null, "BOLETA", "4111111111111111", " ", futureExpiry(), "123"
         )).isInstanceOf(BusinessRuleException.class)
                 .hasMessage("Card holder name is required");
 
         assertThatThrownBy(() -> service.simulatePayment(
-                order, null, null, "4111111111111111", "Ana Perez", futureExpiry(), "12"
+                order, null, null, "BOLETA", "4111111111111111", "Ana Perez", futureExpiry(), "12"
         )).isInstanceOf(BusinessRuleException.class)
                 .hasMessage("CVV must have 3 digits");
     }
@@ -135,32 +153,32 @@ class PaymentReceiptServiceTest {
         when(paymentReceiptRepository.findByOrderId(77)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.simulatePayment(
-                order, null, null, "4111111111111111", "Ana Perez", "13/30", "123"
+                order, null, null, "BOLETA", "4111111111111111", "Ana Perez", "13/30", "123"
         )).isInstanceOf(BusinessRuleException.class)
                 .hasMessage("Expiry date must be in MM/YY format");
 
         assertThatThrownBy(() -> service.simulatePayment(
-                order, null, null, "4111111111111111", "Ana Perez", "01/20", "123"
+                order, null, null, "BOLETA", "4111111111111111", "Ana Perez", "01/20", "123"
         )).isInstanceOf(BusinessRuleException.class)
                 .hasMessage("Card has expired");
 
         assertThatThrownBy(() -> service.simulatePayment(
-                order, null, null, "4111111111110000", "Ana Perez", futureExpiry(), "123"
+                order, null, null, "BOLETA", "4111111111110000", "Ana Perez", futureExpiry(), "123"
         )).isInstanceOf(BusinessRuleException.class)
                 .hasMessage("Payment declined — card rejected by issuer");
 
         assertThatThrownBy(() -> service.simulatePayment(
-                order, null, PaymentMethod.VIRTUAL, "4111111111111111", "Ana Perez", futureExpiry(), "123", ReceiptType.FACTURA
+                order, null, PaymentMethod.VIRTUAL, "FACTURA", "4111111111111111", "Ana Perez", futureExpiry(), "123"
         )).isInstanceOf(BusinessRuleException.class)
                 .hasMessage("RUC is required for invoices");
 
         assertThatThrownBy(() -> service.simulatePayment(
-                order, "123", PaymentMethod.VIRTUAL, "4111111111111111", "Ana Perez", futureExpiry(), "123", ReceiptType.FACTURA
+                order, "123", PaymentMethod.VIRTUAL, "FACTURA", "4111111111111111", "Ana Perez", futureExpiry(), "123"
         )).isInstanceOf(BusinessRuleException.class)
                 .hasMessage("RUC must have 11 digits");
 
         assertThatThrownBy(() -> service.simulatePayment(
-                order, "15123456789", PaymentMethod.VIRTUAL, "4111111111111111", "Ana Perez", futureExpiry(), "123", ReceiptType.FACTURA
+                order, "15123456789", PaymentMethod.VIRTUAL, "FACTURA", "4111111111111111", "Ana Perez", futureExpiry(), "123"
         )).isInstanceOf(BusinessRuleException.class)
                 .hasMessage("RUC must start with 10 or 20");
     }
