@@ -8,10 +8,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
 import pe.edu.pucp.kingstore.domain.dto.product.ProductRequestDTO;
 import pe.edu.pucp.kingstore.domain.dto.product.ProductResponseDTO;
+import pe.edu.pucp.kingstore.domain.model.product.Discount;
 import pe.edu.pucp.kingstore.domain.model.product.Product;
 import pe.edu.pucp.kingstore.domain.model.product.ProductVariant;
 import pe.edu.pucp.kingstore.domain.model.product.enums.Color;
 import pe.edu.pucp.kingstore.domain.model.product.enums.ProductStatus;
+import pe.edu.pucp.kingstore.domain.model.product.enums.VolumeType;
 import pe.edu.pucp.kingstore.domain.model.store.Store;
 import pe.edu.pucp.kingstore.repository.product.DiscountRepository;
 import pe.edu.pucp.kingstore.repository.product.ProductRepository;
@@ -328,6 +330,125 @@ class ProductServiceCoverageTest {
         Product saved = service.createForStore(store(), dto);
 
         assertThat(saved.getImageUrls()).isEmpty();
+    }
+
+    // =========================================================================
+    // public catalog
+    // =========================================================================
+
+    @Test
+    void findPublicByStoreReturnsOnlyActiveStatusProducts() {
+        Product active = product(1, store());
+        active.setStatus(ProductStatus.ACTIVE);
+        Product draft = product(2, store());
+        draft.setStatus(ProductStatus.DRAFT);
+        Product inactive = product(3, store());
+        inactive.setStatus(ProductStatus.INACTIVE);
+        when(productRepository.findByStoreIdAndActive(10, true)).thenReturn(List.of(active, draft, inactive));
+
+        List<Product> result = service.findPublicByStore(10);
+
+        assertThat(result).containsExactly(active);
+    }
+
+    @Test
+    void findPublicInStoreReturnsActiveProductInSameStore() {
+        Product product = product(1, store());
+        product.setActive(true);
+        product.setStatus(ProductStatus.ACTIVE);
+        when(productRepository.findById(1)).thenReturn(Optional.of(product));
+
+        assertThat(service.findPublicInStore(1, 10)).isEqualTo(product);
+    }
+
+    @Test
+    void findPublicInStoreThrowsWhenStoreDiffersInactiveOrNotActiveStatus() {
+        Product differentStore = product(1, store());
+        differentStore.setActive(true);
+        differentStore.setStatus(ProductStatus.ACTIVE);
+        when(productRepository.findById(1)).thenReturn(Optional.of(differentStore));
+
+        assertThatThrownBy(() -> service.findPublicInStore(1, 99))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        Product inactive = product(2, store());
+        inactive.setActive(false);
+        inactive.setStatus(ProductStatus.ACTIVE);
+        when(productRepository.findById(2)).thenReturn(Optional.of(inactive));
+
+        assertThatThrownBy(() -> service.findPublicInStore(2, 10))
+                .isInstanceOf(ResourceNotFoundException.class);
+
+        Product draft = product(3, store());
+        draft.setActive(true);
+        draft.setStatus(ProductStatus.DRAFT);
+        when(productRepository.findById(3)).thenReturn(Optional.of(draft));
+
+        assertThatThrownBy(() -> service.findPublicInStore(3, 10))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void toPublicDTOIncludesOnlyStockedVariantsAndActiveApplicableDiscounts() {
+        Store store = store();
+        Product product = product(1, store);
+        product.setDescription("Polo premium");
+        product.setImageUrls(List.of("https://cdn.test/polo.png"));
+        ProductVariant stocked = new ProductVariant();
+        stocked.setId(11);
+        stocked.setSize("M");
+        stocked.setColor(Color.BLUE);
+        stocked.setStock(4);
+        ProductVariant empty = new ProductVariant();
+        empty.setId(12);
+        empty.setSize("S");
+        empty.setColor(Color.RED);
+        empty.setStock(0);
+        product.setVariants(List.of(stocked, empty));
+
+        Discount global = discount(1, "Mayorista", null, true);
+        Discount specific = discount(2, "Producto", product, true);
+        Product otherProduct = product(99, store);
+        Discount other = discount(3, "Otro", otherProduct, true);
+        Discount inactive = discount(4, "Inactivo", null, false);
+        when(discountRepository.findByStoreId(10)).thenReturn(List.of(global, specific, other, inactive));
+
+        var dto = service.toPublicDTO(product);
+
+        assertThat(dto.getId()).isEqualTo(1);
+        assertThat(dto.getName()).isEqualTo("Polo");
+        assertThat(dto.getDescription()).isEqualTo("Polo premium");
+        assertThat(dto.getImageUrls()).containsExactly("https://cdn.test/polo.png");
+        assertThat(dto.getVariants()).hasSize(1);
+        assertThat(dto.getVariants().get(0).getStock()).isEqualTo(4);
+        assertThat(dto.getDiscounts()).extracting("name").containsExactly("Mayorista", "Producto");
+    }
+
+    @Test
+    void toPublicDTOHandlesNullVariantsAndImages() {
+        Product product = product(1, store());
+        product.setVariants(null);
+        product.setImageUrls(null);
+        when(discountRepository.findByStoreId(10)).thenReturn(List.of());
+
+        var dto = service.toPublicDTO(product);
+
+        assertThat(dto.getVariants()).isEmpty();
+        assertThat(dto.getDiscounts()).isEmpty();
+        assertThat(dto.getImageUrls()).isEmpty();
+    }
+
+    private Discount discount(int id, String name, Product product, boolean active) {
+        Discount discount = new Discount();
+        discount.setId(id);
+        discount.setName(name);
+        discount.setProduct(product);
+        discount.setActive(active);
+        discount.setVolumeType(VolumeType.UNIT);
+        discount.setMinQuantity(1);
+        discount.setMaxQuantity(10);
+        discount.setDiscountPercentage(5.0);
+        return discount;
     }
 
     // =========================================================================

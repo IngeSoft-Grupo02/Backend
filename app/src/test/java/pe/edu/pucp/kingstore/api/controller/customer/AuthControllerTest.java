@@ -82,6 +82,39 @@ class AuthControllerTest {
 
         assertThat(inactiveResponse.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
         assertThat(((Map<?, ?>) inactiveResponse.getBody()).get("code")).isEqualTo("ACCOUNT_INACTIVE");
+
+        LoginRequestDTO badPassword = new LoginRequestDTO();
+        badPassword.setEmail("bad-password@test.com");
+        when(userAccountService.authenticate(badPassword)).thenThrow(new BusinessRuleException("BAD_CREDENTIALS"));
+        ResponseEntity<?> badPasswordResponse = controller.login(badPassword);
+        assertThat(badPasswordResponse.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(((Map<?, ?>) badPasswordResponse.getBody()).get("code")).isEqualTo("BAD_CREDENTIALS");
+
+        LoginRequestDTO roleMissing = new LoginRequestDTO();
+        roleMissing.setEmail("role-missing@test.com");
+        when(userAccountService.authenticate(roleMissing)).thenThrow(new BusinessRuleException("ROLE_NOT_ASSIGNED"));
+        ResponseEntity<?> roleMissingResponse = controller.login(roleMissing);
+        assertThat(roleMissingResponse.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(((Map<?, ?>) roleMissingResponse.getBody()).get("message"))
+                .isEqualTo("Esta cuenta no tiene un rol asignado.");
+
+        LoginRequestDTO emailRequired = new LoginRequestDTO();
+        emailRequired.setEmail("email-required@test.com");
+        when(userAccountService.authenticate(emailRequired)).thenThrow(new BusinessRuleException("Email is required"));
+        assertThat(((Map<?, ?>) controller.login(emailRequired).getBody()).get("message"))
+                .isEqualTo("Ingresa tu correo electrÃƒÂ³nico.");
+
+        LoginRequestDTO passwordRequired = new LoginRequestDTO();
+        passwordRequired.setEmail("password-required@test.com");
+        when(userAccountService.authenticate(passwordRequired)).thenThrow(new BusinessRuleException("Password is required"));
+        assertThat(((Map<?, ?>) controller.login(passwordRequired).getBody()).get("message"))
+                .isEqualTo("Ingresa tu contraseÃƒÂ±a.");
+
+        LoginRequestDTO unknown = new LoginRequestDTO();
+        unknown.setEmail("unknown-error@test.com");
+        when(userAccountService.authenticate(unknown)).thenThrow(new BusinessRuleException("OTHER"));
+        assertThat(((Map<?, ?>) controller.login(unknown).getBody()).get("message"))
+                .isEqualTo("No se pudo iniciar sesiÃƒÂ³n. Revisa tus credenciales.");
     }
 
     @Test

@@ -74,6 +74,20 @@ class PasswordResetServiceTest {
     }
 
     @Test
+    void ignoresBlankAndInactiveAccountsWithoutSendingEmail() {
+        service.requestReset(" ");
+
+        UserAccount inactive = activeAccount();
+        inactive.setActive(false);
+        when(userAccountRepository.findByEmail(inactive.getEmail())).thenReturn(Optional.of(inactive));
+
+        service.requestReset(inactive.getEmail());
+
+        verify(tokenRepository, never()).save(any());
+        verify(mailSender, never()).send(any(SimpleMailMessage.class));
+    }
+
+    @Test
     void createsHashedTokenAndSendsAdminLink() {
         UserAccount account = activeAccount();
         SystemAdministrator administrator = new SystemAdministrator();
@@ -181,6 +195,53 @@ class PasswordResetServiceTest {
     }
 
     @Test
+    void ignoresCustomerResetWhenStoreSlugBelongsToAnotherStore() {
+        UserAccount account = activeAccount();
+        when(userAccountRepository.findByEmail(account.getEmail())).thenReturn(Optional.of(account));
+        when(customerRepository.findByUserAccountIdAndStore_Slug(7, "otra-tienda")).thenReturn(Optional.empty());
+        when(customerRepository.existsByUserAccountId(7)).thenReturn(true);
+
+        service.requestReset(account.getEmail(), " otra-tienda ");
+
+        verify(tokenRepository, never()).save(any());
+        verify(mailSender, never()).send(any(SimpleMailMessage.class));
+    }
+
+    @Test
+    void ignoresResetWhenAccountHasNoRole() {
+        UserAccount account = activeAccount();
+        when(userAccountRepository.findByEmail(account.getEmail())).thenReturn(Optional.of(account));
+        when(customerRepository.existsByUserAccountId(7)).thenReturn(false);
+        when(merchantRepository.findByUserAccountId(7)).thenReturn(Optional.empty());
+        when(administratorRepository.findByUserAccountId(7)).thenReturn(Optional.empty());
+
+        service.requestReset(account.getEmail());
+
+        verify(tokenRepository, never()).save(any());
+        verify(mailSender, never()).send(any(SimpleMailMessage.class));
+    }
+
+    @Test
+    void fallsBackToKingstoreBrandWhenCustomerStoreNameIsBlank() {
+        UserAccount account = activeAccount();
+        Store store = new Store();
+        store.setStoreName("  ");
+        Customer customer = new Customer();
+        customer.setUserAccount(account);
+        customer.setStore(store);
+        when(userAccountRepository.findByEmail(account.getEmail())).thenReturn(Optional.of(account));
+        when(customerRepository.findByUserAccountIdAndStore_Slug(7, "tienda")).thenReturn(Optional.of(customer));
+        when(tokenRepository.findAllByUserAccountIdAndActiveTrue(7)).thenReturn(List.of());
+
+        service.requestReset(account.getEmail(), "tienda");
+
+        ArgumentCaptor<SimpleMailMessage> mailCaptor = ArgumentCaptor.forClass(SimpleMailMessage.class);
+        verify(mailSender).send(mailCaptor.capture());
+        assertThat(mailCaptor.getValue().getSubject())
+                .isEqualTo("Kingstore - Recuperación de contraseña");
+    }
+
+    @Test
     void resetsPasswordAndConsumesToken() {
         UserAccount account = activeAccount();
         PasswordResetToken token = new PasswordResetToken();
@@ -227,6 +288,93 @@ class PasswordResetServiceTest {
         assertThatThrownBy(() -> service.resetPassword(request))
                 .isInstanceOf(BusinessRuleException.class)
                 .hasMessage("RESET_TOKEN_INVALID");
+    }
+
+    @Test
+    void rejectsMissingTokenAndUsedOrInactiveAccountTokens() {
+        assertThatThrownBy(() -> service.resetPassword(null))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessage("RESET_TOKEN_INVALID");
+
+        PasswordResetConfirmDTO missingToken = new PasswordResetConfirmDTO();
+        missingToken.setToken(" ");
+        missingToken.setNewPassword("NuevaClave1*");
+        assertThatThrownBy(() -> service.resetPassword(missingToken))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessage("RESET_TOKEN_INVALID");
+
+        PasswordResetToken used = new PasswordResetToken();
+        used.setUserAccount(activeAccount());
+        used.setUsedAt(LocalDateTime.now());
+        used.setExpiresAt(LocalDateTime.now().plusMinutes(5));
+        used.setActive(true);
+        when(tokenRepository.findByTokenHashAndActiveTrue(any())).thenReturn(Optional.of(used));
+
+        PasswordResetConfirmDTO request = new PasswordResetConfirmDTO();
+        request.setToken("used");
+        request.setNewPassword("NuevaClave1*");
+        assertThatThrownBy(() -> service.resetPassword(request))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessage("RESET_TOKEN_INVALID");
+
+        UserAccount inactive = activeAccount();
+        inactive.setActive(false);
+        PasswordResetToken inactiveAccount = new PasswordResetToken();
+        inactiveAccount.setUserAccount(inactive);
+        inactiveAccount.setExpiresAt(LocalDateTime.now().plusMinutes(5));
+        inactiveAccount.setActive(true);
+        when(tokenRepository.findByTokenHashAndActiveTrue(any())).thenReturn(Optional.of(inactiveAccount));
+        assertThatThrownBy(() -> service.resetPassword(request))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessage("RESET_TOKEN_INVALID");
+    }
+
+    @Test
+    void isTokenValidReturnsFalseForBlankMissingUsedExpiredOrInactiveAccountToken() {
+        assertThat(service.isTokenValid(" ")).isFalse();
+        when(tokenRepository.findByTokenHashAndActiveTrue(any())).thenReturn(Optional.empty());
+        assertThat(service.isTokenValid("missing")).isFalse();
+
+        PasswordResetToken used = new PasswordResetToken();
+        used.setUserAccount(activeAccount());
+        used.setUsedAt(LocalDateTime.now());
+        used.setExpiresAt(LocalDateTime.now().plusMinutes(5));
+        when(tokenRepository.findByTokenHashAndActiveTrue(any())).thenReturn(Optional.of(used));
+        assertThat(service.isTokenValid("used")).isFalse();
+
+        PasswordResetToken valid = new PasswordResetToken();
+        valid.setUserAccount(activeAccount());
+        valid.setExpiresAt(LocalDateTime.now().plusMinutes(5));
+        when(tokenRepository.findByTokenHashAndActiveTrue(any())).thenReturn(Optional.of(valid));
+        assertThat(service.isTokenValid("valid")).isTrue();
+    }
+
+    @Test
+    void requestResetFailsFastWhenMailSenderIsNotConfigured() {
+        PasswordResetService serviceWithoutMailFrom = new PasswordResetService(
+                userAccountRepository,
+                tokenRepository,
+                customerRepository,
+                merchantRepository,
+                administratorRepository,
+                storeRepository,
+                mailSender,
+                " ",
+                " ",
+                30
+        );
+        UserAccount account = activeAccount();
+        SystemAdministrator administrator = new SystemAdministrator();
+        administrator.setUserAccount(account);
+        when(userAccountRepository.findByEmail(account.getEmail())).thenReturn(Optional.of(account));
+        when(customerRepository.existsByUserAccountId(7)).thenReturn(false);
+        when(merchantRepository.findByUserAccountId(7)).thenReturn(Optional.empty());
+        when(administratorRepository.findByUserAccountId(7)).thenReturn(Optional.of(administrator));
+        when(tokenRepository.findAllByUserAccountIdAndActiveTrue(7)).thenReturn(List.of());
+
+        assertThatThrownBy(() -> serviceWithoutMailFrom.requestReset(account.getEmail()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("MAIL_USERNAME must be configured to send password reset emails");
     }
 
     private UserAccount activeAccount() {

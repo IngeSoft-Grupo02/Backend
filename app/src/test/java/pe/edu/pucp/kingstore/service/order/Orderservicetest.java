@@ -467,6 +467,34 @@ class OrderServiceTest {
     }
 
     @Test
+    void findByCustomerAndStoreSkipsNullItemsAndFindsOrderInStore() {
+        Order nullItemOrder = order(1, quotation(5), OrderStatus.PAYMENT_CONFIRMED);
+        ArrayList<OrderItem> inconsistentItems = new ArrayList<>();
+        inconsistentItems.add(null);
+        nullItemOrder.setItems(inconsistentItems);
+
+        pe.edu.pucp.kingstore.domain.model.store.Store store =
+                new pe.edu.pucp.kingstore.domain.model.store.Store();
+        store.setId(10);
+        pe.edu.pucp.kingstore.domain.model.product.Product product =
+                new pe.edu.pucp.kingstore.domain.model.product.Product();
+        product.setStore(store);
+        ProductVariant variant = new ProductVariant();
+        variant.setProduct(product);
+        OrderItem item = new OrderItem();
+        item.setProductVariant(variant);
+        Order matching = order(2, quotation(6), OrderStatus.PAYMENT_CONFIRMED);
+        matching.setItems(new ArrayList<>(List.of(item)));
+
+        when(orderRepository.findByQuotation_ShoppingCart_Customer_Id(1))
+                .thenReturn(List.of(nullItemOrder, matching));
+
+        assertThat(service.findByCustomerInStore(2, 1, 10)).isSameAs(matching);
+        assertThatThrownBy(() -> service.findByCustomerInStore(99, 1, 10))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
     void toResponseDTOStatusLabelPaymentConfirmedAndDelivered() {
         Order confirmed = order(5, quotation(5), OrderStatus.PAYMENT_CONFIRMED);
         confirmed.setItems(null);
@@ -591,6 +619,8 @@ class OrderServiceTest {
         Order order = new Order();
         order.setId(1);
         order.setStatus(OrderStatus.IN_PREPARATION);
+        Quotation quotation = quotation(5);
+        order.setQuotation(quotation);
         when(orderRepository.findById(1)).thenReturn(Optional.of(order));
         when(orderRepository.save(any(Order.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -598,6 +628,7 @@ class OrderServiceTest {
         Order result = service.cancel(1, "Cliente desistió");
 
         assertThat(result.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        assertThat(quotation.getObservations()).isEqualTo("Cliente desistió");
     }
 
     @Test
@@ -617,6 +648,11 @@ class OrderServiceTest {
         assertThatThrownBy(() -> service.cancel(1, "motivo"))
                 .isInstanceOf(BusinessRuleException.class)
                 .hasMessageContaining("cannot be cancelled");
+
+        order.setStatus(OrderStatus.CANCELLED);
+        assertThatThrownBy(() -> service.cancel(1, "motivo"))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("cannot be cancelled");
     }
 
 // =========================================================================
@@ -628,6 +664,8 @@ class OrderServiceTest {
         Order order = new Order();
         order.setId(1);
         order.setStatus(OrderStatus.IN_PREPARATION);
+        ShippingDetail shipping = new ShippingDetail();
+        order.setShippingDetail(shipping);
         when(orderRepository.findById(1)).thenReturn(Optional.of(order));
         when(orderRepository.save(any(Order.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -635,6 +673,24 @@ class OrderServiceTest {
         Order result = service.ship(1, "GU-12345");
 
         assertThat(result.getStatus()).isEqualTo(OrderStatus.IN_TRANSIT);
+        assertThat(shipping.getDescription()).isEqualTo("GU-12345");
+    }
+
+    @Test
+    void shipStoresReferenceInQuotationObservationsWhenShippingDetailIsMissing() {
+        Order order = new Order();
+        order.setId(1);
+        order.setStatus(OrderStatus.IN_PREPARATION);
+        Quotation quotation = quotation(5);
+        order.setQuotation(quotation);
+        when(orderRepository.findById(1)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Order result = service.ship(1, "MOTO-9");
+
+        assertThat(result.getStatus()).isEqualTo(OrderStatus.IN_TRANSIT);
+        assertThat(quotation.getObservations()).isEqualTo("Shipping ref: MOTO-9");
     }
 
     @Test

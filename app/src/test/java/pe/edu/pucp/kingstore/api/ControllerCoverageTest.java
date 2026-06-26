@@ -127,6 +127,8 @@ class ControllerCoverageTest {
         assertThat(controller.create(new CreateUserDTO()).getStatusCode()).isEqualTo(HttpStatus.CREATED);
         when(userAccountService.createWithRole(any())).thenThrow(new BusinessRuleException("bad"));
         assertThat(controller.create(new CreateUserDTO()).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        doThrow(new RuntimeException("boom")).when(userAccountService).createWithRole(any());
+        assertThat(controller.create(new CreateUserDTO()).getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
 
         when(userAccountService.updateUser(eq(3), any())).thenReturn(adminAccount);
         assertThat(controller.update(3, new CreateUserDTO()).getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -139,10 +141,18 @@ class ControllerCoverageTest {
         assertThat(controller.deactivate(3).getStatusCode()).isEqualTo(HttpStatus.OK);
         when(userAccountService.deactivate(98)).thenThrow(new ResourceNotFoundException("User", 98));
         assertThat(controller.deactivate(98).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        when(userAccountService.deactivate(97)).thenThrow(new BusinessRuleException("bad"));
+        assertThat(controller.deactivate(97).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        when(userAccountService.reactivate(3)).thenReturn(adminAccount);
+        assertThat(controller.reactivate(3).getStatusCode()).isEqualTo(HttpStatus.OK);
+        when(userAccountService.reactivate(98)).thenThrow(new ResourceNotFoundException("User", 98));
+        assertThat(controller.reactivate(98).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         when(userAccountService.reactivate(97)).thenThrow(new BusinessRuleException("bad"));
         assertThat(controller.reactivate(97).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
 
         when(merchantRepository.findAll()).thenReturn(List.of(merchant));
+        ResponseEntity<List<MerchantResponseDTO>> allMerchants = controller.findMerchants(null);
+        assertThat(allMerchants.getBody()).hasSize(1);
         ResponseEntity<List<MerchantResponseDTO>> merchants = controller.findMerchants("merchant");
         assertThat(merchants.getBody()).singleElement().extracting(MerchantResponseDTO::getEmail)
                 .isEqualTo("merchant@test.com");
