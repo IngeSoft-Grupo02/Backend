@@ -13,13 +13,13 @@ import pe.edu.pucp.kingstore.domain.model.order.Order;
 import pe.edu.pucp.kingstore.domain.model.order.enums.OrderStatus;
 import pe.edu.pucp.kingstore.domain.model.payment.PaymentReceipt;
 import pe.edu.pucp.kingstore.domain.model.payment.enums.PaymentMethod;
+import pe.edu.pucp.kingstore.domain.model.payment.enums.ReceiptType;
 import pe.edu.pucp.kingstore.domain.model.store.Store;
 import pe.edu.pucp.kingstore.domain.model.user.Customer;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
 import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
 import pe.edu.pucp.kingstore.service.order.OrderService;
 import pe.edu.pucp.kingstore.service.payment.PaymentReceiptService;
-import pe.edu.pucp.kingstore.domain.model.payment.enums.ReceiptType;
 
 import java.util.Map;
 
@@ -30,8 +30,8 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class CustomerPaymentControllerTest {
 
-    @Mock private CustomerContext       customerContext;
-    @Mock private OrderService          orderService;
+    @Mock private CustomerContext customerContext;
+    @Mock private OrderService orderService;
     @Mock private PaymentReceiptService paymentReceiptService;
 
     private CustomerPaymentController controller;
@@ -42,7 +42,7 @@ class CustomerPaymentControllerTest {
 
     @BeforeEach
     void setUp() {
-        controller     = new CustomerPaymentController(customerContext, orderService, paymentReceiptService);
+        controller = new CustomerPaymentController(customerContext, orderService, paymentReceiptService);
         authentication = mock(Authentication.class);
 
         store = new Store();
@@ -61,18 +61,16 @@ class CustomerPaymentControllerTest {
         PaymentRequestDTO request = new PaymentRequestDTO();
         request.setRuc("20123456789");
         request.setPaymentMethod(PaymentMethod.VIRTUAL);
+        request.setReceiptType("BOLETA");
         request.setCardNumber("4111111111111111");
         request.setCardHolder("Juan Perez");
         request.setExpiryDate("12/27");
         request.setCvv("123");
-        request.setReceiptType(ReceiptType.BOLETA);
         return request;
     }
 
-    // ── POST /stores/{slug}/orders/{id}/payment ───────────────────────────────
-
     @Test
-    void payReturns201WithReceiptInfo() {
+    void confirmPayment_withBoletaReceiptType_shouldSucceed() {
         PaymentRequestDTO request = validRequest();
         PaymentReceipt receipt = new PaymentReceipt();
         receipt.setId(1);
@@ -83,8 +81,8 @@ class CustomerPaymentControllerTest {
         when(customerContext.customer(authentication, store)).thenReturn(customer);
         when(orderService.findByCustomerInStore(1, 1, 10)).thenReturn(order);
         when(paymentReceiptService.simulatePayment(
-                order, "20123456789", PaymentMethod.VIRTUAL,
-                "4111111111111111", "Juan Perez", "12/27", "123", ReceiptType.BOLETA))
+                order, "20123456789", PaymentMethod.VIRTUAL, "BOLETA",
+                "4111111111111111", "Juan Perez", "12/27", "123"))
                 .thenReturn(receipt);
 
         var result = controller.pay("tienda-luna", 1, authentication, request);
@@ -95,11 +93,67 @@ class CustomerPaymentControllerTest {
         assertThat(body.get("receiptId")).isEqualTo(1);
         assertThat(body.get("total")).isEqualTo(200.0);
         assertThat(body.get("paymentStatus")).isEqualTo("APPROVED");
+        assertThat(body.get("receiptType")).isEqualTo("BOLETA");
     }
 
     @Test
-    void payReturnsBadRequestWhenReceiptTypeNotProvided() {
-        var result = controller.pay("tienda-luna", 1, authentication, null);
+    void confirmPayment_withFacturaReceiptType_shouldSucceed() {
+        PaymentRequestDTO request = validRequest();
+        request.setReceiptType("FACTURA");
+        PaymentReceipt receipt = new PaymentReceipt();
+        receipt.setId(1);
+        receipt.setFinalTotal(200.0);
+        receipt.setReceiptType(ReceiptType.FACTURA);
+
+        when(customerContext.store("tienda-luna")).thenReturn(store);
+        when(customerContext.customer(authentication, store)).thenReturn(customer);
+        when(orderService.findByCustomerInStore(1, 1, 10)).thenReturn(order);
+        when(paymentReceiptService.simulatePayment(
+                order, "20123456789", PaymentMethod.VIRTUAL, "FACTURA",
+                "4111111111111111", "Juan Perez", "12/27", "123"))
+                .thenReturn(receipt);
+
+        var result = controller.pay("tienda-luna", 1, authentication, request);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    }
+
+    @Test
+    void confirmPayment_withoutReceiptType_shouldFailWithClearMessage() {
+        PaymentRequestDTO request = validRequest();
+        request.setReceiptType(null);
+
+        when(customerContext.store("tienda-luna")).thenReturn(store);
+        when(customerContext.customer(authentication, store)).thenReturn(customer);
+        when(orderService.findByCustomerInStore(1, 1, 10)).thenReturn(order);
+        when(paymentReceiptService.simulatePayment(
+                order, "20123456789", PaymentMethod.VIRTUAL, null,
+                "4111111111111111", "Juan Perez", "12/27", "123"))
+                .thenThrow(new BusinessRuleException("Receipt type is required (BOLETA or FACTURA)"));
+
+        var result = controller.pay("tienda-luna", 1, authentication, request);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> body = (Map<String, Object>) result.getBody();
+        assertThat(body.get("error")).isEqualTo("Receipt type is required (BOLETA or FACTURA)");
+    }
+
+    @Test
+    void confirmPayment_withInvalidReceiptType_shouldFail() {
+        PaymentRequestDTO request = validRequest();
+        request.setReceiptType("TICKET");
+
+        when(customerContext.store("tienda-luna")).thenReturn(store);
+        when(customerContext.customer(authentication, store)).thenReturn(customer);
+        when(orderService.findByCustomerInStore(1, 1, 10)).thenReturn(order);
+        when(paymentReceiptService.simulatePayment(
+                order, "20123456789", PaymentMethod.VIRTUAL, "TICKET",
+                "4111111111111111", "Juan Perez", "12/27", "123"))
+                .thenThrow(new BusinessRuleException("Receipt type is required (BOLETA or FACTURA)"));
+
+        var result = controller.pay("tienda-luna", 1, authentication, request);
+
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 
@@ -112,9 +166,9 @@ class CustomerPaymentControllerTest {
         when(customerContext.customer(authentication, store)).thenReturn(customer);
         when(orderService.findByCustomerInStore(1, 1, 10)).thenReturn(order);
         when(paymentReceiptService.simulatePayment(
-                order, "20123456789", PaymentMethod.VIRTUAL,
-                "4111111110000", "Juan Perez", "12/27", "123", ReceiptType.BOLETA))
-                .thenThrow(new BusinessRuleException("Payment declined — card rejected by issuer"));
+                order, "20123456789", PaymentMethod.VIRTUAL, "BOLETA",
+                "4111111110000", "Juan Perez", "12/27", "123"))
+                .thenThrow(new BusinessRuleException("Payment declined - card rejected by issuer"));
 
         var result = controller.pay("tienda-luna", 1, authentication, request);
 
@@ -141,8 +195,8 @@ class CustomerPaymentControllerTest {
         when(customerContext.customer(authentication, store)).thenReturn(customer);
         when(orderService.findByCustomerInStore(1, 1, 10)).thenReturn(order);
         when(paymentReceiptService.simulatePayment(
-                order, "20123456789", PaymentMethod.VIRTUAL,
-                "4111111111111111", "Juan Perez", "12/27", "123", ReceiptType.BOLETA))
+                order, "20123456789", PaymentMethod.VIRTUAL, "BOLETA",
+                "4111111111111111", "Juan Perez", "12/27", "123"))
                 .thenThrow(new BusinessRuleException("Order already has a payment receipt"));
 
         var result = controller.pay("tienda-luna", 1, authentication, request);

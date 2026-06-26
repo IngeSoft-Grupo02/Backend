@@ -3,8 +3,8 @@ package pe.edu.pucp.kingstore.domain.dto.payment;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import pe.edu.pucp.kingstore.domain.dto.BaseEntityDTO;
-import pe.edu.pucp.kingstore.domain.dto.order.OrderDTO;
 import pe.edu.pucp.kingstore.domain.model.payment.enums.PaymentMethod;
+import pe.edu.pucp.kingstore.domain.model.payment.enums.ReceiptType;
 
 import java.time.LocalDate;
 
@@ -19,4 +19,5 @@ public class PaymentReceiptDTO extends BaseEntityDTO {
     private Double subTotal;
     private Double finalTotal;
     private PaymentMethod paymentMethod;
+    private ReceiptType receiptType;
 }

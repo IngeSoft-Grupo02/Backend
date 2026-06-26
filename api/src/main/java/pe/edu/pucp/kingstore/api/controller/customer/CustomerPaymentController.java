@@ -41,27 +41,20 @@ public class CustomerPaymentController {
                                  Authentication authentication,
                                  @RequestBody(required = false) PaymentRequestDTO request) {
         try {
-            // CAMBIO: receiptType es obligatorio — el cliente debe elegir boleta o factura
-            if (request == null || request.getReceiptType() == null) {
-                throw new BusinessRuleException("Receipt type is required (BOLETA or FACTURA)");
-            }
-
             Store store       = customerContext.store(slug);
             Customer customer = customerContext.customer(authentication, store);
             Order order = orderService.findByCustomerInStore(id, customer.getId(), store.getId());
 
-            String ruc        = request.getRuc();
-            var method        = request.getPaymentMethod();
-            String cardNumber = request.getCardNumber();
-            String cardHolder = request.getCardHolder();
-            String expiryDate = request.getExpiryDate();
-            String cvv        = request.getCvv();
-            // CAMBIO: receiptType viene del request, ya validado arriba
-            var receiptType   = request.getReceiptType();
-
+            String ruc        = request != null ? request.getRuc()           : null;
+            var method        = request != null ? request.getPaymentMethod() : null;
+            String receiptType = request != null ? request.getReceiptType()  : null;
+            String cardNumber = request != null ? request.getCardNumber()    : null;
+            String cardHolder = request != null ? request.getCardHolder()    : null;
+            String expiryDate = request != null ? request.getExpiryDate()    : null;
+            String cvv        = request != null ? request.getCvv()           : null;
 
             var receipt = paymentReceiptService.simulatePayment(
-                    order, ruc, method, cardNumber, cardHolder, expiryDate, cvv, receiptType);
+                    order, ruc, method, receiptType, cardNumber, cardHolder, expiryDate, cvv);
 
             return ResponseEntity.status(201).body(Map.of(
                     "message",       "Pago confirmado exitosamente",
