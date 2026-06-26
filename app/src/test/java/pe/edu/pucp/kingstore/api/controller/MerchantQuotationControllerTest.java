@@ -8,6 +8,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import pe.edu.pucp.kingstore.api.context.MerchantContext;
+import pe.edu.pucp.kingstore.domain.dto.quotation.QuotationDesignDTO;
 import pe.edu.pucp.kingstore.domain.dto.quotation.QuotationResponseDTO;
 import pe.edu.pucp.kingstore.domain.model.quotation.Quotation;
 import pe.edu.pucp.kingstore.domain.model.quotation.enums.QuotationStatus;
@@ -50,6 +51,12 @@ class MerchantQuotationControllerTest {
         QuotationResponseDTO dto = new QuotationResponseDTO();
         dto.setId(1);
         dto.setDescription("Necesito polos para evento corporativo");
+        dto.setDesigns(List.of(new QuotationDesignDTO(
+                1,
+                "diseno-frontal.png",
+                "https://bucket.s3.amazonaws.com/design/street-kings/quotations/1/diseno-frontal.png",
+                "image/png",
+                123456L)));
 
         when(merchantContext.currentStore(authentication, 10)).thenReturn(store);
         when(quotationService.findByStoreId(10)).thenReturn(List.of(quotation));
@@ -62,5 +69,6 @@ class MerchantQuotationControllerTest {
         List<QuotationResponseDTO> body = (List<QuotationResponseDTO>) result.getBody();
         assertThat(body).hasSize(1);
         assertThat(body.get(0).getDescription()).isEqualTo("Necesito polos para evento corporativo");
+        assertThat(body.get(0).getDesigns()).hasSize(1);
     }
 }

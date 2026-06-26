@@ -6,6 +6,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.core.Authentication;
 import pe.edu.pucp.kingstore.api.context.CustomerContext;
 import pe.edu.pucp.kingstore.domain.dto.quotation.QuotationCreateRequestDTO;
@@ -18,11 +19,14 @@ import pe.edu.pucp.kingstore.domain.model.user.Customer;
 import pe.edu.pucp.kingstore.service.cart.ShoppingCartService;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
 import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
+import pe.edu.pucp.kingstore.service.quotation.QuotationDesignService;
 import pe.edu.pucp.kingstore.service.quotation.QuotationService;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -34,6 +38,7 @@ class CustomerQuotationControllerTest {
     @Mock private CustomerContext     customerContext;
     @Mock private ShoppingCartService shoppingCartService;
     @Mock private QuotationService    quotationService;
+    @Mock private QuotationDesignService quotationDesignService;
     private CustomerQuotationController controller;
     private Authentication authentication;
     private Store store;
@@ -44,11 +49,13 @@ class CustomerQuotationControllerTest {
 
     @BeforeEach
     void setUp() {
-        controller     = new CustomerQuotationController(customerContext, shoppingCartService, quotationService);
+        controller = new CustomerQuotationController(
+                customerContext, shoppingCartService, quotationService, quotationDesignService);
         authentication = mock(Authentication.class);
 
         store = new Store();
         store.setId(10);
+        store.setSlug("tienda-luna");
 
         customer = new Customer();
         customer.setId(1);
@@ -99,6 +106,59 @@ class CustomerQuotationControllerTest {
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(((QuotationResponseDTO) result.getBody()).getDescription())
                 .isEqualTo("Necesito polos para evento corporativo");
+    }
+
+    @Test
+    void createQuotation_withDescriptionAndDesigns_shouldUploadDesignsAndKeepDescription() {
+        MockMultipartFile design = new MockMultipartFile(
+                "designs", "diseno-frontal.png", "image/png", "imagen".getBytes());
+        responseDTO.setDescription("Necesito polos para evento corporativo");
+
+        when(customerContext.store("tienda-luna")).thenReturn(store);
+        when(customerContext.customer(authentication, store)).thenReturn(customer);
+        when(shoppingCartService.getOrCreateCart(customer)).thenReturn(cart);
+        when(quotationService.createFromCart(cart, "Necesito polos para evento corporativo")).thenReturn(quotation);
+        when(quotationService.toResponseDTO(quotation, 10)).thenReturn(responseDTO);
+
+        var result = controller.createMultipart(
+                "tienda-luna",
+                authentication,
+                "Necesito polos para evento corporativo",
+                List.of(design),
+                null);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(((QuotationResponseDTO) result.getBody()).getDescription())
+                .isEqualTo("Necesito polos para evento corporativo");
+        verify(quotationDesignService)
+                .uploadDesigns(eq(quotation), eq("tienda-luna"), eq(10), anyList());
+    }
+
+    @Test
+    void createQuotation_whenDesignUploadFails_shouldReturnClearErrorAndNotDeactivateCart() {
+        MockMultipartFile design = new MockMultipartFile(
+                "designs", "diseno-frontal.png", "image/png", "imagen".getBytes());
+
+        when(customerContext.store("tienda-luna")).thenReturn(store);
+        when(customerContext.customer(authentication, store)).thenReturn(customer);
+        when(shoppingCartService.getOrCreateCart(customer)).thenReturn(cart);
+        when(quotationService.createFromCart(cart, "Necesito polos")).thenReturn(quotation);
+        org.mockito.Mockito.doThrow(new BusinessRuleException("No se pudo subir el diseño. Inténtalo nuevamente."))
+                .when(quotationDesignService)
+                .uploadDesigns(eq(quotation), eq("tienda-luna"), eq(10), anyList());
+
+        var result = controller.createMultipart(
+                "tienda-luna",
+                authentication,
+                "Necesito polos",
+                List.of(design),
+                null);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        @SuppressWarnings("unchecked")
+        var body = (java.util.Map<String, Object>) result.getBody();
+        assertThat(body.get("error")).isEqualTo("No se pudo subir el diseño. Inténtalo nuevamente.");
+        verify(shoppingCartService, never()).deactivate(anyInt());
     }
 
     @Test

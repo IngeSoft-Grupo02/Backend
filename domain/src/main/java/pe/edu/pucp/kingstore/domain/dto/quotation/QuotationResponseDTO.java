@@ -30,6 +30,7 @@ public class QuotationResponseDTO {
     private String observations;
     private Integer storeId;
     private List<QuotationItemResponseDTO> items;
+    private List<QuotationDesignDTO> designs;
 
     // Datos reales del cliente (quotation -> shoppingCart -> customer -> person/userAccount).
     private String customerName;

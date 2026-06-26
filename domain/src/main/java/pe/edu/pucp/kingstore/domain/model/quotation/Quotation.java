@@ -40,6 +40,8 @@ public class Quotation extends BaseEntity {
     private String description;
     @Column(length = 500)
     private String observations;
+    @OneToMany(mappedBy = "quotation")
+    private List<QuotationDesign> designs;
     @PrePersist
     protected void onCreate() {
         this.requestedAt = LocalDateTime.now();
