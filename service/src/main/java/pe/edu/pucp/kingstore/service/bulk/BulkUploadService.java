@@ -185,15 +185,6 @@ public class BulkUploadService {
                     "VAL_NAME", BulkIncidenceDTO.IncidenceType.ERROR, "storeName supera 100 caracteres", filename));
         }
 
-        // slug
-        if (row.getSlug() == null || row.getSlug().isBlank()) {
-            resp.addIncidence(incidence(BulkIncidenceDTO.IncidenceBlock.STORES, row.getRowNumber(),
-                    "VAL_SLUG", BulkIncidenceDTO.IncidenceType.ERROR, "slug es obligatorio", filename));
-        } else if (storeRepository.findBySlug(row.getSlug().trim().toLowerCase()).isPresent()) {
-            resp.addIncidence(incidence(BulkIncidenceDTO.IncidenceBlock.STORES, row.getRowNumber(),
-                    "DUPLICATE", BulkIncidenceDTO.IncidenceType.ERROR, "Slug ya registrado: " + row.getSlug(), filename));
-        }
-
         // categoryId Ã¢â‚¬â€ obligatorio y debe existir en BD
         if (row.getCategoryId() == null || row.getCategoryId().isBlank()) {
             resp.addIncidence(incidence(BulkIncidenceDTO.IncidenceBlock.STORES, row.getRowNumber(),
@@ -352,7 +343,6 @@ public class BulkUploadService {
                 BulkStoreRowDTO row = new BulkStoreRowDTO();
                 row.setRowNumber(rowNum);
                 row.setStoreName(get(cols, idx, "storeName"));
-                row.setSlug(get(cols, idx, "slug"));
                 row.setDescription(get(cols, idx, "description"));
                 row.setCategoryId(get(cols, idx, "categoryId"));
                 row.setPrimaryColor(get(cols, idx, "primaryColor"));
@@ -390,7 +380,6 @@ public class BulkUploadService {
     private StoreDTO toStoreDTO(BulkStoreRowDTO row) {
         StoreDTO dto = new StoreDTO();
         dto.setStoreName(row.getStoreName());
-        dto.setSlug(row.getSlug());
         dto.setDescription(row.getDescription());
         dto.setCategoryId(Integer.parseInt(row.getCategoryId()));
         dto.setPrimaryColor(PrimaryColor.valueOf(row.getPrimaryColor().toUpperCase()));

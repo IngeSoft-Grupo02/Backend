@@ -133,25 +133,68 @@ class StoreServiceTest {
     }
 
     @Test
-    void validateForSave_slugBlank_lanzaBusinessRuleException() {
+    void createStore_generatesSlugFromName() {
         Store store = activeStore(0, "  ");
+        store.setStoreName("Hilos Urbanos");
+        when(storeRepository.findBySlug("hilos-urbanos")).thenReturn(Optional.empty());
+        when(storeRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        assertThatThrownBy(() -> service.create(store))
-                .isInstanceOf(BusinessRuleException.class)
-                .hasMessageContaining("slug");
+        Store result = service.create(store);
+
+        assertThat(result.getSlug()).isEqualTo("hilos-urbanos");
     }
 
     @Test
-    void validateForSave_slugDuplicadoEnOtraTienda_lanzaBusinessRuleException() {
+    void createStore_normalizesSpacesInNameAndSlug() {
+        Store store = activeStore(0, null);
+        store.setStoreName(" Hilos   Urbanos ");
+        when(storeRepository.findBySlug("hilos-urbanos")).thenReturn(Optional.empty());
+        when(storeRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Store result = service.create(store);
+
+        assertThat(result.getStoreName()).isEqualTo("Hilos Urbanos");
+        assertThat(result.getSlug()).isEqualTo("hilos-urbanos");
+    }
+
+    @Test
+    void createStore_generatesSlugWithNumbers() {
+        Store store = activeStore(0, null);
+        store.setStoreName("Estudio 47");
+        when(storeRepository.findBySlug("estudio-47")).thenReturn(Optional.empty());
+        when(storeRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Store result = service.create(store);
+
+        assertThat(result.getSlug()).isEqualTo("estudio-47");
+    }
+
+    @Test
+    void createStore_removesAccentsAndUnsafeCharacters() {
+        Store store = activeStore(0, null);
+        store.setStoreName("Mística & Moda");
+        when(storeRepository.findBySlug("mistica-moda")).thenReturn(Optional.empty());
+        when(storeRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Store result = service.create(store);
+
+        assertThat(result.getSlug()).isEqualTo("mistica-moda");
+    }
+
+    @Test
+    void createStore_generatesUniqueSlugWithSuffix() {
         Store existing = activeStore(99, "slug-repetido");
-        Store incoming = activeStore(0, "slug-repetido");
-        incoming.setId(null);
+        existing.setStoreName("Slug Repetido");
+        Store incoming = activeStore(0, null);
+        incoming.setStoreName("Slug Repetido");
 
         when(storeRepository.findBySlug("slug-repetido")).thenReturn(Optional.of(existing));
+        when(storeRepository.findBySlug("slug-repetido-2")).thenReturn(Optional.empty());
+        when(storeRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        assertThatThrownBy(() -> service.create(incoming))
-                .isInstanceOf(BusinessRuleException.class)
-                .hasMessageContaining("slug is already registered");
+        Store result = service.create(incoming);
+
+        assertThat(result.getSlug()).isEqualTo("slug-repetido-2");
     }
 
     @Test
@@ -161,7 +204,6 @@ class StoreServiceTest {
         Store incoming = activeStore(5, "mi-tienda");
 
         when(storeRepository.findById(5)).thenReturn(Optional.of(existing));
-        when(storeRepository.findBySlug("mi-tienda")).thenReturn(Optional.of(existing));
         when(storeRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         service.update(5, incoming);
@@ -170,10 +212,45 @@ class StoreServiceTest {
     }
 
     @Test
+    void updateStore_regeneratesSlugWhenNameChanges() {
+        Store store = activeStore(5, "moda-andina");
+        store.setStoreName("Moda Andina");
+        StoreDTO dto = new StoreDTO();
+        dto.setStoreName("Hilos Urbanos");
+
+        when(storeRepository.findById(5)).thenReturn(Optional.of(store));
+        when(storeRepository.findBySlug("hilos-urbanos")).thenReturn(Optional.empty());
+        when(storeRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Store updated = service.updateFromDTO(5, dto);
+
+        assertThat(updated.getStoreName()).isEqualTo("Hilos Urbanos");
+        assertThat(updated.getSlug()).isEqualTo("hilos-urbanos");
+    }
+
+    @Test
+    void updateStore_doesNotCollideWithItself() {
+        Store store = activeStore(5, "moda-andina");
+        store.setStoreName("Moda Andina");
+        StoreDTO dto = new StoreDTO();
+        dto.setStoreName(" Moda Andina ");
+        dto.setSlug("manual-ignorado");
+
+        when(storeRepository.findById(5)).thenReturn(Optional.of(store));
+        when(storeRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Store updated = service.updateFromDTO(5, dto);
+
+        assertThat(updated.getStoreName()).isEqualTo("Moda Andina");
+        assertThat(updated.getSlug()).isEqualTo("moda-andina");
+        verify(storeRepository, never()).findBySlug("moda-andina-2");
+    }
+
+    @Test
     void validateForSave_categoryNull_lanzaBusinessRuleException() {
         Store store = activeStore(0, "tienda-sin-cat");
         store.setCategory(null);
-        when(storeRepository.findBySlug("tienda-sin-cat")).thenReturn(Optional.empty());
+        when(storeRepository.findBySlug("tienda-0")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.create(store))
                 .isInstanceOf(BusinessRuleException.class)
@@ -329,6 +406,24 @@ class StoreServiceTest {
 
         assertThat(result.getMerchant()).isEqualTo(merchant);
         assertThat(result.getStoreStatus()).isEqualTo(StoreStatus.ACTIVE);
+    }
+
+    @Test
+    void createOrUpdate_ignoresManualSlugIfPresent() {
+        StoreDTO dto = validDTO();
+        dto.setStoreName("Hilos Urbanos");
+        dto.setSlug("slug-manual");
+
+        StoreCategory cat = new StoreCategory();
+        cat.setId(1);
+
+        when(categoryRepository.findById(1)).thenReturn(Optional.of(cat));
+        when(storeRepository.findBySlug("hilos-urbanos")).thenReturn(Optional.empty());
+        when(storeRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Store result = service.createFromDTO(dto);
+
+        assertThat(result.getSlug()).isEqualTo("hilos-urbanos");
     }
 
     @Test

@@ -754,7 +754,9 @@ class CoreServiceCoverageTest {
         duplicateExisting.setId(53);
         duplicateExisting.setSlug("store");
         when(storeRepository.findBySlug("store")).thenReturn(Optional.of(duplicateExisting));
-        assertThatThrownBy(() -> storeService.create(duplicateTarget)).isInstanceOf(BusinessRuleException.class);
+        when(storeRepository.findBySlug("store-2")).thenReturn(Optional.empty());
+        when(storeRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        assertThat(storeService.create(duplicateTarget).getSlug()).isEqualTo("store-2");
 
         StoreDTO dto = new StoreDTO();
         dto.setStoreName("Missing Category");

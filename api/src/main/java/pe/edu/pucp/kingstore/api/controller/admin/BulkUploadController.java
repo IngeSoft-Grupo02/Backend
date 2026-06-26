@@ -82,9 +82,9 @@ public class BulkUploadController {
     public ResponseEntity<byte[]> templateStores() {
         // Columnas actualizadas: se quitÃ³ colorPalette, se agregÃ³ categoryId + 3 colores individuales
         String csv = """
-                storeName,slug,categoryId,primaryColor,secondaryColor,tertiaryColor,description,merchantEmail,logoFileName
-                Mi Tienda Urbana,mi-tienda-urbana,1,ONYX_BLACK,SLATE,RAW_GOLD,Ropa urbana para jovenes,juan.perez@ejemplo.com,MiTiendaUrbana.png
-                Luxe Moda,luxe-moda,2,MIDNIGHT,SAGE,RAW_GOLD,Alta costura accesible,maria.torres@ejemplo.com,
+                storeName,categoryId,primaryColor,secondaryColor,tertiaryColor,description,merchantEmail,logoFileName
+                Mi Tienda Urbana,1,ONYX_BLACK,SLATE,RAW_GOLD,Ropa urbana para jovenes,juan.perez@ejemplo.com,MiTiendaUrbana.png
+                Luxe Moda,2,MIDNIGHT,SAGE,RAW_GOLD,Alta costura accesible,maria.torres@ejemplo.com,
                 """;
         return csvResponse(csv, "plantilla_tiendas.csv");
     }

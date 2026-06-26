@@ -55,15 +55,23 @@ public class StoreService extends AbstractCrudService<Store> {
 
     @Override
     protected void validateForSave(Store store) {
-        requireText(store.getStoreName(), "Store name");
-        requireText(store.getSlug(), "Store slug");
-        store.setSlug(normalizeSlug(store.getSlug()));
+        String normalizedName = StoreSlugUtil.normalizeStoreName(store.getStoreName());
+        store.setStoreName(normalizedName);
 
-        storeRepository.findBySlug(store.getSlug())
-                .filter(existing -> !existing.getId().equals(store.getId()))
-                .ifPresent(existing -> {
-                    throw new BusinessRuleException("Store slug is already registered");
-                });
+        Optional<Store> currentStore = Optional.empty();
+        if (store.getId() != null) {
+            currentStore = storeRepository.findById(store.getId());
+        }
+        boolean keepExistingSlug = currentStore
+                .map(existing -> StoreSlugUtil.normalizeStoreName(existing.getStoreName()).equals(normalizedName)
+                        && existing.getSlug() != null
+                        && !existing.getSlug().isBlank())
+                .orElse(false);
+        if (keepExistingSlug) {
+            store.setSlug(currentStore.get().getSlug());
+        } else {
+            store.setSlug(generateUniqueSlugForStore(store.getId(), normalizedName));
+        }
 
         if (store.getCategory() == null)
             throw new BusinessRuleException("Store category is required");
@@ -117,8 +125,7 @@ public class StoreService extends AbstractCrudService<Store> {
     @Transactional
     public Store createFromDTO(StoreDTO dto) {
         Store store = new Store();
-        store.setStoreName(dto.getStoreName());
-        store.setSlug(dto.getSlug());
+        store.setStoreName(StoreSlugUtil.normalizeStoreName(dto.getStoreName()));
         store.setDescription(dto.getDescription());
         store.setLogoUrl(dto.getLogoUrl());
 
@@ -141,6 +148,30 @@ public class StoreService extends AbstractCrudService<Store> {
 
         store.setStoreStatus(StoreStatus.ACTIVE);
         return create(store);
+    }
+
+    @Transactional
+    public Store updateFromDTO(Integer id, StoreDTO dto) {
+        Store store = getById(id);
+
+        if (dto.getStoreName() != null) {
+            String normalizedName = StoreSlugUtil.normalizeStoreName(dto.getStoreName());
+            boolean nameChanged = !StoreSlugUtil.normalizeStoreName(store.getStoreName()).equals(normalizedName);
+            store.setStoreName(normalizedName);
+            if (nameChanged || store.getSlug() == null || store.getSlug().isBlank()) {
+                store.setSlug(generateUniqueSlugForUpdate(id, normalizedName));
+            }
+        }
+        if (dto.getDescription()   != null) store.setDescription(dto.getDescription());
+        if (dto.getPrimaryColor()  != null) store.setPrimaryColor(dto.getPrimaryColor());
+        if (dto.getSecondaryColor()!= null) store.setSecondaryColor(dto.getSecondaryColor());
+        if (dto.getTertiaryColor() != null) store.setTertiaryColor(dto.getTertiaryColor());
+        if (dto.getMerchantId()    != null)
+            merchantRepository.findById(dto.getMerchantId()).ifPresent(store::setMerchant);
+        if (dto.getCategoryId()    != null)
+            categoryRepository.findById(dto.getCategoryId()).ifPresent(store::setCategory);
+
+        return update(id, store);
     }
 
     @Transactional(readOnly = true)
@@ -260,21 +291,14 @@ public class StoreService extends AbstractCrudService<Store> {
     }
     private void applyMerchantRequest(Store store, MerchantStoreRequestDTO request, boolean creating) {
         if (request == null) throw new BusinessRuleException("Store request is required");
-        requireText(request.getName(), "Store name");
+        String normalizedName = StoreSlugUtil.normalizeStoreName(request.getName());
+        boolean nameChanged = store.getStoreName() == null
+                || !StoreSlugUtil.normalizeStoreName(store.getStoreName()).equals(normalizedName);
 
-        String slug = normalizeSlug(
-                request.getSlug() == null || request.getSlug().isBlank()
-                        ? request.getName()
-                        : request.getSlug()
-        );
-        storeRepository.findBySlug(slug)
-                .filter(existing -> !existing.getId().equals(store.getId()))
-                .ifPresent(existing -> {
-                    throw new BusinessRuleException("Store slug is already registered");
-                });
-
-        store.setStoreName(request.getName().trim());
-        store.setSlug(slug);
+        store.setStoreName(normalizedName);
+        if (!creating && (nameChanged || store.getSlug() == null || store.getSlug().isBlank())) {
+            store.setSlug(generateUniqueSlugForStore(store.getId(), normalizedName));
+        }
         store.setDescription(blankToNull(request.getDescription()));
         store.setLogoUrl(blankToNull(request.getLogoUrl()));
         store.setPrimaryColor(request.getPrimaryColor() != null
@@ -315,6 +339,30 @@ public class StoreService extends AbstractCrudService<Store> {
     }
 
     private String normalizeSlug(String slug) {
-        return slug.trim().toLowerCase().replaceAll("\\s+", "-");
+        return StoreSlugUtil.toSlugBase(StoreSlugUtil.normalizeStoreName(slug));
+    }
+
+    public String generateUniqueSlug(String name) {
+        return generateUniqueSlugForStore(null, StoreSlugUtil.normalizeStoreName(name));
+    }
+
+    public String generateUniqueSlugForUpdate(Integer storeId, String name) {
+        return generateUniqueSlugForStore(storeId, StoreSlugUtil.normalizeStoreName(name));
+    }
+
+    private String generateUniqueSlugForStore(Integer storeId, String normalizedName) {
+        String base = StoreSlugUtil.toSlugBase(normalizedName);
+        String candidate = base;
+        int suffix = 2;
+
+        while (true) {
+            Optional<Store> existing = storeRepository.findBySlug(candidate);
+            if (existing.isEmpty()
+                    || (storeId != null && existing.get().getId() != null && existing.get().getId().equals(storeId))) {
+                return candidate;
+            }
+            candidate = base + "-" + suffix;
+            suffix++;
+        }
     }
 }
