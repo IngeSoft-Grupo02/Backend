@@ -216,6 +216,7 @@ class ControllerCoverageTest {
         StorePublicDTO publicDTO = new StorePublicDTO();
         publicDTO.setSlug("ripley");
         publicDTO.setStoreName("Ripley");
+        publicDTO.setLogoUrl("https://cdn.test/logos/ripley.png");
         publicDTO.setCategory("Moda");
         when(storeService.findPublicStores()).thenReturn(List.of(activeStore));
         when(storeService.toPublicDTO(activeStore)).thenReturn(publicDTO);
@@ -224,12 +225,14 @@ class ControllerCoverageTest {
             assertThat(item.getSlug()).isEqualTo("ripley");
             assertThat(item.getCategory()).isEqualTo("Moda");
             assertThat(item.getStoreName()).isEqualTo("Ripley");
+            assertThat(item.getLogoUrl()).isEqualTo("https://cdn.test/logos/ripley.png");
         });
 
         when(storeService.findPublicBySlug("ripley")).thenReturn(Optional.of(activeStore));
         ResponseEntity<?> found = controller.getPublicStore("ripley");
         assertThat(found.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(((StorePublicDTO) found.getBody()).getSlug()).isEqualTo("ripley");
+        assertThat(((StorePublicDTO) found.getBody()).getLogoUrl()).isEqualTo("https://cdn.test/logos/ripley.png");
 
         when(storeService.findPublicBySlug("missing")).thenReturn(Optional.empty());
         assertThat(controller.getPublicStore("missing").getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
