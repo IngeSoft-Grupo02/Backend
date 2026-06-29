@@ -206,7 +206,7 @@ Para más detalles sobre el cifrado de propiedades, ver [`ENCRYPTION_GUIDE.md`](
 ## Despliegue del Backend
 
 El backend es una aplicación Spring Boot multi-módulo (Maven). Se despliega automáticamente en EC2 mediante GitHub Actions al hacer push a `main`. No se requiere Docker Hub ni intervención manual.
-El backend es una aplicación Spring Boot multi-módulo (Maven). Se despliega automáticamente en EC2 mediante GitHub Actions al hacer push a `main`. No se requiere Docker Hub ni intervención manual.
+
 
 ### Arquitectura
 
@@ -326,3 +326,132 @@ El workflow escribe automáticamente un archivo `.env` en `~/kingstore/backend/`
 | `SPRING_DATASOURCE_PASSWORD` | Contraseña de la base de datos MySQL en RDS |
 
 `SPRING_PROFILES_ACTIVE=prod` se pasa directamente en `docker-compose.production.yml`.
+
+---
+
+## Arquitectura del Backend
+
+### 1. Tipo de Arquitectura
+
+El backend implementa una **Arquitectura Monolítica Modular por Capas** (Modular Layered Monolith). El proyecto es una única aplicación Spring Boot desplegada en un solo proceso y artefacto JAR, pero internamente está dividida en cinco módulos Maven con dependencias unidireccionales que imponen separación de responsabilidades estricta.
+
+La dirección de dependencias es:
+
+```
+app → api → service → repository → domain
+```
+
+Ningún módulo inferior puede depender de uno superior. `domain` no conoce a nadie; `service` nunca importa clases de `api`.
+
+---
+
+### 2. Módulos
+
+| Módulo | Responsabilidad |
+|--------|----------------|
+| `domain` | Entidades JPA (`@Entity`, `@MappedSuperclass`), DTOs de request/response y enumeraciones del negocio. No tiene dependencias externas. |
+| `repository` | Interfaces que extienden `JpaRepository<T, Integer>`. Define las consultas a MySQL vía Spring Data JPA. Depende solo de `domain`. |
+| `service` | Lógica de negocio, validaciones, generación de JWT, integración con S3. Define abstracciones (`CrudService`, `StorageService`) que el módulo `api` consume. |
+| `api` | Controllers REST agrupados por rol (`admin/`, `merchant/`, `customer/`, `public_/`), filtro JWT, configuración CORS y el interceptor de auditoría. |
+| `app` | Clase principal `@SpringBootApplication`, configuración condicional de S3Client y Jasypt. Empaqueta todos los módulos en el fat JAR. |
+
+---
+
+### 3. Patrones de Diseño
+
+#### Repository Pattern
+Todos los accesos a base de datos están encapsulados en interfaces del módulo `repository` que extienden `JpaRepository`. Los servicios nunca usan `EntityManager` directamente.
+
+```
+ProductRepository → JpaRepository<Product, Integer>
+OrderRepository   → JpaRepository<Order, Integer>
+```
+
+#### Template Method
+`AbstractCrudService<T>` implementa el flujo genérico de CRUD (crear, actualizar, desactivar, reactivar) dejando un método gancho `validateForSave(T entity)` vacío para que cada servicio concreto agregue sus propias validaciones sin duplicar el esqueleto.
+
+```java
+public abstract class AbstractCrudService<T extends BaseEntity> implements CrudService<T> {
+    protected void validateForSave(T entity) { } // hook sobreescribible
+}
+```
+
+#### Strategy Pattern
+`StorageService` es una interfaz con dos implementaciones intercambiables seleccionadas mediante la propiedad `kingstore.storage.provider`:
+
+| Implementación | Cuándo se activa | Qué hace |
+|---------------|-----------------|----------|
+| `LocalStorageService` | perfil `local` | Guarda archivos en disco (carpeta `upload-local/`) |
+| `S3StorageService` | perfil `prod` | Sube archivos al bucket S3 via AWS SDK v2 |
+
+`BulkUploadService` depende de `StorageService`, nunca de la implementación concreta.
+
+#### Chain of Responsibility / Servlet Filter
+`JwtAuthenticationFilter` extiende `OncePerRequestFilter`. Por cada request HTTP extrae el token del header `Authorization: Bearer <token>`, lo valida con `JwtUtil` y puebla el `SecurityContextHolder`. Si el token no está presente o es inválido, la cadena continúa sin autenticación (Spring Security rechaza el acceso si el endpoint lo requiere).
+
+#### Interceptor Pattern (Post-Action Audit)
+`AuditInterceptor` implementa `HandlerInterceptor.afterCompletion()`. Registra automáticamente cada mutación (POST, PUT, PATCH, DELETE) en la tabla `audit_log` con email del usuario, rol, endpoint, método HTTP, status code y nivel (`INFO`, `WARN`, `ERROR`). Las peticiones GET no se auditan.
+
+#### Request-Scoped Context Object
+`CustomerContext` y `MerchantContext` son beans de Spring con scope `request` y proxy `TARGET_CLASS`. Cada uno resuelve y cachea (por request) el usuario autenticado y su tienda asociada para que los controllers no repitan la misma consulta a base de datos dentro del mismo ciclo HTTP.
+
+#### Conditional Bean / Factory
+`S3Config` usa `@ConditionalOnProperty(name = "kingstore.storage.provider", havingValue = "s3")`. El bean `S3Client` solo se instancia en el perfil `prod`; en `local` el SDK de AWS nunca carga y el arranque es instantáneo.
+
+#### Base Controller (Template con herencia)
+`BaseMerchantController` es una clase abstracta que centraliza el manejo de excepciones (`ResourceNotFoundException`, `BusinessRuleException`, `DataIntegrityViolationException`) y utilidades compartidas (parseo, normalización, slugify). Todos los controllers del módulo comerciante lo extienden.
+
+---
+
+### 4. Conexión Backend ↔ Frontend
+
+El frontend es una aplicación Next.js unificada con tres dominios (`cliente`, `admin`, `comerciante`), cada uno con su propio cliente HTTP que consume la API REST del backend en puerto `8080`.
+
+#### Clientes HTTP del frontend
+
+| Dominio | Variable de entorno | Base URL en prod |
+|---------|--------------------|--------------------|
+| `cliente` | `NEXT_PUBLIC_API_URL` | `http://100.57.218.181:8080` |
+| `admin` | `NEXT_PUBLIC_API_URL` | `http://100.57.218.181:8080` |
+| `comerciante` | `NEXT_PUBLIC_API_BASE_URL` | `http://100.57.218.181:8080` |
+
+Las variables `NEXT_PUBLIC_*` se embeben en el bundle del navegador durante el build de Next.js en GitHub Actions. Un cambio de URL del backend requiere redesplegar el frontend.
+
+#### Flujo de autenticación JWT
+
+1. El frontend envía `POST /auth/login` (sin token) con email y contraseña.
+2. El backend valida credenciales contra RDS MySQL, genera un JWT firmado con HMAC-SHA256 que incluye `userId`, `email`, `role` y `storeSlug`.
+3. La expiración varía por rol: CUSTOMER (1 h), MERCHANT (2 h), SYSTEM\_ADMIN (4 h).
+4. El frontend persiste el token en `localStorage` y lo adjunta en cada request: `Authorization: Bearer <token>`.
+5. `JwtAuthenticationFilter` intercepta el request, valida el token y registra la autenticación en el `SecurityContextHolder`.
+6. `SecurityConfig` autoriza el acceso por rol (`ROLE_SYSTEM_ADMIN`, `ROLE_MERCHANT`, `ROLE_CUSTOMER`).
+
+#### CORS
+
+La lista de orígenes permitidos se configura en `application.properties` bajo la clave `kingstore.cors.allowed-origin-patterns`. En producción incluye la IP del servidor EC2. Para agregar un dominio personalizado basta con añadirlo a esa propiedad y redesplegar.
+
+#### Protocolo de transferencia
+
+| Aspecto | Detalle |
+|---------|---------|
+| Protocolo | HTTP REST (JSON) |
+| Autenticación | JWT Bearer token |
+| Gestión de sesión | Stateless (`SessionCreationPolicy.STATELESS`) — sin cookies de sesión |
+| CORS | Configurado en backend; credentials habilitadas (`allowCredentials: true`) |
+| Subida de archivos | Multipart form-data para imágenes; almacenadas en S3 (prod) o disco (local) |
+
+---
+
+### 5. Diagramas PlantUML
+
+#### Diagrama 1 — Arquitectura general del Backend
+
+![Aquitectura del Backend](diagramas/arquitectura.png)
+
+---
+
+#### Diagrama 2 — Ciclo de vida de una petición autenticada
+
+![Ciclo del Proyecto](diagramas/ciclo.png)
+
+---
