@@ -9,17 +9,22 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import pe.edu.pucp.kingstore.api.context.MerchantContext;
 import pe.edu.pucp.kingstore.domain.dto.quotation.QuotationDesignDTO;
+import pe.edu.pucp.kingstore.domain.dto.quotation.QuotationResponseRequestDTO;
 import pe.edu.pucp.kingstore.domain.dto.quotation.QuotationResponseDTO;
 import pe.edu.pucp.kingstore.domain.model.quotation.Quotation;
 import pe.edu.pucp.kingstore.domain.model.quotation.enums.QuotationStatus;
 import pe.edu.pucp.kingstore.domain.model.store.Store;
+import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
 import pe.edu.pucp.kingstore.service.order.OrderService;
 import pe.edu.pucp.kingstore.service.quotation.QuotationService;
 
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -71,5 +76,87 @@ class MerchantQuotationControllerTest {
         assertThat(body).hasSize(1);
         assertThat(body.get(0).getDescription()).isEqualTo("Necesito polos para evento corporativo");
         assertThat(body.get(0).getDesigns()).hasSize(1);
+    }
+
+    @Test
+    void quotationsWithStatus_shouldUseStatusFilter() {
+        Quotation quotation = new Quotation();
+        quotation.setId(2);
+        quotation.setStatus(QuotationStatus.APPROVED);
+        QuotationResponseDTO dto = new QuotationResponseDTO();
+        dto.setId(2);
+
+        when(merchantContext.currentStore(authentication, 10)).thenReturn(store);
+        when(quotationService.findByStoreIdAndStatus(10, QuotationStatus.APPROVED)).thenReturn(List.of(quotation));
+        when(quotationService.toResponseDTO(quotation, 10)).thenReturn(dto);
+
+        var result = controller.quotations(authentication, "approved", 10);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+        @SuppressWarnings("unchecked")
+        List<QuotationResponseDTO> body = (List<QuotationResponseDTO>) result.getBody();
+        assertThat(body).extracting(QuotationResponseDTO::getId).containsExactly(2);
+    }
+
+    @Test
+    void respondQuotationApproved_shouldCreateOrder() {
+        Quotation quotation = new Quotation();
+        quotation.setId(7);
+        quotation.setStatus(QuotationStatus.PENDING);
+        Quotation responded = new Quotation();
+        responded.setId(7);
+        responded.setStatus(QuotationStatus.APPROVED);
+        QuotationResponseDTO dto = new QuotationResponseDTO();
+        dto.setId(7);
+        QuotationResponseRequestDTO request = new QuotationResponseRequestDTO();
+        request.setStatus(QuotationStatus.APPROVED);
+        request.setObservations("Aprobado");
+
+        when(merchantContext.currentStore(authentication, 10)).thenReturn(store);
+        when(quotationService.findInStore(7, 10)).thenReturn(quotation);
+        when(quotationService.respond(7, QuotationStatus.APPROVED, "Aprobado")).thenReturn(responded);
+        when(quotationService.toResponseDTO(responded, 10)).thenReturn(dto);
+
+        var result = controller.respondQuotation(authentication, 7, 10, request);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+        verify(orderService).createFromQuotation(responded);
+    }
+
+    @Test
+    void respondQuotationRejected_shouldNotCreateOrder() {
+        Quotation quotation = new Quotation();
+        quotation.setId(8);
+        quotation.setStatus(QuotationStatus.PENDING);
+        Quotation responded = new Quotation();
+        responded.setId(8);
+        responded.setStatus(QuotationStatus.REJECTED);
+        QuotationResponseDTO dto = new QuotationResponseDTO();
+        dto.setId(8);
+        QuotationResponseRequestDTO request = new QuotationResponseRequestDTO();
+        request.setStatus(QuotationStatus.REJECTED);
+        request.setObservations("Sin stock");
+
+        when(merchantContext.currentStore(authentication, 10)).thenReturn(store);
+        when(quotationService.findInStore(8, 10)).thenReturn(quotation);
+        when(quotationService.respond(8, QuotationStatus.REJECTED, "Sin stock")).thenReturn(responded);
+        when(quotationService.toResponseDTO(eq(responded), eq(10))).thenReturn(dto);
+
+        var result = controller.respondQuotation(authentication, 8, 10, request);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+        verify(orderService, never()).createFromQuotation(responded);
+    }
+
+    @Test
+    void respondQuotationBusinessRule_shouldReturnBadRequest() {
+        QuotationResponseRequestDTO request = new QuotationResponseRequestDTO();
+        request.setStatus(QuotationStatus.APPROVED);
+        when(merchantContext.currentStore(authentication, 10)).thenReturn(store);
+        when(quotationService.findInStore(9, 10)).thenThrow(new BusinessRuleException("No pertenece a la tienda"));
+
+        var result = controller.respondQuotation(authentication, 9, 10, request);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 }

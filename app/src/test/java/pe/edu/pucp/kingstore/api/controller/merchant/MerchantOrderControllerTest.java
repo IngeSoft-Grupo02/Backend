@@ -10,11 +10,14 @@ import pe.edu.pucp.kingstore.api.context.MerchantContext;
 import pe.edu.pucp.kingstore.api.controller.MerchantOrderController;
 import pe.edu.pucp.kingstore.domain.dto.order.OrderCancelRequestDTO;
 import pe.edu.pucp.kingstore.domain.dto.order.OrderShipRequestDTO;
+import pe.edu.pucp.kingstore.domain.dto.order.OrderStatusRequestDTO;
 import pe.edu.pucp.kingstore.domain.model.order.Order;
 import pe.edu.pucp.kingstore.domain.model.order.enums.OrderStatus;
 import pe.edu.pucp.kingstore.domain.model.store.Store;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
 import pe.edu.pucp.kingstore.service.order.OrderService;
+
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -41,6 +44,62 @@ public class MerchantOrderControllerTest {
         order          = new Order();
         order.setId(1);
         order.setStatus(OrderStatus.IN_PREPARATION);
+    }
+
+    // ── GET /merchant/orders ─────────────────────────────────────────────────
+
+    @Test
+    void ordersWithoutStatusReturnsAllStoreOrders() {
+        when(merchantContext.currentStore(authentication, 10)).thenReturn(store);
+        when(orderService.findByStoreId(10)).thenReturn(List.of(order));
+        when(orderService.toResponseDTO(eq(order), eq(10))).thenReturn(new pe.edu.pucp.kingstore.domain.dto.order.OrderResponseDTO());
+
+        var result = controller.orders(authentication, null, 10);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+        @SuppressWarnings("unchecked")
+        List<pe.edu.pucp.kingstore.domain.dto.order.OrderResponseDTO> body =
+                (List<pe.edu.pucp.kingstore.domain.dto.order.OrderResponseDTO>) result.getBody();
+        assertThat(body).hasSize(1);
+    }
+
+    @Test
+    void ordersWithStatusUsesStatusFilter() {
+        when(merchantContext.currentStore(authentication, 10)).thenReturn(store);
+        when(orderService.findByStoreIdAndStatus(10, OrderStatus.IN_PREPARATION)).thenReturn(List.of(order));
+        when(orderService.toResponseDTO(eq(order), eq(10))).thenReturn(new pe.edu.pucp.kingstore.domain.dto.order.OrderResponseDTO());
+
+        var result = controller.orders(authentication, "in_preparation", 10);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    // ── PATCH /merchant/orders/{id}/status ───────────────────────────────────
+
+    @Test
+    void updateOrderStatusReturnsUpdatedOrder() {
+        OrderStatusRequestDTO request = new OrderStatusRequestDTO();
+        request.setStatus(OrderStatus.IN_TRANSIT);
+        order.setStatus(OrderStatus.IN_TRANSIT);
+
+        when(merchantContext.currentStore(authentication, 10)).thenReturn(store);
+        when(orderService.findInStore(1, 10)).thenReturn(order);
+        when(orderService.changeStatus(1, OrderStatus.IN_TRANSIT)).thenReturn(order);
+        when(orderService.toResponseDTO(eq(order), eq(10))).thenReturn(new pe.edu.pucp.kingstore.domain.dto.order.OrderResponseDTO());
+
+        var result = controller.updateOrderStatus(authentication, 1, 10, request);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void updateOrderStatusRequiresStatus() {
+        OrderStatusRequestDTO request = new OrderStatusRequestDTO();
+        when(merchantContext.currentStore(authentication, 10)).thenReturn(store);
+
+        var result = controller.updateOrderStatus(authentication, 1, 10, request);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 
     // ── PATCH /merchant/orders/{id}/advance ───────────────────────────────────

@@ -249,6 +249,36 @@ class StoreServiceCoverageTest {
     }
 
     @Test
+    void updateForMerchantParsesActiveAndInactiveStatuses() {
+        Store store = storeWithCategory(5, "mi-tienda");
+        store.setStoreStatus(StoreStatus.SUSPENDED);
+
+        when(categoryRepository.findById(1)).thenReturn(Optional.of(category(1)));
+        when(storeRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        MerchantStoreRequestDTO dto = requestDTO();
+        dto.setStatus("active");
+        Store active = service.updateForMerchant(store, dto);
+        assertThat(active.getStoreStatus()).isEqualTo(StoreStatus.ACTIVE);
+
+        dto.setStatus("inactiva");
+        Store inactive = service.updateForMerchant(store, dto);
+        assertThat(inactive.getStoreStatus()).isEqualTo(StoreStatus.INACTIVE);
+    }
+
+    @Test
+    void updateForMerchantThrowsWhenStatusInvalid() {
+        Store store = storeWithCategory(5, "mi-tienda");
+        MerchantStoreRequestDTO dto = requestDTO();
+        dto.setStatus("pausada");
+        when(categoryRepository.findById(1)).thenReturn(Optional.of(category(1)));
+
+        assertThatThrownBy(() -> service.updateForMerchant(store, dto))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("Invalid store status");
+    }
+
+    @Test
     void updateForMerchantKeepsStatusWhenBlank() {
         Store store = storeWithCategory(5, "mi-tienda");
         store.setStoreStatus(StoreStatus.ACTIVE);
@@ -387,5 +417,70 @@ class StoreServiceCoverageTest {
         assertThat(dto.getCategoryId()).isNull();
         assertThat(dto.getCategoryName()).isNull();
         assertThat(dto.getPendingQuotes()).isEqualTo(0);
+    }
+
+    @Test
+    void toPublicDTOMapsStoreFieldsAndHandlesNullCategory() {
+        Store store = storeWithCategory(5, "mi-tienda");
+        store.setDescription("Descripcion");
+        store.setLogoUrl("https://cdn.test/logo.png");
+        store.setPrimaryColor(PrimaryColor.CHARCOAL);
+        store.setSecondaryColor(SecondaryColor.TERRA);
+        store.setTertiaryColor(TertiaryColor.EMERALD);
+
+        var dto = service.toPublicDTO(store);
+
+        assertThat(dto.getId()).isEqualTo(5);
+        assertThat(dto.getStoreName()).isEqualTo("Tienda 5");
+        assertThat(dto.getSlug()).isEqualTo("mi-tienda");
+        assertThat(dto.getDescription()).isEqualTo("Descripcion");
+        assertThat(dto.getLogoUrl()).isEqualTo("https://cdn.test/logo.png");
+        assertThat(dto.getCategory()).isEqualTo("Ropa");
+        assertThat(dto.getPrimaryColor()).isEqualTo(PrimaryColor.CHARCOAL);
+
+        store.setCategory(null);
+        assertThat(service.toPublicDTO(store).getCategory()).isNull();
+    }
+
+    @Test
+    void generateUniqueSlugUsesSuffixAndAllowsSameStoreIdOnUpdate() {
+        Store existing = storeWithCategory(9, "mi-tienda");
+        when(storeRepository.findBySlug("mi-tienda")).thenReturn(Optional.of(existing));
+        when(storeRepository.findBySlug("mi-tienda-2")).thenReturn(Optional.empty());
+
+        assertThat(service.generateUniqueSlug("Mi Tienda")).isEqualTo("mi-tienda-2");
+
+        when(storeRepository.findBySlug("mi-tienda")).thenReturn(Optional.of(existing));
+        assertThat(service.generateUniqueSlugForUpdate(9, "Mi Tienda")).isEqualTo("mi-tienda");
+    }
+
+    @Test
+    void updateFromDTOAppliesOptionalFieldsAndDoesNotRegenerateSlugWhenNameNull() {
+        Store store = storeWithCategory(5, "mi-tienda");
+        StoreCategory newCategory = category(2);
+        Merchant merchant = new Merchant();
+        merchant.setId(8);
+        pe.edu.pucp.kingstore.domain.dto.store.StoreDTO dto = new pe.edu.pucp.kingstore.domain.dto.store.StoreDTO();
+        dto.setDescription("Nueva descripcion");
+        dto.setPrimaryColor(PrimaryColor.MIDNIGHT);
+        dto.setSecondaryColor(SecondaryColor.SAGE);
+        dto.setTertiaryColor(TertiaryColor.COPPER);
+        dto.setMerchantId(8);
+        dto.setCategoryId(2);
+
+        when(storeRepository.findById(5)).thenReturn(Optional.of(store));
+        when(merchantRepository.findById(8)).thenReturn(Optional.of(merchant));
+        when(categoryRepository.findById(2)).thenReturn(Optional.of(newCategory));
+        when(storeRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Store updated = service.updateFromDTO(5, dto);
+
+        assertThat(updated.getDescription()).isEqualTo("Nueva descripcion");
+        assertThat(updated.getPrimaryColor()).isEqualTo(PrimaryColor.MIDNIGHT);
+        assertThat(updated.getSecondaryColor()).isEqualTo(SecondaryColor.SAGE);
+        assertThat(updated.getTertiaryColor()).isEqualTo(TertiaryColor.COPPER);
+        assertThat(updated.getMerchant()).isSameAs(merchant);
+        assertThat(updated.getCategory()).isSameAs(newCategory);
+        assertThat(updated.getSlug()).isEqualTo("mi-tienda");
     }
 }

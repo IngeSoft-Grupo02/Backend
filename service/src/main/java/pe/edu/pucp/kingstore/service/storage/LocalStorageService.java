@@ -3,7 +3,7 @@ package pe.edu.pucp.kingstore.service.storage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Profile;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -13,7 +13,7 @@ import java.nio.file.Paths;
 
 /**
  * ImplementaciÃ³n LOCAL de StorageService.
- * Activa solo con el perfil Spring "local" (desarrollo sin AWS).
+ * Activa cuando kingstore.storage.provider=local.
  *
  * Guarda el archivo en disco dentro de upload-local/ y devuelve
  * una URL ficticia del tipo: http://localhost:8080/uploads/logos/ripley.png
@@ -22,12 +22,11 @@ import java.nio.file.Paths;
  * sin necesidad de credenciales AWS.
  *
  * ACTIVACIÃ“N:
- *   En application-local.properties ya estÃ¡ configurado:
- *     spring.profiles.active=local
- *   O al arrancar IntelliJ: Edit Configurations â†’ Active profiles: local
+ *   Por defecto kingstore.storage.provider=local.
+ *   Para S3 usar kingstore.storage.provider=s3.
  */
 @Service
-@Profile("local")
+@ConditionalOnProperty(name = "kingstore.storage.provider", havingValue = "local", matchIfMissing = true)
 public class LocalStorageService implements StorageService {
 
     private static final Logger log = LoggerFactory.getLogger(LocalStorageService.class);

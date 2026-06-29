@@ -206,6 +206,7 @@ Para más detalles sobre el cifrado de propiedades, ver [`ENCRYPTION_GUIDE.md`](
 ## Despliegue del Backend
 
 El backend es una aplicación Spring Boot multi-módulo (Maven). Se despliega automáticamente en EC2 mediante GitHub Actions al hacer push a `main`. No se requiere Docker Hub ni intervención manual.
+El backend es una aplicación Spring Boot multi-módulo (Maven). Se despliega automáticamente en EC2 mediante GitHub Actions al hacer push a `main`. No se requiere Docker Hub ni intervención manual.
 
 ### Arquitectura
 
@@ -311,35 +312,6 @@ docker compose -f docker-compose.production.yml down --rmi all
 ```
 
 > Los datos en RDS no se eliminan. Solo se detiene el contenedor.
-
----
-
-### Apagar el servidor EC2 para ahorrar créditos
-
-Detener el contenedor Docker **no detiene el cobro de EC2** — la instancia sigue corriendo y consumiendo créditos. Para pausar completamente el servidor:
-
-**Desde la consola de AWS:**
-1. Ir a **EC2 → Instances**
-2. Seleccionar la instancia `100.57.218.181`
-3. **Instance State → Stop instance**
-
-> **Stop** conserva el disco EBS (mínimo costo). **Terminate** elimina la instancia y todos sus datos permanentemente.
-
-Al volver a iniciarla (**Start instance**), la IP elástica `100.57.218.181` se mantiene — no hay que reconfigurar nada.
-
----
-
-### GitHub Actions — consumo de minutos
-
-Los workflows **solo se ejecutan cuando se hace push a `main` o se disparan manualmente**. No corren de forma continua.
-
-| Plan de GitHub | Minutos gratuitos/mes |
-|---------------|----------------------|
-| Repositorio público | Ilimitados |
-| Free (privado) | 2 000 min |
-| Team (privado) | 3 000 min |
-
-Cada deploy del backend tarda aproximadamente **5–8 minutos** (build de Maven + imagen Docker). Si el repositorio es público, no hay costo.
 
 ---
 

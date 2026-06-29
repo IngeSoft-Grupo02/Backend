@@ -24,6 +24,7 @@ public class MerchantProfileService {
 
     private final MerchantRepository    merchantRepository;
     private final UserAccountRepository userAccountRepository;
+    private final PasswordHashService passwordHashService = new PasswordHashService();
 
     public MerchantProfileService(MerchantRepository merchantRepository,
                                   UserAccountRepository userAccountRepository) {
@@ -70,14 +71,14 @@ public class MerchantProfileService {
         MerchantStringUtil.requireText(request.getNewPassword(),     "New password");
         MerchantStringUtil.requireText(request.getConfirmPassword(), "Password confirmation");
 
-        if (!Objects.equals(account.getPassword(), request.getCurrentPassword())) {
+        if (!passwordHashService.matches(request.getCurrentPassword(), account.getPassword())) {
             throw new BusinessRuleException("Current password is incorrect");
         }
         if (!Objects.equals(request.getNewPassword(), request.getConfirmPassword())) {
             throw new BusinessRuleException("Passwords do not match");
         }
         validateNewPassword(request.getNewPassword());
-        account.setPassword(request.getNewPassword());
+        account.setPassword(passwordHashService.hash(request.getNewPassword()));
         userAccountRepository.save(account);
     }
 

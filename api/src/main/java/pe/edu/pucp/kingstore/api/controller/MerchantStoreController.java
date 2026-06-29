@@ -76,21 +76,8 @@ public class MerchantStoreController extends BaseMerchantController {
     public ResponseEntity<?> uploadStoreLogo(Authentication authentication,
                                              @RequestPart("logo") MultipartFile logo) {
         return handle(() -> {
-            Merchant merchant = currentMerchant(authentication);
-            if (logo == null || logo.isEmpty()) {
-                throw new BusinessRuleException("Store logo is required");
-            }
-            String filename  = logo.getOriginalFilename() == null ? "" : logo.getOriginalFilename();
-            String extension = extension(filename);
-            if (!ALLOWED_IMAGE_EXTENSIONS.contains(extension)) {
-                throw new BusinessRuleException("Invalid logo extension. Allowed: jpg, jpeg, png, webp");
-            }
-            if (logo.getSize() > MAX_IMAGE_SIZE_BYTES) {
-                throw new BusinessRuleException("Logo image exceeds 2 MB");
-            }
-            String key    = "logos/merchants/" + merchant.getId() + "/" + UUID.randomUUID() + "." + extension;
-            String logoUrl = storageService.uploadBytes(key, logo.getBytes(), contentType(filename));
-            return ResponseEntity.ok(Map.of("logoUrl", logoUrl));
+            currentMerchant(authentication);
+            return ResponseEntity.ok(Map.of("logoUrl", uploadLogo(logo)));
         });
     }
 
@@ -104,12 +91,30 @@ public class MerchantStoreController extends BaseMerchantController {
         });
     }
 
-    @PutMapping("/stores/{id}")
+    @PutMapping(value = "/stores/{id}", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> updateStore(Authentication authentication,
                                          @PathVariable Integer id,
                                          @RequestBody MerchantStoreRequestDTO request) {
         return handle(() -> {
             Store store = storeInMerchantScope(authentication, id);
+            Store updated = storeService.updateForMerchant(store, request);
+            return ResponseEntity.ok(storeService.toResponseDTO(updated));
+        });
+    }
+
+    @PutMapping(value = "/stores/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<?> updateStoreWithLogo(Authentication authentication,
+                                                 @PathVariable Integer id,
+                                                 @RequestPart("store") MerchantStoreRequestDTO request,
+                                                 @RequestPart(value = "logo", required = false) MultipartFile logo) {
+        return handle(() -> {
+            Store store = storeInMerchantScope(authentication, id);
+            if (logo != null && !logo.isEmpty()) {
+                String logoName = request.getName() == null || request.getName().isBlank()
+                        ? store.getStoreName()
+                        : request.getName();
+                request.setLogoUrl(uploadLogo(logo, logoName));
+            }
             Store updated = storeService.updateForMerchant(store, request);
             return ResponseEntity.ok(storeService.toResponseDTO(updated));
         });
@@ -133,6 +138,41 @@ public class MerchantStoreController extends BaseMerchantController {
 
             return ResponseEntity.ok(dashboardService.getDashboardData(store.getId()));
         });
+    }
+
+    private static String safeFilename(String filename) {
+        return filename.replaceAll("[^a-zA-Z0-9._-]", "-");
+    }
+
+    private static String filenameWithoutExtension(String filename, String extension) {
+        String suffix = "." + extension;
+        if (filename.toLowerCase().endsWith(suffix)) {
+            return filename.substring(0, filename.length() - suffix.length());
+        }
+        return filename;
+    }
+
+    private String uploadLogo(MultipartFile logo) throws java.io.IOException {
+        return uploadLogo(logo, null);
+    }
+
+    private String uploadLogo(MultipartFile logo, String storeName) throws java.io.IOException {
+        if (logo == null || logo.isEmpty()) {
+            throw new BusinessRuleException("Store logo is required");
+        }
+        String filename = logo.getOriginalFilename() == null ? "" : logo.getOriginalFilename();
+        String extension = extension(filename);
+        if (!ALLOWED_IMAGE_EXTENSIONS.contains(extension)) {
+            throw new BusinessRuleException("Invalid logo extension. Allowed: jpg, jpeg, png, webp");
+        }
+        if (logo.getSize() > MAX_IMAGE_SIZE_BYTES) {
+            throw new BusinessRuleException("Logo image exceeds 2 MB");
+        }
+        String baseName = storeName == null || storeName.isBlank()
+                ? UUID.randomUUID() + "-" + safeFilename(filenameWithoutExtension(filename, extension))
+                : slugify(storeName);
+        String key = "logos/" + baseName + "." + extension;
+        return storageService.uploadBytes(key, logo.getBytes(), contentType(filename));
     }
 
 }

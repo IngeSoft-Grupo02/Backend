@@ -166,7 +166,12 @@ class CoreServiceCoverageTest {
         ProductVariantService variantService = new ProductVariantService(productVariantRepository);
         ProductVariant variant = variant();
         when(productVariantRepository.save(any(ProductVariant.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(productVariantRepository.findWithProductById(4)).thenReturn(Optional.of(variant));
+        when(productVariantRepository.findWithProductById(404)).thenReturn(Optional.empty());
         assertThat(variantService.create(variant).getStock()).isEqualTo(3);
+        assertThat(variantService.getByIdWithProduct(4)).isSameAs(variant);
+        assertThatThrownBy(() -> variantService.getByIdWithProduct(0)).isInstanceOf(BusinessRuleException.class);
+        assertThatThrownBy(() -> variantService.getByIdWithProduct(404)).isInstanceOf(ResourceNotFoundException.class);
         variant.setStock(-1);
         assertThatThrownBy(() -> variantService.create(variant)).isInstanceOf(BusinessRuleException.class);
 
@@ -226,12 +231,18 @@ class CoreServiceCoverageTest {
         assertThat(categoryService.createFromDTO(categoryDTO).getStoreCategoryName()).isEqualTo("Urban");
         assertThat(categoryService.search("urb")).containsExactly(category);
         assertThat(categoryService.search(null)).containsExactly(category);
+        StoreCategoryDTO blankCategory = new StoreCategoryDTO();
+        blankCategory.setStoreCategoryName(" ");
+        assertThatThrownBy(() -> categoryService.createFromDTO(blankCategory)).isInstanceOf(BusinessRuleException.class);
         categoryDTO.setStoreCategoryName("Casual");
         assertThat(categoryService.updateFromDTO(1, categoryDTO).getStoreCategoryName()).isEqualTo("Casual");
         StoreCategory duplicate = category(2, "Casual");
         when(categoryRepository.findAll()).thenReturn(List.of(duplicate));
         assertThatThrownBy(() -> categoryService.updateFromDTO(1, categoryDTO))
                 .isInstanceOf(BusinessRuleException.class);
+        category.setActive(true);
+        when(categoryRepository.findAll()).thenReturn(List.of(category));
+        assertThat(categoryService.findActive()).containsExactly(category);
 
         StoreService storeService = new StoreService(storeRepository, merchantRepository, categoryRepository, quotationRepository);
         Store store = store();
@@ -328,6 +339,27 @@ class CoreServiceCoverageTest {
         Customer invalid = customerProfile();
         invalid.setFirstName("");
         assertThatThrownBy(() -> customerService.create(invalid)).isInstanceOf(BusinessRuleException.class);
+        Customer missingUser = customerProfile();
+        missingUser.setUserAccount(null);
+        assertThatThrownBy(() -> customerService.create(missingUser)).isInstanceOf(BusinessRuleException.class);
+        Customer missingDocumentType = customerProfile();
+        missingDocumentType.setDocumentType(null);
+        assertThatThrownBy(() -> customerService.create(missingDocumentType)).isInstanceOf(BusinessRuleException.class);
+        Customer missingBirthDate = customerProfile();
+        missingBirthDate.setBirthDate(null);
+        assertThatThrownBy(() -> customerService.create(missingBirthDate)).isInstanceOf(BusinessRuleException.class);
+        Customer missingGender = customerProfile();
+        missingGender.setGender(null);
+        assertThatThrownBy(() -> customerService.create(missingGender)).isInstanceOf(BusinessRuleException.class);
+        Customer missingDocumentNumber = customerProfile();
+        missingDocumentNumber.setDocumentNumber(" ");
+        assertThatThrownBy(() -> customerService.create(missingDocumentNumber)).isInstanceOf(BusinessRuleException.class);
+        Customer missingPaternalSurname = customerProfile();
+        missingPaternalSurname.setPaternalSurname(" ");
+        assertThatThrownBy(() -> customerService.create(missingPaternalSurname)).isInstanceOf(BusinessRuleException.class);
+        Customer missingMaternalSurname = customerProfile();
+        missingMaternalSurname.setMaternalSurname(" ");
+        assertThatThrownBy(() -> customerService.create(missingMaternalSurname)).isInstanceOf(BusinessRuleException.class);
 
         AuditLogService auditLogService = new AuditLogService(auditLogRepository);
         AuditLog log = new AuditLog();

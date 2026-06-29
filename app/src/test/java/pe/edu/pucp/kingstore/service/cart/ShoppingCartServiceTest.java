@@ -10,6 +10,7 @@ import pe.edu.pucp.kingstore.domain.dto.product.CustomDesignRequestDTO;
 import pe.edu.pucp.kingstore.domain.model.cart.CartItem;
 import pe.edu.pucp.kingstore.domain.model.cart.ShoppingCart;
 import pe.edu.pucp.kingstore.domain.model.product.Discount;
+import pe.edu.pucp.kingstore.domain.model.product.CustomDesign;
 import pe.edu.pucp.kingstore.domain.model.product.Product;
 import pe.edu.pucp.kingstore.domain.model.product.ProductVariant;
 import pe.edu.pucp.kingstore.domain.model.product.enums.Color;
@@ -284,6 +285,31 @@ class ShoppingCartServiceTest {
         assertThat(result.getItems().get(0).getPrice()).isEqualTo(90.0);
     }
 
+    @Test
+    void addItemChoosesBestActiveApplicableDiscountOnly() {
+        Customer customer = customer(1);
+        Store store = store(10);
+        Product product = product(1, store, 100.0);
+        Product otherProduct = product(2, store, 100.0);
+        ProductVariant variant = variant(1, product, 50);
+        ShoppingCart cart = emptyCart(customer);
+
+        Discount inactive = discount(null, 1, 100, 80.0, false);
+        Discount otherProductDiscount = discount(otherProduct, 1, 100, 70.0, true);
+        Discount outOfRange = discount(null, 20, 30, 60.0, true);
+        Discount general = discount(null, 1, 10, 10.0, true);
+        Discount specific = discount(product, 1, 10, 25.0, true);
+
+        when(discountRepository.findByStoreId(10))
+                .thenReturn(List.of(inactive, otherProductDiscount, outOfRange, general, specific));
+        when(shoppingCartRepository.save(any(ShoppingCart.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ShoppingCart result = service.addItem(cart, variant, 5, 10);
+
+        assertThat(result.getItems().get(0).getPrice()).isEqualTo(75.0);
+    }
+
     // ── updateItem ────────────────────────────────────────────────────────────
 
     @Test
@@ -419,6 +445,39 @@ class ShoppingCartServiceTest {
     }
 
     @Test
+    void addDesignToItemRejectsNullRequestAndReusesExistingDesign() {
+        Customer customer = customer(1);
+        Store store = store(10);
+        Product product = product(1, store, 100.0);
+        ProductVariant variant = variant(1, product, 50);
+        ShoppingCart cart = emptyCart(customer);
+
+        CustomDesign existingDesign = new CustomDesign();
+        existingDesign.setId(77);
+        CartItem item = new CartItem();
+        item.setId(1);
+        item.setProductVariant(variant);
+        item.setCustomDesign(existingDesign);
+        cart.getItems().add(item);
+
+        assertThatThrownBy(() -> service.addDesignToItem(cart, 1, null))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessage("Design request is required");
+
+        CustomDesignRequestDTO request = new CustomDesignRequestDTO();
+        request.setImageUrl("https://cdn.test/design.png");
+        request.setDescription("Nuevo diseño");
+        when(shoppingCartRepository.save(any(ShoppingCart.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ShoppingCart result = service.addDesignToItem(cart, 1, request);
+
+        assertThat(result.getItems().get(0).getCustomDesign()).isSameAs(existingDesign);
+        assertThat(existingDesign.getImageUrl()).isEqualTo("https://cdn.test/design.png");
+        assertThat(existingDesign.getProduct()).isSameAs(product);
+    }
+
+    @Test
     void addDesignToItemThrowsWhenRequestEmpty() {
         ShoppingCart cart = emptyCart(customer(1));
         CartItem item = new CartItem();
@@ -480,5 +539,96 @@ class ShoppingCartServiceTest {
 
         assertThat(result.getItems()).isEmpty();
         assertThat(result.getTotalAmount()).isEqualTo(0);
+    }
+
+    @Test
+    void toResponseDTOHandlesNullItemsAndCustomDesignDetails() {
+        ShoppingCart empty = emptyCart(customer(1));
+        empty.setItems(null);
+        assertThat(service.toResponseDTO(empty).getItems()).isEmpty();
+
+        Product product = product(1, store(10), 0.0);
+        ProductVariant variant = variant(1, product, 50);
+        CustomDesign design = new CustomDesign();
+        design.setId(9);
+        design.setImageUrl("https://cdn.test/design.png");
+        design.setDescription("Bordado");
+        design.setObservations("OK");
+
+        CartItem item = new CartItem();
+        item.setId(1);
+        item.setProductVariant(variant);
+        item.setQuantity(1);
+        item.setPrice(0.0);
+        item.setSubtotal(0.0);
+        item.setCustomDesign(design);
+
+        ShoppingCart cart = emptyCart(customer(1));
+        cart.getItems().add(item);
+
+        CartResponseDTO result = service.toResponseDTO(cart);
+
+        assertThat(result.getItems()).singleElement().satisfies(dto -> {
+            assertThat(dto.getDiscountApplied()).isZero();
+            assertThat(dto.getCustomDesign()).isNotNull();
+            assertThat(dto.getCustomDesign().getImageUrl()).isEqualTo("https://cdn.test/design.png");
+        });
+    }
+
+    @Test
+    void createValidatesCustomerItemsPricesAndDiscount() {
+        ShoppingCart noCustomer = new ShoppingCart();
+        noCustomer.setItems(new ArrayList<>());
+        noCustomer.setDiscount(0.0);
+        assertThatThrownBy(() -> service.create(noCustomer))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessage("Shopping cart must belong to a customer");
+
+        ShoppingCart badQuantity = emptyCart(customer(1));
+        badQuantity.getItems().add(cartItem(0, 10.0));
+        assertThatThrownBy(() -> service.create(badQuantity))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessage("Cart item quantity must be positive");
+
+        ShoppingCart badPrice = emptyCart(customer(1));
+        badPrice.getItems().add(cartItem(1, -1.0));
+        assertThatThrownBy(() -> service.create(badPrice))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessage("Cart item price cannot be negative");
+
+        ShoppingCart badDiscount = emptyCart(customer(1));
+        badDiscount.setDiscount(50.0);
+        badDiscount.getItems().add(cartItem(1, 10.0));
+        assertThatThrownBy(() -> service.create(badDiscount))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessage("Cart discount must be between zero and subtotal");
+
+        ShoppingCart valid = emptyCart(customer(1));
+        valid.setDiscount(2.0);
+        valid.getItems().add(cartItem(2, 10.0));
+        when(shoppingCartRepository.save(any(ShoppingCart.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ShoppingCart saved = service.create(valid);
+
+        assertThat(saved.getSubTotal()).isEqualTo(20.0);
+        assertThat(saved.getTotalAmount()).isEqualTo(18.0);
+    }
+
+    private Discount discount(Product product, int min, int max, double percentage, boolean active) {
+        Discount discount = new Discount();
+        discount.setProduct(product);
+        discount.setMinQuantity(min);
+        discount.setMaxQuantity(max);
+        discount.setDiscountPercentage(percentage);
+        discount.setActive(active);
+        return discount;
+    }
+
+    private CartItem cartItem(int quantity, double price) {
+        CartItem item = new CartItem();
+        item.setQuantity(quantity);
+        item.setPrice(price);
+        return item;
     }
 }

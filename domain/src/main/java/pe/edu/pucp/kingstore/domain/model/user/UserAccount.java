@@ -18,6 +18,6 @@ public class UserAccount extends BaseEntity {
     private String email;
 
     @JsonIgnore
-    @Column(nullable = false)
+    @Column(nullable = false, length = 255)
     private String password;
 }
