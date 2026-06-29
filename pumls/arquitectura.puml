@@ -1,0 +1,77 @@
+@startuml BackendArchitecture
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam ArrowColor #555555
+skinparam PackageBorderColor #888888
+
+package "app" #EEF4FF {
+  [KingstoreBackendApplication] <<@SpringBootApplication>>
+  [S3Config] <<@ConditionalOnProperty>>
+  [JasyptConfig]
+}
+
+package "api" #E8F5E9 {
+  package "controllers" {
+    [AuthController]
+    [AdminControllers]
+    [MerchantControllers]
+    [CustomerControllers]
+    [PublicControllers]
+  }
+  package "security" {
+    [SecurityConfig]
+    [JwtAuthenticationFilter]
+  }
+  package "context" {
+    [CustomerContext]
+    [MerchantContext]
+  }
+  [AuditInterceptor]
+}
+
+package "service" #FFF8E1 {
+  interface CrudService
+  [AbstractCrudService] ..|> CrudService
+  interface StorageService
+  [LocalStorageService] ..|> StorageService
+  [S3StorageService] ..|> StorageService
+  [JwtUtil]
+  [UserAccountService]
+  [ProductService]
+  [OrderService]
+  [QuotationService]
+  [StoreService]
+  [AuditLogService]
+  [BulkUploadService] --> StorageService
+}
+
+package "repository" #FBE9E7 {
+  interface "JpaRepository" as JpaRepo
+  [ProductRepository] ..|> JpaRepo
+  [OrderRepository] ..|> JpaRepo
+  [UserRepository] ..|> JpaRepo
+  [StoreRepository] ..|> JpaRepo
+}
+
+package "domain" #F3E5F5 {
+  [BaseEntity] <<@MappedSuperclass>>
+  [Entities] <<@Entity>>
+  [DTOs]
+  [Enums]
+  [Entities] --|> [BaseEntity]
+}
+
+[app] ..> [api] : arranca
+[api] ..> [service] : usa
+[service] ..> [repository] : consulta
+[repository] ..> [domain] : mapea
+[service] ..> [domain] : opera con
+[api] ..> [domain] : serializa DTOs
+
+database "AWS RDS\nMySQL" as RDS
+[repository] --> RDS
+
+cloud "AWS S3" as S3
+[S3StorageService] --> S3
+
+@enduml

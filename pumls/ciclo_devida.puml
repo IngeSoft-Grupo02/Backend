@@ -1,0 +1,88 @@
+@startuml RequestLifecycle
+skinparam shadowing false
+skinparam BoxPadding 10
+skinparam ParticipantPadding 10
+
+actor Browser as "Browser (Next.js)"
+
+box "Spring Security Filter Chain" #F2F4F8
+  participant CorsFilter as "CorsFilter"
+  participant JwtFilter as "JwtAuthFilter"
+end box
+
+box "Spring MVC Layer" #E8F5E9
+  participant Controller as "Controller"
+  participant Ctx as "RequestContext"
+  participant Audit as "AuditInterceptor"
+end box
+
+box "Business & Data Layer" #FFF8E1
+  participant Service as "Service"
+  participant Repo as "Repository"
+end box
+
+database DB as "RDS MySQL"
+entity S3 as "AWS S3"
+
+' --- INICIO DEL FLUJO ---
+Browser -> CorsFilter : HTTP Request + Bearer token
+activate CorsFilter
+CorsFilter -> CorsFilter : Verificar origen (CORS)
+
+CorsFilter -> JwtFilter : Continuar cadena
+activate JwtFilter
+JwtFilter -> JwtFilter : Extraer y validar JWT
+JwtFilter -> JwtFilter : Poblar SecurityContext (RBAC)
+
+JwtFilter -> Controller : Petición autorizada
+deactivate CorsFilter
+deactivate JwtFilter
+activate Controller
+
+' --- CONTEXTO ---
+Controller -> Ctx : Resolver usuario y tienda
+activate Ctx
+Ctx -> Repo : findByUserAccountId()
+activate Repo
+Repo -> DB : SELECT
+DB --> Repo : Entidad
+Repo --> Ctx : Retorna contexto
+deactivate Repo
+Ctx --> Controller : Contexto (Customer/Merchant)
+deactivate Ctx
+
+' --- NEGOCIO ---
+Controller -> Service : Ejecutar lógica de negocio
+activate Service
+Service -> Service : Validaciones
+
+alt Caso: Subida de Imágenes
+  Service -> S3 : uploadBytes()
+  S3 --> Service : S3 URL
+end
+
+Service -> Repo : save() / find()
+activate Repo
+Repo -> DB : INSERT / UPDATE / SELECT
+DB --> Repo : Resultado
+Repo --> Service : Entidad
+deactivate Repo
+
+Service --> Controller : Retorna DTO respuesta
+deactivate Service
+
+' --- RESPUESTA AL CLIENTE ---
+Controller --> Browser : HTTP 200 OK (JSON)
+
+' --- POST-PROCESAMIENTO ASÍNCRONO/INTERCEPTOR ---
+note over Controller, Audit
+  El interceptor ejecuta 'afterCompletion' 
+  después de enviar la respuesta al cliente.
+end note
+Controller -> Audit : afterCompletion()
+activate Audit
+Audit -> DB : INSERT audit_log
+deactivate Audit
+deactivate Controller
+
+@enduml
