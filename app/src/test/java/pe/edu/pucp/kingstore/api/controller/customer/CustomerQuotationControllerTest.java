@@ -189,6 +189,7 @@ class CustomerQuotationControllerTest {
         assertThat(associationsCaptor.getValue().get(0)).isSameAs(firstItem);
         assertThat(associationsCaptor.getValue().get(1)).isSameAs(secondItem);
     }
+
     @Test
     void createQuotation_whenDesignUploadFails_shouldReturnClearErrorAndNotDeactivateCart() {
         MockMultipartFile design = new MockMultipartFile(
@@ -232,9 +233,6 @@ class CustomerQuotationControllerTest {
 
     @Test
     void createDoesNotDeactivateCartWhenCreationFails() {
-        // El carrito SOLO se desactiva tras crear la cotización con éxito. Si
-        // createFromCart lanza (carrito vacío o, en una carrera, ya cotizado), no
-        // debe destruirse el carrito: nada de deactivate y respuesta 400.
         when(customerContext.store("tienda-luna")).thenReturn(store);
         when(customerContext.customer(authentication, store)).thenReturn(customer);
         when(shoppingCartService.getOrCreateCart(customer)).thenReturn(cart);

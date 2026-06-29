@@ -473,6 +473,7 @@ class QuotationServiceTest {
         assertThat(result.getItems()).hasSize(1);
         assertThat(result.getItems().get(0).getCustomerDescription()).isEqualTo("Bordado izquierdo");
     }
+
     @Test
     void createQuotation_withDescription_shouldPersistDescription() {
         pe.edu.pucp.kingstore.domain.model.product.Product product =
@@ -633,8 +634,6 @@ class QuotationServiceTest {
 
     @Test
     void findByCustomerAndStoreDelegatesToCustomerStoreQuery() {
-        // El criterio de pertenencia es customer.id + customer.store.id (query
-        // repository-level), igual de robusto y consistente con el del comerciante.
         Quotation quotation = quotation(1, cart(1), List.of(), 0);
         quotation.setStatus(QuotationStatus.PENDING);
 
@@ -648,10 +647,6 @@ class QuotationServiceTest {
 
     @Test
     void findByCustomerAndStoreListsQuotationEvenWhenCartItemsAreEmptyOrInconsistent() {
-        // La pertenencia a la tienda se decide por customer.store, NO por los items
-        // del carrito. Una cotización con el carrito vacío (o con items históricos
-        // inconsistentes) igual debe listarse para el cliente — tal como la ve el
-        // comerciante por quotation_item. Ya no se oculta por datos de cart_item.
         ShoppingCart emptyCart = cart(1);
         emptyCart.setItems(new ArrayList<>());
         Quotation quotation = quotation(2, emptyCart, List.of(), 0);
