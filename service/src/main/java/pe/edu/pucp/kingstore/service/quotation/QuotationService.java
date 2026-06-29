@@ -3,6 +3,7 @@ package pe.edu.pucp.kingstore.service.quotation;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pe.edu.pucp.kingstore.domain.model.quotation.Quotation;
+import pe.edu.pucp.kingstore.domain.model.quotation.QuotationDesign;
 import pe.edu.pucp.kingstore.domain.model.quotation.QuotationItem;
 import pe.edu.pucp.kingstore.domain.model.quotation.enums.QuotationStatus;
 import pe.edu.pucp.kingstore.repository.quotation.QuotationRepository;
@@ -10,7 +11,6 @@ import pe.edu.pucp.kingstore.service.common.AbstractCrudService;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
 import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
 import pe.edu.pucp.kingstore.domain.model.cart.ShoppingCart;
-import pe.edu.pucp.kingstore.domain.model.quotation.QuotationItem;
 
 import pe.edu.pucp.kingstore.domain.dto.quotation.QuotationItemResponseDTO;
 import pe.edu.pucp.kingstore.domain.dto.quotation.QuotationDesignDTO;
@@ -63,6 +63,11 @@ public class QuotationService extends AbstractCrudService<Quotation> {
             qi.setQuantity(cartItem.getQuantity());
             qi.setPrice(cartItem.getPrice());
             qi.setSubTotal(cartItem.getSubtotal());
+            if (cartItem.getCustomDesign() != null
+                    && cartItem.getCustomDesign().getDescription() != null
+                    && !cartItem.getCustomDesign().getDescription().isBlank()) {
+                qi.setCustomerDescription(cartItem.getCustomDesign().getDescription().trim());
+            }
             return qi;
         }).toList();
 
@@ -227,10 +232,14 @@ public class QuotationService extends AbstractCrudService<Quotation> {
                 ? quotation.getShoppingCart().getCustomer()
                 : null;
 
+        List<QuotationDesign> allDesigns = quotation.getDesigns() == null
+                ? List.of()
+                : quotation.getDesigns();
+
         List<QuotationItemResponseDTO> items = quotation.getItems() == null
                 ? List.of()
                 : quotation.getItems().stream()
-                  .map(this::toItemResponseDTO)
+                  .map(item -> toItemResponseDTO(item, allDesigns))
                   .toList();
 
         QuotationResponseDTO dto = new QuotationResponseDTO();
@@ -246,25 +255,17 @@ public class QuotationService extends AbstractCrudService<Quotation> {
         dto.setDiscount(quotation.getDiscount());
         dto.setTotalAmount(quotation.getTotalAmount());
         dto.setRequestedAt(quotation.getRequestedAt());
-        // responseAt es null mientras la cotización está pendiente (se setea al aprobar/rechazar).
         dto.setResponseAt(quotation.getResponseAt());
         dto.setDescription(quotation.getDescription());
         dto.setObservations(quotation.getObservations());
         dto.setStoreId(storeId);
         dto.setItems(items);
-        dto.setDesigns(quotation.getDesigns() == null
-                ? List.of()
-                : quotation.getDesigns().stream()
+        dto.setDesigns(allDesigns.stream()
                     .filter(design -> Boolean.TRUE.equals(design.getActive()))
-                    .map(design -> new QuotationDesignDTO(
-                            design.getId(),
-                            design.getOriginalFileName(),
-                            design.getFileUrl(),
-                            design.getContentType(),
-                            design.getSizeBytes()))
+                    .filter(design -> design.getQuotationItem() == null)
+                    .map(this::toDesignDTO)
                     .toList());
 
-        // Datos reales del cliente.
         dto.setCustomerName(MerchantCustomerUtil.customerName(customer));
         dto.setCustomerEmail(MerchantCustomerUtil.customerEmail(customer));
         dto.setCustomerPhone(MerchantCustomerUtil.customerPhone(customer));
@@ -273,7 +274,8 @@ public class QuotationService extends AbstractCrudService<Quotation> {
         return dto;
     }
 
-    private QuotationItemResponseDTO toItemResponseDTO(QuotationItem item) {
+    private QuotationItemResponseDTO toItemResponseDTO(QuotationItem item,
+                                                        List<QuotationDesign> allDesigns) {
         var variant = item.getProductVariant();
         var product = variant != null ? variant.getProduct() : null;
 
@@ -284,7 +286,13 @@ public class QuotationService extends AbstractCrudService<Quotation> {
                 ? size + " / " + (color != null ? color : "")
                 : null;
 
+        List<QuotationDesignDTO> itemDesigns = allDesigns.stream()
+                .filter(d -> isDesignForItem(d, item) && Boolean.TRUE.equals(d.getActive()))
+                .map(this::toDesignDTO)
+                .toList();
+
         QuotationItemResponseDTO dto = new QuotationItemResponseDTO();
+        dto.setId(item.getId());
         dto.setProductId(product != null ? product.getId() : null);
         dto.setProductName(productName);
         dto.setProductVariantId(variant != null ? variant.getId() : null);
@@ -294,11 +302,33 @@ public class QuotationService extends AbstractCrudService<Quotation> {
         dto.setQuantity(item.getQuantity());
         dto.setUnitPrice(item.getPrice());
         dto.setSubTotal(item.getSubTotal());
+        dto.setCustomerDescription(item.getCustomerDescription());
+        dto.setDesigns(itemDesigns);
 
         // Legacy: el frontend actual usa product/variant/price.
         dto.setProduct(productName);
         dto.setVariant(variantLabel);
         dto.setPrice(item.getPrice());
         return dto;
+    }
+
+    private boolean isDesignForItem(QuotationDesign design, QuotationItem item) {
+        QuotationItem associatedItem = design.getQuotationItem();
+        if (associatedItem == null || item == null) {
+            return false;
+        }
+        if (associatedItem.getId() != null && item.getId() != null) {
+            return Objects.equals(associatedItem.getId(), item.getId());
+        }
+        return associatedItem == item;
+    }
+    private QuotationDesignDTO toDesignDTO(QuotationDesign design) {
+        return new QuotationDesignDTO(
+                design.getId(),
+                design.getOriginalFileName(),
+                design.getFileUrl(),
+                design.getContentType(),
+                design.getSizeBytes(),
+                design.getQuotationItem() != null ? design.getQuotationItem().getId() : null);
     }
 }

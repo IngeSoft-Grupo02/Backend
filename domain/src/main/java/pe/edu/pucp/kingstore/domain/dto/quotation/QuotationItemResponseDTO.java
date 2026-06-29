@@ -4,6 +4,8 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 /**
  * DTO de respuesta para ítems de cotización en el panel del comerciante.
  *
@@ -17,6 +19,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class QuotationItemResponseDTO {
+    private Integer id;
     private Integer productId;
     private String productName;
     private Integer productVariantId;
@@ -26,6 +29,9 @@ public class QuotationItemResponseDTO {
     private int quantity;
     private double unitPrice;
     private double subTotal;
+
+    private String customerDescription;
+    private List<QuotationDesignDTO> designs;
 
     // Legacy (no eliminar: el frontend actual los consume).
     private String product;

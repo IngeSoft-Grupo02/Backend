@@ -20,4 +20,7 @@ public class QuotationItem extends BaseEntity {
     private double price;
     @Column(nullable = false)
     private double subTotal;
+
+    @Column(length = 500)
+    private String customerDescription;
 }

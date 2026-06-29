@@ -23,6 +23,10 @@ public class QuotationDesign extends BaseEntity {
     @JoinColumn(name = "quotation_id", nullable = false)
     private Quotation quotation;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "quotation_item_id")
+    private QuotationItem quotationItem;
+
     @Column(name = "store_id", nullable = false)
     private Integer storeId;
 

@@ -13,4 +13,5 @@ public class QuotationDesignDTO {
     private String url;
     private String contentType;
     private Long sizeBytes;
+    private Integer quotationItemId;
 }

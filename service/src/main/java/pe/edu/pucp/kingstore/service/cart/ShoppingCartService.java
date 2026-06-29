@@ -223,6 +223,7 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
             }
             return new CartResponseDTO.CartItemResponseDTO(
                     item.getId(),
+                    product.getId(),
                     variant.getId(),
                     product.getName(),
                     variant.getSize(),

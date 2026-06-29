@@ -61,7 +61,8 @@ class MerchantQuotationControllerTest {
                 "diseno-frontal.png",
                 "https://bucket.s3.amazonaws.com/design/street-kings/quotations/1/diseno-frontal.png",
                 "image/png",
-                123456L)));
+                123456L,
+                null)));
 
         when(merchantContext.currentStore(authentication, 10)).thenReturn(store);
         when(quotationService.findByStoreId(10)).thenReturn(List.of(quotation));
