@@ -6,6 +6,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import pe.edu.pucp.kingstore.domain.model.cart.ShoppingCart;
+import pe.edu.pucp.kingstore.domain.model.product.CustomDesign;
 import pe.edu.pucp.kingstore.domain.model.product.ProductVariant;
 import pe.edu.pucp.kingstore.domain.model.product.enums.Color;
 import pe.edu.pucp.kingstore.domain.model.quotation.Quotation;
@@ -323,7 +324,9 @@ class QuotationServiceTest {
         cart.setCustomer(customer);
 
         QuotationItem item = item(15.0, 2);
+        item.setId(15);
         item.setSubTotal(30.0);
+        item.setCustomerDescription("Bordado al frente");
 
         Quotation quotation = quotation(1, cart, List.of(item), 5);
         quotation.setStatus(QuotationStatus.APPROVED);
@@ -331,13 +334,20 @@ class QuotationServiceTest {
         quotation.setTotalAmount(25.0);
         quotation.setDescription("Necesito polos para evento corporativo");
         quotation.setObservations("Aprobado con stock disponible");
-        QuotationDesign design = new QuotationDesign();
-        design.setId(7);
-        design.setOriginalFileName("diseno-frontal.png");
-        design.setFileUrl("https://bucket.s3.amazonaws.com/design/street-kings/quotations/1/diseno-frontal.png");
-        design.setContentType("image/png");
-        design.setSizeBytes(123456L);
-        quotation.setDesigns(List.of(design));
+        QuotationDesign generalDesign = new QuotationDesign();
+        generalDesign.setId(7);
+        generalDesign.setOriginalFileName("brief-general.pdf");
+        generalDesign.setFileUrl("https://bucket.s3.amazonaws.com/design/street-kings/quotations/1/brief-general.pdf");
+        generalDesign.setContentType("application/pdf");
+        generalDesign.setSizeBytes(123456L);
+        QuotationDesign itemDesign = new QuotationDesign();
+        itemDesign.setId(8);
+        itemDesign.setOriginalFileName("diseno-frontal.png");
+        itemDesign.setFileUrl("https://bucket.s3.amazonaws.com/design/street-kings/quotations/1/diseno-frontal.png");
+        itemDesign.setContentType("image/png");
+        itemDesign.setSizeBytes(654321L);
+        itemDesign.setQuotationItem(item);
+        quotation.setDesigns(List.of(generalDesign, itemDesign));
 
         var dto = service.toResponseDTO(quotation, 10);
 
@@ -349,11 +359,15 @@ class QuotationServiceTest {
         assertThat(dto.getDescription()).isEqualTo("Necesito polos para evento corporativo");
         assertThat(dto.getObservations()).isEqualTo("Aprobado con stock disponible");
         assertThat(dto.getDesigns()).hasSize(1);
-        assertThat(dto.getDesigns().get(0).getFileName()).isEqualTo("diseno-frontal.png");
-        assertThat(dto.getDesigns().get(0).getUrl()).contains("/design/street-kings/quotations/1/");
+        assertThat(dto.getDesigns().get(0).getFileName()).isEqualTo("brief-general.pdf");
+        assertThat(dto.getDesigns().get(0).getQuotationItemId()).isNull();
         assertThat(dto.getItems()).hasSize(1);
         assertThat(dto.getItems().get(0).getVariant()).isEqualTo("M / BLACK");
         assertThat(dto.getItems().get(0).getSubTotal()).isEqualTo(30.0);
+        assertThat(dto.getItems().get(0).getCustomerDescription()).isEqualTo("Bordado al frente");
+        assertThat(dto.getItems().get(0).getDesigns()).hasSize(1);
+        assertThat(dto.getItems().get(0).getDesigns().get(0).getFileName()).isEqualTo("diseno-frontal.png");
+        assertThat(dto.getItems().get(0).getDesigns().get(0).getQuotationItemId()).isEqualTo(15);
     }
 
     @Test
@@ -424,6 +438,41 @@ class QuotationServiceTest {
         assertThat(result.getItems().get(0).getQuantity()).isEqualTo(2);
     }
 
+    @Test
+    void createFromCartCopiesItemCustomerDescription() {
+        pe.edu.pucp.kingstore.domain.model.product.Product product =
+                new pe.edu.pucp.kingstore.domain.model.product.Product();
+        product.setId(1);
+
+        ProductVariant variant = new ProductVariant();
+        variant.setId(1);
+        variant.setProduct(product);
+
+        CustomDesign customDesign = new CustomDesign();
+        customDesign.setDescription("  Bordado izquierdo  ");
+
+        pe.edu.pucp.kingstore.domain.model.cart.CartItem cartItem =
+                new pe.edu.pucp.kingstore.domain.model.cart.CartItem();
+        cartItem.setId(1);
+        cartItem.setProductVariant(variant);
+        cartItem.setQuantity(2);
+        cartItem.setPrice(100.0);
+        cartItem.setSubtotal(200.0);
+        cartItem.setCustomDesign(customDesign);
+
+        ShoppingCart cart = cart(1);
+        cart.setItems(new java.util.ArrayList<>(List.of(cartItem)));
+        cart.setDiscount(0.0);
+
+        when(quotationRepository.findByShoppingCartId(1)).thenReturn(Optional.empty());
+        when(quotationRepository.save(any(Quotation.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Quotation result = service.createFromCart(cart);
+
+        assertThat(result.getItems()).hasSize(1);
+        assertThat(result.getItems().get(0).getCustomerDescription()).isEqualTo("Bordado izquierdo");
+    }
     @Test
     void createQuotation_withDescription_shouldPersistDescription() {
         pe.edu.pucp.kingstore.domain.model.product.Product product =

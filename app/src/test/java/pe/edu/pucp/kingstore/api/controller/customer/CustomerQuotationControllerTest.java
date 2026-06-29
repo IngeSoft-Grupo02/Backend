@@ -3,6 +3,7 @@ package pe.edu.pucp.kingstore.api.controller.customer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
@@ -12,7 +13,10 @@ import pe.edu.pucp.kingstore.api.context.CustomerContext;
 import pe.edu.pucp.kingstore.domain.dto.quotation.QuotationCreateRequestDTO;
 import pe.edu.pucp.kingstore.domain.dto.quotation.QuotationResponseDTO;
 import pe.edu.pucp.kingstore.domain.model.cart.ShoppingCart;
+import pe.edu.pucp.kingstore.domain.model.product.Product;
+import pe.edu.pucp.kingstore.domain.model.product.ProductVariant;
 import pe.edu.pucp.kingstore.domain.model.quotation.Quotation;
+import pe.edu.pucp.kingstore.domain.model.quotation.QuotationItem;
 import pe.edu.pucp.kingstore.domain.model.quotation.enums.QuotationStatus;
 import pe.edu.pucp.kingstore.domain.model.store.Store;
 import pe.edu.pucp.kingstore.domain.model.user.Customer;
@@ -22,9 +26,11 @@ import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
 import pe.edu.pucp.kingstore.service.quotation.QuotationDesignService;
 import pe.edu.pucp.kingstore.service.quotation.QuotationService;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -125,15 +131,64 @@ class CustomerQuotationControllerTest {
                 authentication,
                 "Necesito polos para evento corporativo",
                 List.of(design),
+                null,
                 null);
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(((QuotationResponseDTO) result.getBody()).getDescription())
                 .isEqualTo("Necesito polos para evento corporativo");
         verify(quotationDesignService)
-                .uploadDesigns(eq(quotation), eq("tienda-luna"), eq(10), anyList());
+                .uploadDesigns(eq(quotation), eq("tienda-luna"), eq(10), anyList(), anyMap());
     }
 
+    @Test
+    void createQuotation_withTwoVariantsOfSameProduct_shouldAssociateDesignsByVariant() {
+        MockMultipartFile firstDesign = new MockMultipartFile(
+                "designs", "variante-101.png", "image/png", "imagen-101".getBytes());
+        MockMultipartFile secondDesign = new MockMultipartFile(
+                "designs", "variante-102.png", "image/png", "imagen-102".getBytes());
+
+        Product product = new Product();
+        product.setId(55);
+
+        ProductVariant firstVariant = new ProductVariant();
+        firstVariant.setId(101);
+        firstVariant.setProduct(product);
+        QuotationItem firstItem = new QuotationItem();
+        firstItem.setId(201);
+        firstItem.setProductVariant(firstVariant);
+
+        ProductVariant secondVariant = new ProductVariant();
+        secondVariant.setId(102);
+        secondVariant.setProduct(product);
+        QuotationItem secondItem = new QuotationItem();
+        secondItem.setId(202);
+        secondItem.setProductVariant(secondVariant);
+        quotation.setItems(List.of(firstItem, secondItem));
+
+        when(customerContext.store("tienda-luna")).thenReturn(store);
+        when(customerContext.customer(authentication, store)).thenReturn(customer);
+        when(shoppingCartService.getOrCreateCart(customer)).thenReturn(cart);
+        when(quotationService.createFromCart(cart, "Necesito variantes")).thenReturn(quotation);
+        when(quotationService.toResponseDTO(quotation, 10)).thenReturn(responseDTO);
+
+        var result = controller.createMultipart(
+                "tienda-luna",
+                authentication,
+                "Necesito variantes",
+                List.of(firstDesign, secondDesign),
+                null,
+                "[{\"productVariantId\":101},{\"productVariantId\":102}]");
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        ArgumentCaptor<Map<Integer, QuotationItem>> associationsCaptor =
+                (ArgumentCaptor) ArgumentCaptor.forClass(Map.class);
+        verify(quotationDesignService).uploadDesigns(
+                eq(quotation), eq("tienda-luna"), eq(10), anyList(), associationsCaptor.capture());
+        assertThat(associationsCaptor.getValue().get(0)).isSameAs(firstItem);
+        assertThat(associationsCaptor.getValue().get(1)).isSameAs(secondItem);
+    }
     @Test
     void createQuotation_whenDesignUploadFails_shouldReturnClearErrorAndNotDeactivateCart() {
         MockMultipartFile design = new MockMultipartFile(
@@ -145,13 +200,14 @@ class CustomerQuotationControllerTest {
         when(quotationService.createFromCart(cart, "Necesito polos")).thenReturn(quotation);
         org.mockito.Mockito.doThrow(new BusinessRuleException("No se pudo subir el diseño. Inténtalo nuevamente."))
                 .when(quotationDesignService)
-                .uploadDesigns(eq(quotation), eq("tienda-luna"), eq(10), anyList());
+                .uploadDesigns(eq(quotation), eq("tienda-luna"), eq(10), anyList(), anyMap());
 
         var result = controller.createMultipart(
                 "tienda-luna",
                 authentication,
                 "Necesito polos",
                 List.of(design),
+                null,
                 null);
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);

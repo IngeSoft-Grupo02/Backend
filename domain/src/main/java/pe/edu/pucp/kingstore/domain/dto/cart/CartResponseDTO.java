@@ -24,6 +24,7 @@ public class CartResponseDTO {
     @AllArgsConstructor
     public static class CartItemResponseDTO {
         private Integer id;
+        private Integer productId;
         private Integer productVariantId;
         private String productName;
         private String size;

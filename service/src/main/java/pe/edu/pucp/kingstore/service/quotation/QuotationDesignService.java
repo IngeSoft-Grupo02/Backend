@@ -5,6 +5,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import pe.edu.pucp.kingstore.domain.model.quotation.Quotation;
 import pe.edu.pucp.kingstore.domain.model.quotation.QuotationDesign;
+import pe.edu.pucp.kingstore.domain.model.quotation.QuotationItem;
 import pe.edu.pucp.kingstore.repository.quotation.QuotationDesignRepository;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
 import pe.edu.pucp.kingstore.service.storage.StorageService;
@@ -14,6 +15,7 @@ import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -42,12 +44,23 @@ public class QuotationDesignService {
                                                String storeSlug,
                                                Integer storeId,
                                                List<MultipartFile> files) {
+        return uploadDesigns(quotation, storeSlug, storeId, files, Map.of());
+    }
+
+    @Transactional
+    public List<QuotationDesign> uploadDesigns(Quotation quotation,
+                                               String storeSlug,
+                                               Integer storeId,
+                                               List<MultipartFile> files,
+                                               Map<Integer, QuotationItem> fileIndexToItem) {
         if (files == null || files.isEmpty()) {
             return List.of();
         }
 
+        List<MultipartFile> validFiles = files.stream().filter(file -> file != null).toList();
         List<QuotationDesign> saved = new ArrayList<>();
-        for (MultipartFile file : files.stream().filter(file -> file != null).toList()) {
+        for (int i = 0; i < validFiles.size(); i++) {
+            MultipartFile file = validFiles.get(i);
             validate(file);
 
             String originalFileName = originalFileName(file);
@@ -66,6 +79,12 @@ public class QuotationDesignService {
             design.setFileUrl(url);
             design.setContentType(contentType);
             design.setSizeBytes(file.getSize());
+
+            QuotationItem associatedItem = fileIndexToItem.get(i);
+            if (associatedItem != null) {
+                design.setQuotationItem(associatedItem);
+            }
+
             saved.add(quotationDesignRepository.save(design));
         }
 
