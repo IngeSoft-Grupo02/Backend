@@ -299,9 +299,11 @@ class ShoppingCartServiceTest {
         Discount outOfRange = discount(null, 20, 30, 60.0, true);
         Discount general = discount(null, 1, 10, 10.0, true);
         Discount specific = discount(product, 1, 10, 25.0, true);
+        Discount deleted = discount(null, 1, 10, 95.0, true);
+        deleted.setDeleted(true);
 
         when(discountRepository.findByStoreId(10))
-                .thenReturn(List.of(inactive, otherProductDiscount, outOfRange, general, specific));
+                .thenReturn(List.of(inactive, otherProductDiscount, outOfRange, general, specific, deleted));
         when(shoppingCartRepository.save(any(ShoppingCart.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 

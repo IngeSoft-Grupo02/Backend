@@ -254,6 +254,7 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
     private double resolveDiscount(Integer storeId, Product product, int quantity) {
         return discountRepository.findByStoreId(storeId).stream()
                 .filter(d -> Boolean.TRUE.equals(d.getActive()))
+                .filter(d -> !Boolean.TRUE.equals(d.getDeleted()))
                 .filter(d -> d.getProduct() == null
                         || Objects.equals(d.getProduct().getId(), product.getId()))
                 .filter(d -> quantity >= d.getMinQuantity()

@@ -411,7 +411,9 @@ class ProductServiceCoverageTest {
         Product otherProduct = product(99, store);
         Discount other = discount(3, "Otro", otherProduct, true);
         Discount inactive = discount(4, "Inactivo", null, false);
-        when(discountRepository.findByStoreId(10)).thenReturn(List.of(global, specific, other, inactive));
+        Discount deleted = discount(5, "Eliminado", null, true);
+        deleted.setDeleted(true);
+        when(discountRepository.findByStoreId(10)).thenReturn(List.of(global, specific, other, inactive, deleted));
 
         var dto = service.toPublicDTO(product);
 

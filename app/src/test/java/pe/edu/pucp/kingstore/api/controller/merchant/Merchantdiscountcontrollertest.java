@@ -181,7 +181,7 @@ class MerchantDiscountControllerTest {
     // =========================================================================
 
     @Test
-    void deleteDiscountDeactivatesAndReturnsMessage() {
+    void deleteDiscountMarksDeletedAndReturnsMessage() {
         when(merchantContext.currentStore(authentication, 10)).thenReturn(store);
         Discount existing = new Discount();
         existing.setId(1);
@@ -192,7 +192,7 @@ class MerchantDiscountControllerTest {
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
         @SuppressWarnings("unchecked")
         Map<String, String> body = (Map<String, String>) result.getBody();
-        assertThat(body.get("message")).isEqualTo("Discount deactivated successfully");
-        verify(discountService).deactivate(1);
+        assertThat(body.get("message")).isEqualTo("Discount deleted successfully");
+        verify(discountService).markDeleted(1);
     }
 }

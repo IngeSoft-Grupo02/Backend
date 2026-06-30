@@ -6,7 +6,6 @@ import pe.edu.pucp.kingstore.domain.model.product.Discount;
 import pe.edu.pucp.kingstore.repository.product.DiscountRepository;
 import pe.edu.pucp.kingstore.service.common.AbstractCrudService;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
-import com.fasterxml.jackson.annotation.JsonAlias;
 import pe.edu.pucp.kingstore.domain.dto.product.DiscountRequestDTO;
 import pe.edu.pucp.kingstore.domain.dto.product.DiscountResponseDTO;
 import pe.edu.pucp.kingstore.domain.model.product.enums.VolumeType;
@@ -15,6 +14,7 @@ import pe.edu.pucp.kingstore.domain.model.product.Product;
 import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
 import pe.edu.pucp.kingstore.service.user.util.MerchantStringUtil;
 
+import java.time.LocalDateTime;
 import java.text.Normalizer;
 import java.util.Locale;
 import java.util.Objects;
@@ -46,6 +46,9 @@ public class DiscountService extends AbstractCrudService<Discount> {
         requireId(discountId);
         requireId(storeId);
         Discount discount = getById(discountId);
+        if (isDeleted(discount)) {
+            throw new ResourceNotFoundException("Discount", discountId);
+        }
         Integer discountStoreId = discount.getStore() != null
                 ? discount.getStore().getId()
                 : discount.getProduct() != null && discount.getProduct().getStore() != null
@@ -86,6 +89,14 @@ public class DiscountService extends AbstractCrudService<Discount> {
         return discountRepository.save(discount);
     }
 
+    @Transactional
+    public Discount markDeleted(Integer discountId) {
+        Discount discount = getById(discountId);
+        discount.setDeleted(true);
+        discount.setDeletedAt(LocalDateTime.now());
+        return discountRepository.save(discount);
+    }
+
     public DiscountResponseDTO toResponseDTO(Discount discount) {
         Product product = discount.getProduct();
         Integer storeId = discount.getStore() != null
@@ -115,6 +126,7 @@ public class DiscountService extends AbstractCrudService<Discount> {
 
     private void enforceDiscountLimit(Integer storeId, Integer currentDiscountId) {
         long count = discountRepository.findByStoreId(storeId).stream()
+                .filter(d -> !isDeleted(d))
                 .filter(d -> currentDiscountId == null
                         || !Objects.equals(d.getId(), currentDiscountId))
                 .count();
@@ -183,10 +195,17 @@ public class DiscountService extends AbstractCrudService<Discount> {
                 .replaceAll("\\p{M}", "")
                 .toLowerCase(Locale.ROOT);
     }
+
+    private boolean isDeleted(Discount discount) {
+        return Boolean.TRUE.equals(discount.getDeleted());
+    }
+
     @Override
     protected void validateForSave(Discount discount) {
-        if (discount.getProduct() == null || discount.getProduct().getId() == null) {
-            throw new BusinessRuleException("Discount must belong to a product");
+        boolean hasStore = discount.getStore() != null && discount.getStore().getId() != null;
+        boolean hasProduct = discount.getProduct() != null && discount.getProduct().getId() != null;
+        if (!hasStore && !hasProduct) {
+            throw new BusinessRuleException("Discount must belong to a store or product");
         }
         if (discount.getMinQuantity() <= 0 || discount.getMaxQuantity() <= 0) {
             throw new BusinessRuleException("Discount quantities must be positive");

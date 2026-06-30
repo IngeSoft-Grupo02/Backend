@@ -72,8 +72,8 @@ public class MerchantDiscountController extends BaseMerchantController {
         return handle(() -> {
             Store store = currentMerchantStore(authentication, storeId);
             discountService.findInStore(id, store.getId()); // scope guard
-            discountService.deactivate(id);
-            return ResponseEntity.ok(java.util.Map.of("message", "Discount deactivated successfully"));
+            discountService.markDeleted(id);
+            return ResponseEntity.ok(java.util.Map.of("message", "Discount deleted successfully"));
         });
     }
 }

@@ -137,6 +137,7 @@ public class ProductService extends AbstractCrudService<Product> {
         List<DiscountPublicDTO> discounts =
                 discountRepository.findByStoreId(product.getStore().getId()).stream()
                         .filter(d -> Boolean.TRUE.equals(d.getActive()))
+                        .filter(d -> !Boolean.TRUE.equals(d.getDeleted()))
                         .filter(d -> appliesToProduct(d, product))
                         .map(d -> new DiscountPublicDTO(
                                 d.getId(),
