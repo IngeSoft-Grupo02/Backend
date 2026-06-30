@@ -281,8 +281,101 @@ class ShoppingCartServiceTest {
 
         ShoppingCart result = service.addItem(cart, variant, 5, 10);
 
-        // 100 - 10% = 90
-        assertThat(result.getItems().get(0).getPrice()).isEqualTo(90.0);
+        assertThat(result.getItems().get(0).getPrice()).isEqualTo(100.0);
+        assertThat(result.getSubTotal()).isEqualTo(500.0);
+        assertThat(result.getDiscount()).isEqualTo(50.0);
+        assertThat(result.getTotalAmount()).isEqualTo(450.0);
+    }
+
+    @Test
+    void addItemAppliesOpenEndedDiscountAtMinQuantityAndAbove() {
+        Store store = store(10);
+        Product product = product(1, store, 100.0);
+        ProductVariant variant = variant(1, product, 50);
+        Discount discount = discount(null, 10, 10, 10.0, true);
+
+        when(discountRepository.findByStoreId(10)).thenReturn(List.of(discount));
+        when(shoppingCartRepository.save(any(ShoppingCart.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ShoppingCart nine = service.addItem(emptyCart(customer(1)), variant, 9, 10);
+        ShoppingCart ten = service.addItem(emptyCart(customer(1)), variant, 10, 10);
+        ShoppingCart eleven = service.addItem(emptyCart(customer(1)), variant, 11, 10);
+        ShoppingCart twelve = service.addItem(emptyCart(customer(1)), variant, 12, 10);
+
+        assertThat(nine.getItems().get(0).getPrice()).isEqualTo(100.0);
+        assertThat(nine.getDiscount()).isZero();
+        assertThat(ten.getItems().get(0).getPrice()).isEqualTo(100.0);
+        assertThat(ten.getDiscount()).isEqualTo(100.0);
+        assertThat(eleven.getItems().get(0).getPrice()).isEqualTo(100.0);
+        assertThat(eleven.getDiscount()).isEqualTo(110.0);
+        assertThat(twelve.getItems().get(0).getPrice()).isEqualTo(100.0);
+        assertThat(twelve.getDiscount()).isEqualTo(120.0);
+    }
+
+    @Test
+    void addItemRespectsRealUpperBoundWhenMaxQuantityIsGreaterThanMinQuantity() {
+        Store store = store(10);
+        Product product = product(1, store, 100.0);
+        ProductVariant variant = variant(1, product, 50);
+        Discount discount = discount(null, 10, 12, 10.0, true);
+
+        when(discountRepository.findByStoreId(10)).thenReturn(List.of(discount));
+        when(shoppingCartRepository.save(any(ShoppingCart.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ShoppingCart inRange = service.addItem(emptyCart(customer(1)), variant, 12, 10);
+        ShoppingCart outOfRange = service.addItem(emptyCart(customer(1)), variant, 13, 10);
+
+        assertThat(inRange.getItems().get(0).getPrice()).isEqualTo(100.0);
+        assertThat(inRange.getDiscount()).isEqualTo(120.0);
+        assertThat(outOfRange.getItems().get(0).getPrice()).isEqualTo(100.0);
+        assertThat(outOfRange.getDiscount()).isZero();
+    }
+
+    @Test
+    void addItemRecalculatesDiscountUsingAccumulatedQuantity() {
+        Store store = store(10);
+        Product product = product(1, store, 100.0);
+        ProductVariant variant = variant(1, product, 50);
+        ShoppingCart cart = emptyCart(customer(1));
+        CartItem existingItem = new CartItem();
+        existingItem.setProductVariant(variant);
+        existingItem.setQuantity(10);
+        existingItem.setPrice(90.0);
+        existingItem.setSubtotal(900.0);
+        cart.getItems().add(existingItem);
+
+        Discount discount = discount(null, 10, 10, 10.0, true);
+        when(discountRepository.findByStoreId(10)).thenReturn(List.of(discount));
+        when(shoppingCartRepository.save(any(ShoppingCart.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ShoppingCart result = service.addItem(cart, variant, 1, 10);
+
+        assertThat(result.getItems().get(0).getQuantity()).isEqualTo(11);
+        assertThat(result.getItems().get(0).getPrice()).isEqualTo(100.0);
+        assertThat(result.getItems().get(0).getSubtotal()).isEqualTo(1100.0);
+        assertThat(result.getDiscount()).isEqualTo(110.0);
+        assertThat(result.getTotalAmount()).isEqualTo(990.0);
+    }
+
+    @Test
+    void addItemDoesNotApplyPausedOrDeletedDiscounts() {
+        Store store = store(10);
+        Product product = product(1, store, 100.0);
+        ProductVariant variant = variant(1, product, 50);
+        Discount paused = discount(null, 1, 1, 90.0, false);
+        Discount deleted = discount(null, 1, 1, 80.0, true);
+        deleted.setDeleted(true);
+
+        when(discountRepository.findByStoreId(10)).thenReturn(List.of(paused, deleted));
+        when(shoppingCartRepository.save(any(ShoppingCart.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ShoppingCart result = service.addItem(emptyCart(customer(1)), variant, 12, 10);
+
+        assertThat(result.getItems().get(0).getPrice()).isEqualTo(100.0);
     }
 
     @Test
@@ -309,7 +402,9 @@ class ShoppingCartServiceTest {
 
         ShoppingCart result = service.addItem(cart, variant, 5, 10);
 
-        assertThat(result.getItems().get(0).getPrice()).isEqualTo(75.0);
+        assertThat(result.getItems().get(0).getPrice()).isEqualTo(100.0);
+        assertThat(result.getDiscount()).isEqualTo(125.0);
+        assertThat(result.getTotalAmount()).isEqualTo(375.0);
     }
 
     // ── updateItem ────────────────────────────────────────────────────────────
@@ -431,19 +526,64 @@ class ShoppingCartServiceTest {
         CartItem item = new CartItem();
         item.setId(1);
         item.setProductVariant(variant);
+        item.setQuantity(1);
+        item.setPrice(100.0);
+        item.setSubtotal(100.0);
         cart.getItems().add(item);
 
         CustomDesignRequestDTO request = new CustomDesignRequestDTO();
         request.setDescription("Logo bordado en el pecho");
 
+        when(discountRepository.findByStoreId(10)).thenReturn(List.of());
         when(shoppingCartRepository.save(any(ShoppingCart.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         ShoppingCart result = service.addDesignToItem(cart, 1, request);
 
-        assertThat(result.getItems().get(0).getCustomDesign()).isNotNull();
-        assertThat(result.getItems().get(0).getCustomDesign().getDescription())
+        CartItem resultItem = result.getItems().get(0);
+        assertThat(resultItem.getCustomDesign()).isNotNull();
+        assertThat(resultItem.getCustomDesign().getDescription())
                 .isEqualTo("Logo bordado en el pecho");
+        assertThat(resultItem.getSubtotal()).isEqualTo(100.0);
+    }
+
+    @Test
+    void addDesignToItemAppliesDesignFeeOnlyToDesignedItem() {
+        Store store = store(10);
+        Product designedProduct = product(1, store, 100.0);
+        Product plainProduct = product(2, store, 50.0);
+        ProductVariant designedVariant = variant(1, designedProduct, 50);
+        ProductVariant plainVariant = variant(2, plainProduct, 50);
+        ShoppingCart cart = emptyCart(customer(1));
+
+        CartItem designedItem = new CartItem();
+        designedItem.setId(1);
+        designedItem.setProductVariant(designedVariant);
+        designedItem.setQuantity(2);
+        designedItem.setPrice(100.0);
+        designedItem.setSubtotal(200.0);
+        cart.getItems().add(designedItem);
+
+        CartItem plainItem = new CartItem();
+        plainItem.setId(2);
+        plainItem.setProductVariant(plainVariant);
+        plainItem.setQuantity(2);
+        plainItem.setPrice(50.0);
+        plainItem.setSubtotal(100.0);
+        cart.getItems().add(plainItem);
+
+        CustomDesignRequestDTO request = new CustomDesignRequestDTO();
+        request.setDescription("Logo frontal");
+        request.setImageUrl("https://cdn.test/logo.png");
+        when(discountRepository.findByStoreId(10)).thenReturn(List.of());
+        when(shoppingCartRepository.save(any(ShoppingCart.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ShoppingCart result = service.addDesignToItem(cart, 1, request);
+
+        assertThat(result.getItems().get(0).getSubtotal()).isEqualTo(220.0);
+        assertThat(result.getItems().get(1).getSubtotal()).isEqualTo(100.0);
+        assertThat(result.getTotalAmount()).isEqualTo(320.0);
     }
 
     @Test
@@ -459,6 +599,9 @@ class ShoppingCartServiceTest {
         CartItem item = new CartItem();
         item.setId(1);
         item.setProductVariant(variant);
+        item.setQuantity(1);
+        item.setPrice(100.0);
+        item.setSubtotal(100.0);
         item.setCustomDesign(existingDesign);
         cart.getItems().add(item);
 
@@ -469,6 +612,7 @@ class ShoppingCartServiceTest {
         CustomDesignRequestDTO request = new CustomDesignRequestDTO();
         request.setImageUrl("https://cdn.test/design.png");
         request.setDescription("Nuevo diseño");
+        when(discountRepository.findByStoreId(10)).thenReturn(List.of());
         when(shoppingCartRepository.save(any(ShoppingCart.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -598,13 +742,6 @@ class ShoppingCartServiceTest {
                 .isInstanceOf(BusinessRuleException.class)
                 .hasMessage("Cart item price cannot be negative");
 
-        ShoppingCart badDiscount = emptyCart(customer(1));
-        badDiscount.setDiscount(50.0);
-        badDiscount.getItems().add(cartItem(1, 10.0));
-        assertThatThrownBy(() -> service.create(badDiscount))
-                .isInstanceOf(BusinessRuleException.class)
-                .hasMessage("Cart discount must be between zero and subtotal");
-
         ShoppingCart valid = emptyCart(customer(1));
         valid.setDiscount(2.0);
         valid.getItems().add(cartItem(2, 10.0));
@@ -614,7 +751,8 @@ class ShoppingCartServiceTest {
         ShoppingCart saved = service.create(valid);
 
         assertThat(saved.getSubTotal()).isEqualTo(20.0);
-        assertThat(saved.getTotalAmount()).isEqualTo(18.0);
+        assertThat(saved.getDiscount()).isZero();
+        assertThat(saved.getTotalAmount()).isEqualTo(20.0);
     }
 
     private Discount discount(Product product, int min, int max, double percentage, boolean active) {

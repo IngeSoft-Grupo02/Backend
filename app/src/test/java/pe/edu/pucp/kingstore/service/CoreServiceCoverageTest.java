@@ -179,7 +179,7 @@ class CoreServiceCoverageTest {
         ShoppingCart cart = cart();
         when(shoppingCartRepository.save(any(ShoppingCart.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(shoppingCartRepository.findByCustomerIdAndActiveTrueOrderByIdDesc(10)).thenReturn(List.of(cart));
-        assertThat(cartService.create(cart).getTotalAmount()).isEqualTo(17);
+        assertThat(cartService.create(cart).getTotalAmount()).isEqualTo(20);
         assertThat(cartService.findByCustomer(10)).contains(cart);
         cart.getItems().get(0).setQuantity(0);
         assertThatThrownBy(() -> cartService.create(cart)).isInstanceOf(BusinessRuleException.class);

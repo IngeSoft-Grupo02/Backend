@@ -16,7 +16,6 @@ import pe.edu.pucp.kingstore.domain.model.user.Customer;
 import pe.edu.pucp.kingstore.repository.product.DiscountRepository;
 import pe.edu.pucp.kingstore.domain.dto.product.CustomDesignRequestDTO;
 import pe.edu.pucp.kingstore.domain.model.product.CustomDesign;
-import pe.edu.pucp.kingstore.domain.model.product.Product;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -24,6 +23,8 @@ import java.util.Optional;
 
 @Service
 public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
+
+    public static final double DESIGN_FEE_PERCENTAGE = 10.0;
 
     private final ShoppingCartRepository shoppingCartRepository;
     private final DiscountRepository discountRepository;
@@ -101,24 +102,19 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
                 .findFirst()
                 .orElse(null);
 
-        double price = variant.getProduct().getBasePrice();
-        double discountApplied = resolveDiscount(storeId, variant.getProduct(), quantity);
-        double finalPrice = price * (1 - discountApplied / 100);
-
         if (existing != null) {
             int newQty = existing.getQuantity() + quantity;
             existing.setQuantity(newQty);
-            existing.setPrice(finalPrice);
-            existing.setSubtotal(finalPrice * newQty);
+            priceCartItem(existing, storeId);
         } else {
             CartItem item = new CartItem();
             item.setProductVariant(variant);
             item.setQuantity(quantity);
-            item.setPrice(finalPrice);
-            item.setSubtotal(finalPrice * quantity);
+            priceCartItem(item, storeId);
             cart.getItems().add(item);
         }
 
+        recalculateTotals(cart);
         return shoppingCartRepository.save(cart);
     }
 
@@ -142,14 +138,10 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
         // El stock NO bloquea la actualización del carrito (mismo criterio que addItem):
         // la cotización admite cantidades por encima del stock disponible.
 
-        double price = variant.getProduct().getBasePrice();
-        double discountApplied = resolveDiscount(storeId, variant.getProduct(), quantity);
-        double finalPrice = price * (1 - discountApplied / 100);
-
         item.setQuantity(quantity);
-        item.setPrice(finalPrice);
-        item.setSubtotal(finalPrice * quantity);
+        priceCartItem(item, storeId);
 
+        recalculateTotals(cart);
         return shoppingCartRepository.save(cart);
     }
 
@@ -164,6 +156,7 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
             throw new pe.edu.pucp.kingstore.service.common
                     .ResourceNotFoundException("Cart item", cartItemId);
         }
+        recalculateTotals(cart);
         return shoppingCartRepository.save(cart);
     }
     /**
@@ -197,6 +190,9 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
 
         item.setCustomDesign(design);
 
+        Integer storeId = item.getProductVariant().getProduct().getStore().getId();
+        priceCartItem(item, storeId);
+        recalculateTotals(cart);
         return shoppingCartRepository.save(cart);
     }
 // ── Entity → DTO ──────────────────────────────────────────────────────────────
@@ -208,8 +204,10 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
             ProductVariant variant = item.getProductVariant();
             Product product = variant.getProduct();
             double originalPrice = product.getBasePrice();
-            double discountApplied = originalPrice > 0
-                    ? (1 - item.getPrice() / originalPrice) * 100 : 0;
+            DiscountMatch discount = resolveDiscount(
+                    product.getStore().getId(), product, item.getQuantity());
+            PriceBreakdown pricing = priceBreakdown(
+                    originalPrice, item.getQuantity(), discount.percentage(), hasCustomDesign(item));
             CartResponseDTO.CustomDesignResponseDTO designDTO = null;
             if (item.getCustomDesign() != null) {
                 CustomDesign d = item.getCustomDesign();
@@ -228,20 +226,40 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
                     product.getName(),
                     variant.getSize(),
                     variant.getColor(),
-                    item.getPrice(),
+                    round(pricing.lineTotal() / item.getQuantity()),
                     item.getQuantity(),
-                    item.getSubtotal(),
-                    Math.round(discountApplied * 100.0) / 100.0,
-                    designDTO
+                    pricing.lineTotal(),
+                    round(discount.percentage()),
+                    designDTO,
+                    round(originalPrice),
+                    pricing.baseSubtotal(),
+                    pricing.discountAmount(),
+                    pricing.designFeeAmount(),
+                    pricing.lineTotal(),
+                    discount.ruleLabel(),
+                    pricing.designFeeAmount() > 0
             );
         }).toList();
+
+        double productSubtotal = items.stream()
+                .mapToDouble(CartResponseDTO.CartItemResponseDTO::getBaseSubtotal)
+                .sum();
+        double discountTotal = items.stream()
+                .mapToDouble(CartResponseDTO.CartItemResponseDTO::getDiscountAmount)
+                .sum();
+        double designFeeTotal = items.stream()
+                .mapToDouble(CartResponseDTO.CartItemResponseDTO::getDesignFeeAmount)
+                .sum();
 
         return new CartResponseDTO(
                 cart.getId(),
                 items,
                 cart.getSubTotal(),
                 cart.getDiscount(),
-                cart.getTotalAmount()
+                cart.getTotalAmount(),
+                round(productSubtotal),
+                round(discountTotal),
+                round(designFeeTotal)
         );
     }
 
@@ -251,17 +269,24 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
      * Busca el descuento por volumen activo más beneficioso para el producto
      * según la cantidad solicitada. Retorna el porcentaje a aplicar (0 si ninguno aplica).
      */
-    private double resolveDiscount(Integer storeId, Product product, int quantity) {
-        return discountRepository.findByStoreId(storeId).stream()
+    private DiscountMatch resolveDiscount(Integer storeId, Product product, int quantity) {
+        if (storeId == null || product == null) {
+            return new DiscountMatch(0, null);
+        }
+        List<Discount> discounts = Optional.ofNullable(discountRepository.findByStoreId(storeId))
+                .orElse(List.of());
+        return discounts.stream()
                 .filter(d -> Boolean.TRUE.equals(d.getActive()))
                 .filter(d -> !Boolean.TRUE.equals(d.getDeleted()))
                 .filter(d -> d.getProduct() == null
                         || Objects.equals(d.getProduct().getId(), product.getId()))
-                .filter(d -> quantity >= d.getMinQuantity()
-                        && quantity <= d.getMaxQuantity())
-                .mapToDouble(Discount::getDiscountPercentage)
-                .max()
-                .orElse(0);
+                .filter(d -> appliesToQuantity(d, quantity))
+                .max((left, right) -> Double.compare(
+                        left.getDiscountPercentage(), right.getDiscountPercentage()))
+                .map(d -> new DiscountMatch(
+                        d.getDiscountPercentage(),
+                        discountRuleLabel(d)))
+                .orElse(new DiscountMatch(0, null));
     }
     @Override
     protected void validateForSave(ShoppingCart cart) {
@@ -273,6 +298,7 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
 
     private void recalculateTotals(ShoppingCart cart) {
         double subTotal = 0;
+        double discountTotal = 0;
         if (cart.getItems() != null) {
             for (CartItem item : cart.getItems()) {
                 if (item.getQuantity() <= 0) {
@@ -281,15 +307,86 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
                 if (item.getPrice() < 0) {
                     throw new BusinessRuleException("Cart item price cannot be negative");
                 }
-                item.setSubtotal(item.getPrice() * item.getQuantity());
+                PriceBreakdown pricing = breakdownForCartItem(item);
+                item.setPrice(round(pricing.amountBeforeDiscount() / item.getQuantity()));
+                item.setSubtotal(pricing.amountBeforeDiscount());
                 subTotal += item.getSubtotal();
+                discountTotal += pricing.discountAmount();
             }
         }
 
+        cart.setDiscount(round(discountTotal));
         if (cart.getDiscount() < 0 || cart.getDiscount() > subTotal) {
             throw new BusinessRuleException("Cart discount must be between zero and subtotal");
         }
-        cart.setSubTotal(subTotal);
-        cart.setTotalAmount(subTotal - cart.getDiscount());
+        cart.setSubTotal(round(subTotal));
+        cart.setTotalAmount(round(subTotal - cart.getDiscount()));
     }
+
+    private void priceCartItem(CartItem item, Integer storeId) {
+        Product product = item.getProductVariant().getProduct();
+        double baseUnitPrice = product.getBasePrice();
+        DiscountMatch discount = resolveDiscount(storeId, product, item.getQuantity());
+        PriceBreakdown pricing = priceBreakdown(
+                baseUnitPrice, item.getQuantity(), discount.percentage(), hasCustomDesign(item));
+        item.setPrice(round(pricing.amountBeforeDiscount() / item.getQuantity()));
+        item.setSubtotal(pricing.amountBeforeDiscount());
+    }
+
+    private PriceBreakdown breakdownForCartItem(CartItem item) {
+        if (item.getProductVariant() == null || item.getProductVariant().getProduct() == null) {
+            double fallbackSubtotal = round(item.getPrice() * item.getQuantity());
+            return new PriceBreakdown(fallbackSubtotal, 0, 0, fallbackSubtotal, fallbackSubtotal);
+        }
+        Product product = item.getProductVariant().getProduct();
+        Integer storeId = product.getStore() != null ? product.getStore().getId() : null;
+        DiscountMatch discount = resolveDiscount(storeId, product, item.getQuantity());
+        return priceBreakdown(product.getBasePrice(), item.getQuantity(),
+                discount.percentage(), hasCustomDesign(item));
+    }
+
+    private PriceBreakdown priceBreakdown(double baseUnitPrice, int quantity,
+                                          double discountPercentage,
+                                          boolean hasDesign) {
+        double baseSubtotal = round(baseUnitPrice * quantity);
+        double discountAmount = round(baseSubtotal * discountPercentage / 100);
+        double designFeeAmount = hasDesign
+                ? round(baseSubtotal * DESIGN_FEE_PERCENTAGE / 100)
+                : 0;
+        double amountBeforeDiscount = round(baseSubtotal + designFeeAmount);
+        double lineTotal = round(amountBeforeDiscount - discountAmount);
+        return new PriceBreakdown(baseSubtotal, discountAmount, designFeeAmount,
+                amountBeforeDiscount, lineTotal);
+    }
+
+    private boolean hasCustomDesign(CartItem item) {
+        CustomDesign design = item.getCustomDesign();
+        if (design == null) {
+            return false;
+        }
+        return design.getImageUrl() != null && !design.getImageUrl().isBlank();
+    }
+
+    private boolean appliesToQuantity(Discount discount, int quantity) {
+        int min = discount.getMinQuantity();
+        int max = discount.getMaxQuantity();
+        return quantity >= min && (max <= min || quantity <= max);
+    }
+
+    private String discountRuleLabel(Discount discount) {
+        int min = discount.getMinQuantity();
+        int max = discount.getMaxQuantity();
+        String range = max <= min ? min + " a mas unidades" : min + "-" + max + " unidades";
+        return range + ": -" + round(discount.getDiscountPercentage()) + "%";
+    }
+
+    private double round(double value) {
+        return Math.round(value * 100.0) / 100.0;
+    }
+
+    private record DiscountMatch(double percentage, String ruleLabel) {}
+
+    private record PriceBreakdown(double baseSubtotal, double discountAmount,
+                                  double designFeeAmount, double amountBeforeDiscount,
+                                  double lineTotal) {}
 }

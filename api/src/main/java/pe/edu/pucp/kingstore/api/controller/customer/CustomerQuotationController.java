@@ -94,6 +94,9 @@ public class CustomerQuotationController {
                     designAssociationsJson, quotation.getItems());
             quotationDesignService.uploadDesigns(
                     quotation, store.getSlug(), store.getId(), designs, fileIndexToItem);
+            if (designs != null && !designs.isEmpty()) {
+                quotation = quotationService.applyItemDesignFees(quotation);
+            }
 
             shoppingCartService.deactivate(cart.getId());
             return ResponseEntity.status(201).body(

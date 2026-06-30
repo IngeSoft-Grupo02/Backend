@@ -475,6 +475,93 @@ class QuotationServiceTest {
     }
 
     @Test
+    void applyItemDesignFeesAddsFeeOnlyToItemsWithAssociatedDesigns() {
+        pe.edu.pucp.kingstore.domain.model.product.Product designedProduct =
+                new pe.edu.pucp.kingstore.domain.model.product.Product();
+        designedProduct.setBasePrice(100.0);
+        ProductVariant designedVariant = new ProductVariant();
+        designedVariant.setId(101);
+        designedVariant.setProduct(designedProduct);
+        QuotationItem designedItem = new QuotationItem();
+        designedItem.setId(201);
+        designedItem.setProductVariant(designedVariant);
+        designedItem.setQuantity(2);
+        designedItem.setPrice(100.0);
+        designedItem.setSubTotal(200.0);
+
+        pe.edu.pucp.kingstore.domain.model.product.Product plainProduct =
+                new pe.edu.pucp.kingstore.domain.model.product.Product();
+        plainProduct.setBasePrice(50.0);
+        ProductVariant plainVariant = new ProductVariant();
+        plainVariant.setId(102);
+        plainVariant.setProduct(plainProduct);
+        QuotationItem plainItem = new QuotationItem();
+        plainItem.setId(202);
+        plainItem.setProductVariant(plainVariant);
+        plainItem.setQuantity(2);
+        plainItem.setPrice(50.0);
+        plainItem.setSubTotal(100.0);
+
+        QuotationDesign itemDesign = new QuotationDesign();
+        itemDesign.setQuotationItem(designedItem);
+        itemDesign.setActive(true);
+        QuotationDesign generalDesign = new QuotationDesign();
+        generalDesign.setQuotationItem(null);
+        generalDesign.setActive(true);
+
+        Quotation quotation = quotation(1, cart(1), new ArrayList<>(List.of(designedItem, plainItem)), 0);
+        quotation.setDesigns(new ArrayList<>(List.of(itemDesign, generalDesign)));
+        when(quotationRepository.save(any(Quotation.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Quotation result = service.applyItemDesignFees(quotation);
+
+        assertThat(result.getItems().get(0).getSubTotal()).isEqualTo(220.0);
+        assertThat(result.getItems().get(1).getSubTotal()).isEqualTo(100.0);
+        assertThat(result.getTotalAmount()).isEqualTo(320.0);
+    }
+
+    @Test
+    void toResponseDTOExposesPricingBreakdownForDiscountAndDesign() {
+        pe.edu.pucp.kingstore.domain.model.product.Product product =
+                new pe.edu.pucp.kingstore.domain.model.product.Product();
+        product.setId(1);
+        product.setName("Polo");
+        product.setBasePrice(100.0);
+        ProductVariant variant = new ProductVariant();
+        variant.setId(101);
+        variant.setProduct(product);
+
+        QuotationItem item = new QuotationItem();
+        item.setId(201);
+        item.setProductVariant(variant);
+        item.setQuantity(10);
+        item.setPrice(110.0);
+        item.setSubTotal(1100.0);
+
+        QuotationDesign design = new QuotationDesign();
+        design.setId(301);
+        design.setQuotationItem(item);
+        design.setOriginalFileName("logo.png");
+        design.setFileUrl("https://cdn.test/logo.png");
+        design.setContentType("image/png");
+        design.setSizeBytes(100L);
+        design.setActive(true);
+
+        Quotation quotation = quotation(1, cart(1), List.of(item), 0);
+        quotation.setStatus(QuotationStatus.PENDING);
+        quotation.setSubTotal(1100.0);
+        quotation.setTotalAmount(1100.0);
+        quotation.setDesigns(List.of(design));
+
+        var dto = service.toResponseDTO(quotation, 10);
+
+        assertThat(dto.getProductSubtotal()).isEqualTo(1000.0);
+        assertThat(dto.getDesignFeeTotal()).isEqualTo(100.0);
+        assertThat(dto.getItems().get(0).getDesignFeeAmount()).isEqualTo(100.0);
+    }
+
+    @Test
     void createQuotation_withDescription_shouldPersistDescription() {
         pe.edu.pucp.kingstore.domain.model.product.Product product =
                 new pe.edu.pucp.kingstore.domain.model.product.Product();
