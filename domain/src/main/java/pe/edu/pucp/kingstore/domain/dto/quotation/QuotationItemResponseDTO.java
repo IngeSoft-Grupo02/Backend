@@ -29,6 +29,13 @@ public class QuotationItemResponseDTO {
     private int quantity;
     private double unitPrice;
     private double subTotal;
+    private double baseUnitPrice;
+    private double baseSubtotal;
+    private double discountAmount;
+    private double designFeeAmount;
+    private double lineTotal;
+    private String discountRuleLabel;
+    private boolean hasDesignFee;
 
     private String customerDescription;
     private List<QuotationDesignDTO> designs;

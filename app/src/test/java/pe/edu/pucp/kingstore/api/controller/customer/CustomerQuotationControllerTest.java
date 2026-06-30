@@ -124,6 +124,7 @@ class CustomerQuotationControllerTest {
         when(customerContext.customer(authentication, store)).thenReturn(customer);
         when(shoppingCartService.getOrCreateCart(customer)).thenReturn(cart);
         when(quotationService.createFromCart(cart, "Necesito polos para evento corporativo")).thenReturn(quotation);
+        when(quotationService.applyItemDesignFees(quotation)).thenReturn(quotation);
         when(quotationService.toResponseDTO(quotation, 10)).thenReturn(responseDTO);
 
         var result = controller.createMultipart(
@@ -170,6 +171,7 @@ class CustomerQuotationControllerTest {
         when(customerContext.customer(authentication, store)).thenReturn(customer);
         when(shoppingCartService.getOrCreateCart(customer)).thenReturn(cart);
         when(quotationService.createFromCart(cart, "Necesito variantes")).thenReturn(quotation);
+        when(quotationService.applyItemDesignFees(quotation)).thenReturn(quotation);
         when(quotationService.toResponseDTO(quotation, 10)).thenReturn(responseDTO);
 
         var result = controller.createMultipart(
