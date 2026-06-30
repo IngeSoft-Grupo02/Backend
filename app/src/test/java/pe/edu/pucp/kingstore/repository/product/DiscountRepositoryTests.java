@@ -74,17 +74,19 @@ public class DiscountRepositoryTests {
     }
 
     @Test
-    public void testThatDiscountCanBeDeleted(){
+    public void testThatDiscountCanBeMarkedDeletedAndRecalled(){
         Store store = storeRepository.save(ProductTestDataUtil.createTestStoreA());
         Product product = productRepository.save(ProductTestDataUtil.createTestProductA(store));
         Discount discount = underTest.save(ProductTestDataUtil.createTestDiscountA(product));
 
         assertThat(underTest.findById(discount.getId())).isPresent();
 
-        underTest.deleteById(discount.getId());
+        discount.setDeleted(true);
+        underTest.save(discount);
         Optional<Discount> result =  underTest.findById(discount.getId());
 
-        assertThat(result).isEmpty();
+        assertThat(result).isPresent();
+        assertThat(result.get().getDeleted()).isTrue();
     }
 
     @Test
@@ -106,5 +108,41 @@ public class DiscountRepositoryTests {
                         .containsExactlyInAnyOrder(
                                 discountB.getId()
                         );
+    }
+
+    @Test
+    public void testThatFindByStoreIdDoesNotReturnLogicallyDeletedDiscounts(){
+        Store store = storeRepository.save(ProductTestDataUtil.createTestStoreA());
+        Product product = productRepository.save(ProductTestDataUtil.createTestProductA(store));
+
+        Discount deleted = underTest.save(ProductTestDataUtil.createTestDiscountA(product));
+        Discount remaining = underTest.save(ProductTestDataUtil.createTestDiscountB(product));
+
+        deleted.setDeleted(true);
+        underTest.save(deleted);
+
+        List<Discount> result = underTest.findByStoreId(store.getId());
+
+        assertThat(result)
+                .extracting(Discount::getId)
+                .containsExactly(remaining.getId());
+    }
+
+    @Test
+    public void testThatFindByProductIdDoesNotReturnLogicallyDeletedDiscounts(){
+        Store store = storeRepository.save(ProductTestDataUtil.createTestStoreA());
+        Product product = productRepository.save(ProductTestDataUtil.createTestProductA(store));
+
+        Discount deleted = underTest.save(ProductTestDataUtil.createTestDiscountA(product));
+        Discount remaining = underTest.save(ProductTestDataUtil.createTestDiscountB(product));
+
+        deleted.setDeleted(true);
+        underTest.save(deleted);
+
+        List<Discount> result = underTest.findByProductId(product.getId());
+
+        assertThat(result)
+                .extracting(Discount::getId)
+                .containsExactly(remaining.getId());
     }
 }

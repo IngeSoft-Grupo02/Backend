@@ -7,6 +7,8 @@ import pe.edu.pucp.kingstore.domain.model.BaseEntity;
 import pe.edu.pucp.kingstore.domain.model.product.enums.VolumeType;
 import pe.edu.pucp.kingstore.domain.model.store.Store;
 
+import java.time.LocalDateTime;
+
 @Getter
 @Setter
 @Entity
@@ -45,4 +47,10 @@ public class Discount extends BaseEntity {
 
     @Column(nullable = false)
     private double discountPercentage;
+
+    @Column(nullable = false)
+    private Boolean deleted = false;
+
+    @Column
+    private LocalDateTime deletedAt;
 }

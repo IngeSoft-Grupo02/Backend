@@ -21,6 +21,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -141,6 +143,18 @@ class DiscountServiceTest {
     }
 
     @Test
+    void findInStoreThrowsNotFoundWhenDiscountIsDeleted() {
+        Discount discount = new Discount();
+        discount.setId(1);
+        discount.setStore(store(10));
+        discount.setDeleted(true);
+        when(discountRepository.findById(1)).thenReturn(Optional.of(discount));
+
+        assertThatThrownBy(() -> service.findInStore(1, 10))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
     void findInStoreThrowsWhenIdsInvalid() {
         assertThatThrownBy(() -> service.findInStore(0, 10)).isInstanceOf(BusinessRuleException.class);
         assertThatThrownBy(() -> service.findInStore(1, 0)).isInstanceOf(BusinessRuleException.class);
@@ -166,6 +180,44 @@ class DiscountServiceTest {
     }
 
     @Test
+    void createForStoreIgnoresDeletedDiscountForLimit() {
+        List<Discount> existing = new ArrayList<>();
+        for (int i = 1; i <= 4; i++) {
+            Discount d = new Discount();
+            d.setId(i);
+            existing.add(d);
+        }
+        Discount deleted = new Discount();
+        deleted.setId(5);
+        deleted.setDeleted(true);
+        existing.add(deleted);
+        when(discountRepository.findByStoreId(10)).thenReturn(existing);
+        when(discountRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Discount saved = service.createForStore(store(10), product(1, store(10)), requestDTO());
+
+        assertThat(saved.getStore().getId()).isEqualTo(10);
+        assertThat(saved.getActive()).isTrue();
+    }
+
+    @Test
+    void createForStoreCountsPausedDiscountsForLimit() {
+        List<Discount> existing = new ArrayList<>();
+        for (int i = 1; i <= 5; i++) {
+            Discount d = new Discount();
+            d.setId(i);
+            d.setActive(false);
+            d.setDeleted(false);
+            existing.add(d);
+        }
+        when(discountRepository.findByStoreId(10)).thenReturn(existing);
+
+        assertThatThrownBy(() -> service.createForStore(store(10), product(1, store(10)), requestDTO()))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("up to 5 discounts");
+    }
+
+    @Test
     void createForStorePersistsDiscountWhenUnderLimit() {
         when(discountRepository.findByStoreId(10)).thenReturn(List.of());
         when(discountRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -180,6 +232,18 @@ class DiscountServiceTest {
         assertThat(saved.getVolumeType()).isEqualTo(VolumeType.UNIT);
         assertThat(saved.getAppliesTo()).isEqualTo("Todo el catalogo");
         assertThat(saved.getDiscountType()).isEqualTo("Porcentaje");
+    }
+
+    @Test
+    void createForStorePersistsStoreWideDiscountWithoutProduct() {
+        when(discountRepository.findByStoreId(10)).thenReturn(List.of());
+        when(discountRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Discount saved = service.createForStore(store(10), null, requestDTO());
+
+        assertThat(saved.getStore().getId()).isEqualTo(10);
+        assertThat(saved.getProduct()).isNull();
+        assertThat(saved.getAppliesTo()).isEqualTo("Todo el catalogo");
     }
 
     // =========================================================================
@@ -220,6 +284,24 @@ class DiscountServiceTest {
         Discount result = service.deactivate(1);
 
         assertThat(result.getActive()).isFalse();
+    }
+
+    @Test
+    void markDeletedSetsDeletedTrueAndDeletedAtWithoutPhysicalDelete() {
+        Discount discount = new Discount();
+        discount.setId(1);
+        discount.setActive(true);
+        discount.setDeleted(false);
+        when(discountRepository.findById(1)).thenReturn(Optional.of(discount));
+        when(discountRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Discount result = service.markDeleted(1);
+
+        assertThat(result.getDeleted()).isTrue();
+        assertThat(result.getDeletedAt()).isNotNull();
+        assertThat(result.getActive()).isTrue();
+        verify(discountRepository).save(discount);
+        verify(discountRepository, never()).deleteById(1);
     }
 
     // =========================================================================
@@ -505,16 +587,17 @@ class DiscountServiceTest {
     // =========================================================================
 
     @Test
-    void validateForSaveThrowsWhenProductMissing() {
+    void validateForSaveThrowsWhenStoreAndProductMissing() {
         Discount discount = new Discount();
         discount.setProduct(null);
+        discount.setStore(null);
         discount.setMinQuantity(1);
         discount.setMaxQuantity(5);
         discount.setDiscountPercentage(10.0);
 
         assertThatThrownBy(() -> service.create(discount))
                 .isInstanceOf(BusinessRuleException.class)
-                .hasMessageContaining("must belong to a product");
+                .hasMessageContaining("must belong to a store or product");
     }
 
     @Test
