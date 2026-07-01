@@ -195,13 +195,14 @@ class PasswordResetServiceTest {
     }
 
     @Test
-    void ignoresCustomerResetWhenStoreSlugBelongsToAnotherStore() {
+    void rejectsCustomerResetWhenStoreSlugBelongsToAnotherStore() {
         UserAccount account = activeAccount();
         when(userAccountRepository.findByEmail(account.getEmail())).thenReturn(Optional.of(account));
         when(customerRepository.findByUserAccountIdAndStore_Slug(7, "otra-tienda")).thenReturn(Optional.empty());
-        when(customerRepository.existsByUserAccountId(7)).thenReturn(true);
 
-        service.requestReset(account.getEmail(), " otra-tienda ");
+        assertThatThrownBy(() -> service.requestReset(account.getEmail(), " otra-tienda "))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessage("CUSTOMER_NOT_REGISTERED_IN_STORE");
 
         verify(tokenRepository, never()).save(any());
         verify(mailSender, never()).send(any(SimpleMailMessage.class));

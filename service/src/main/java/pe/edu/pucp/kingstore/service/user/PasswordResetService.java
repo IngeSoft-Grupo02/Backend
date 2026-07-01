@@ -172,9 +172,7 @@ public class PasswordResetService {
             if (customer.isPresent()) {
                 return new ResetTarget("/recuperacion", resolveStoreName(customer.get().getStore()));
             }
-            if (customerRepository.existsByUserAccountId(userAccountId)) {
-                return null;
-            }
+            throw new BusinessRuleException("CUSTOMER_NOT_REGISTERED_IN_STORE");
         }
         if (customerRepository.existsByUserAccountId(userAccountId)) {
             return new ResetTarget("/recuperacion", "Kingstore");

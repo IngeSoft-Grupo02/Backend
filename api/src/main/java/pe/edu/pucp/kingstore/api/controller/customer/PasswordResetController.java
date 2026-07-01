@@ -44,6 +44,12 @@ public class PasswordResetController {
                         "message", "Tu cuenta de comerciante aún no tiene una tienda asignada. No puedes recuperar la contraseña hasta que se asocie una tienda."
                 ));
             }
+            if ("CUSTOMER_NOT_REGISTERED_IN_STORE".equals(exception.getMessage())) {
+                return ResponseEntity.badRequest().body(Map.of(
+                        "code", "CUSTOMER_NOT_REGISTERED_IN_STORE",
+                        "message", "Este correo no pertenece a ningún cliente registrado en esta tienda. Regístrate para crear una cuenta."
+                ));
+            }
             LOGGER.error("Password reset request could not be processed", exception);
         } catch (RuntimeException exception) {
             LOGGER.error("Password reset email could not be sent", exception);
