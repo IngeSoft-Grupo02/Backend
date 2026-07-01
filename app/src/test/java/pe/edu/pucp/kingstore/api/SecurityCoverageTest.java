@@ -1,5 +1,6 @@
 package pe.edu.pucp.kingstore.api;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.AfterEach;
@@ -15,11 +16,13 @@ import pe.edu.pucp.kingstore.domain.model.audit.enums.AuditLevel;
 import pe.edu.pucp.kingstore.domain.model.user.enums.Role;
 import pe.edu.pucp.kingstore.service.audit.AuditLogService;
 import pe.edu.pucp.kingstore.service.security.JwtUtil;
+import pe.edu.pucp.kingstore.service.user.UserAccountService;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -66,6 +69,53 @@ class SecurityCoverageTest {
         assertThat(SecurityContextHolder.getContext().getAuthentication().getAuthorities())
                 .extracting("authority")
                 .containsExactly("ROLE_MERCHANT");
+    }
+
+    @Test
+    void auditInterceptorRecordsFailureStatusAndSkipsInternalEndpoints() {
+        AuditLogService auditLogService = mock(AuditLogService.class);
+        JwtUtil jwtUtil = mock(JwtUtil.class);
+        UserAccountService userAccountService = mock(UserAccountService.class);
+        AuditInterceptor interceptor = new AuditInterceptor(
+                auditLogService,
+                jwtUtil,
+                new ObjectMapper(),
+                userAccountService
+        );
+
+        MockHttpServletRequest skippedAuditRequest = new MockHttpServletRequest("POST", "/admin/audit");
+        interceptor.afterCompletion(skippedAuditRequest, new MockHttpServletResponse(), new Object(), null);
+        MockHttpServletRequest skippedErrorRequest = new MockHttpServletRequest("POST", "/error");
+        interceptor.afterCompletion(skippedErrorRequest, new MockHttpServletResponse(), new Object(), null);
+        verify(auditLogService, never()).save(any());
+
+        Claims claims = mock(Claims.class);
+        when(claims.get("email", String.class)).thenReturn("admin@test.com");
+        when(jwtUtil.isTokenValid("valid")).thenReturn(true);
+        when(jwtUtil.extractClaims("valid")).thenReturn(claims);
+        when(jwtUtil.extractRole("valid")).thenReturn(Role.SYSTEM_ADMIN);
+        when(jwtUtil.extractStoreSlug("valid")).thenReturn("");
+
+        MockHttpServletRequest warnRequest = new MockHttpServletRequest("POST", "/admin/bulk/upload");
+        warnRequest.addHeader("Authorization", "Bearer valid");
+        MockHttpServletResponse warnResponse = new MockHttpServletResponse();
+        warnResponse.setStatus(400);
+        interceptor.afterCompletion(warnRequest, warnResponse, new Object(), null);
+
+        MockHttpServletRequest errorRequest = new MockHttpServletRequest("POST", "/admin/bulk/upload");
+        MockHttpServletResponse errorResponse = new MockHttpServletResponse();
+        errorResponse.setStatus(200);
+        interceptor.afterCompletion(errorRequest, errorResponse, new Object(), new RuntimeException("boom"));
+
+        ArgumentCaptor<AuditLog> captor = ArgumentCaptor.forClass(AuditLog.class);
+        verify(auditLogService, times(2)).save(captor.capture());
+
+        assertThat(captor.getAllValues()).extracting(AuditLog::getStatusCode)
+                .containsExactly(400, 500);
+        assertThat(captor.getAllValues()).extracting(AuditLog::getLevel)
+                .containsExactly(AuditLevel.WARN, AuditLevel.ERROR);
+        assertThat(captor.getAllValues().get(0).getUserEmail()).isEqualTo("admin@test.com");
+        assertThat(captor.getAllValues().get(0).getRole()).isEqualTo("SYSTEM_ADMIN");
     }
 
 //    @Test

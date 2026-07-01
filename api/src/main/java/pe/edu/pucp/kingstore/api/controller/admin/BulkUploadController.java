@@ -2,12 +2,14 @@ package pe.edu.pucp.kingstore.api.controller.admin;
 
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import pe.edu.pucp.kingstore.domain.dto.bulk.BulkUploadResponseDTO;
 import pe.edu.pucp.kingstore.repository.store.StoreRepository;
 import pe.edu.pucp.kingstore.repository.user.UserAccountRepository;
 import pe.edu.pucp.kingstore.service.bulk.BulkUploadService;
+import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
 
 import java.io.IOException;
 import java.util.List;
@@ -40,11 +42,18 @@ public class BulkUploadController {
         try {
             if (isEmpty(merchantsCsv) && isEmpty(storesCsv) && isEmpty(logosZip))
                 return ResponseEntity.badRequest()
-                        .body("Debes enviar al menos un archivo (merchants, stores o logos).");
+                        .body(Map.of("message", "Debes enviar al menos un archivo (merchants, stores o logos)."));
             BulkUploadResponseDTO result = bulkUploadService.process(merchantsCsv, storesCsv, logosZip);
+            if (result.getErrorCount() > 0) {
+                return ResponseEntity.badRequest().body(result);
+            }
             return ResponseEntity.ok(result);
+        } catch (BusinessRuleException | IllegalArgumentException | DataIntegrityViolationException e) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", "No se pudo completar la carga masiva: " + safeMessage(e)));
         } catch (IOException e) {
-            return ResponseEntity.status(500).body("Error procesando archivos: " + e.getMessage());
+            return ResponseEntity.status(500)
+                    .body(Map.of("message", "Error procesando archivos: " + safeMessage(e)));
         }
     }
 
@@ -93,6 +102,12 @@ public class BulkUploadController {
 
     private boolean isEmpty(MultipartFile file) {
         return file == null || file.isEmpty();
+    }
+
+    private String safeMessage(Exception e) {
+        return e.getMessage() == null || e.getMessage().isBlank()
+                ? "error no especificado"
+                : e.getMessage();
     }
 
     private ResponseEntity<byte[]> csvResponse(String content, String filename) {
