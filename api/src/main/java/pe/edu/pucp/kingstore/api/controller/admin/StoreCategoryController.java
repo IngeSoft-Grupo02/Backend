@@ -1,5 +1,6 @@
 package pe.edu.pucp.kingstore.api.controller.admin;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import pe.edu.pucp.kingstore.domain.dto.store.StoreCategoryDTO;
@@ -42,6 +43,8 @@ public class StoreCategoryController {
             return ResponseEntity.status(201).body(categoryService.createFromDTO(dto));
         } catch (BusinessRuleException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (DataIntegrityViolationException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Category already exists"));
         }
     }
 
@@ -53,6 +56,8 @@ public class StoreCategoryController {
             return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
         } catch (BusinessRuleException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (DataIntegrityViolationException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Category already exists"));
         }
     }
 

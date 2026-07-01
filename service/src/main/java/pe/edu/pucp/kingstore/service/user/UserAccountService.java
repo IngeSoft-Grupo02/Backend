@@ -22,9 +22,11 @@ import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
 import pe.edu.pucp.kingstore.domain.dto.user.CreateUserDTO;
 import pe.edu.pucp.kingstore.domain.model.user.Customer;
 import pe.edu.pucp.kingstore.domain.model.user.Merchant;
+import pe.edu.pucp.kingstore.domain.model.user.Person;
 import pe.edu.pucp.kingstore.domain.model.user.SystemAdministrator;
 
 import java.time.LocalDate;
+import java.util.Optional;
 import java.util.regex.Pattern;
 
 @Service
@@ -113,6 +115,26 @@ public class UserAccountService extends AbstractCrudService<UserAccount> {
             return Role.SYSTEM_ADMIN;
         }
         throw new BusinessRuleException("ROLE_NOT_ASSIGNED");
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<Role> findRoleByEmail(String email) {
+        if (email == null || email.isBlank()) return Optional.empty();
+
+        return userAccountRepository.findByEmail(normalizeEmail(email))
+                .flatMap(account -> {
+                    Integer userAccountId = account.getId();
+                    if (customerRepository.existsByUserAccountId(userAccountId)) {
+                        return Optional.of(Role.CUSTOMER);
+                    }
+                    if (merchantRepository.findByUserAccountId(userAccountId).isPresent()) {
+                        return Optional.of(Role.MERCHANT);
+                    }
+                    if (administratorRepository.findByUserAccountId(userAccountId).isPresent()) {
+                        return Optional.of(Role.SYSTEM_ADMIN);
+                    }
+                    return Optional.empty();
+                });
     }
 
     private String normalizeEmail(String email) {
@@ -258,33 +280,49 @@ public class UserAccountService extends AbstractCrudService<UserAccount> {
     public UserAccount updateUser(Integer id, CreateUserDTO dto) {
         UserAccount account = getById(id);
 
-        // Actualizar email y contraseÃ±a en UserAccount
         if (dto.getEmail() != null && !dto.getEmail().isBlank()) {
-            account.setEmail(normalizeEmail(dto.getEmail()));
+            String email = normalizeEmail(dto.getEmail());
+            if (!EMAIL_PATTERN.matcher(email).matches()) {
+                throw new BusinessRuleException("Ingresa un correo electrónico válido");
+            }
+            userAccountRepository.findByEmail(email)
+                    .filter(existing -> !existing.getId().equals(account.getId()))
+                    .ifPresent(existing -> {
+                        throw new BusinessRuleException("Email is already registered");
+                    });
+            account.setEmail(email);
         }
         if (dto.getPassword() != null && !dto.getPassword().isBlank()) {
             account.setPassword(passwordHashService.hash(dto.getPassword()));
         }
-        validateForSave(account);
         userAccountRepository.save(account);
 
-        // Actualizar phone en la entidad Person correspondiente
-        if (dto.getPhone() != null) {
-            merchantRepository.findByUserAccountId(id).ifPresent(m -> {
-                m.setPhone(dto.getPhone());
-                merchantRepository.save(m);
-            });
-            customerRepository.findAllByUserAccountId(id).forEach(c -> {
-                c.setPhone(dto.getPhone());
-                customerRepository.save(c);
-            });
-            administratorRepository.findByUserAccountId(id).ifPresent(a -> {
-                a.setPhone(dto.getPhone());
-                administratorRepository.save(a);
-            });
-        }
+        merchantRepository.findByUserAccountId(id).ifPresent(m -> {
+            applyPersonUpdates(m, dto);
+            if (dto.getRuc() != null) m.setRuc(dto.getRuc());
+            merchantRepository.save(m);
+        });
+        customerRepository.findAllByUserAccountId(id).forEach(c -> {
+            applyPersonUpdates(c, dto);
+            customerRepository.save(c);
+        });
+        administratorRepository.findByUserAccountId(id).ifPresent(a -> {
+            applyPersonUpdates(a, dto);
+            administratorRepository.save(a);
+        });
 
         return userAccountRepository.save(account);
+    }
+
+    private void applyPersonUpdates(Person person, CreateUserDTO dto) {
+        if (dto.getDocumentNumber() != null) person.setDocumentNumber(dto.getDocumentNumber());
+        if (dto.getDocumentType() != null) person.setDocumentType(dto.getDocumentType());
+        if (dto.getFirstName() != null) person.setFirstName(dto.getFirstName());
+        if (dto.getPaternalSurname() != null) person.setPaternalSurname(dto.getPaternalSurname());
+        if (dto.getMaternalSurname() != null) person.setMaternalSurname(dto.getMaternalSurname());
+        if (dto.getBirthDate() != null) person.setBirthDate(dto.getBirthDate());
+        if (dto.getPhone() != null) person.setPhone(dto.getPhone());
+        if (dto.getGender() != null) person.setGender(dto.getGender());
     }
 
     @Transactional

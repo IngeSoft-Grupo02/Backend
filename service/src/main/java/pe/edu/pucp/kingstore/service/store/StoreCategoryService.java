@@ -4,7 +4,6 @@ import jakarta.transaction.TransactionScoped;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import pe.edu.pucp.kingstore.domain.dto.store.StoreCategoryDTO;
-import pe.edu.pucp.kingstore.domain.model.store.Store;
 import pe.edu.pucp.kingstore.domain.model.store.StoreCategory;
 import pe.edu.pucp.kingstore.repository.store.StoreCategoryRepository;
 import pe.edu.pucp.kingstore.service.common.AbstractCrudService;
@@ -27,12 +26,13 @@ public class StoreCategoryService extends AbstractCrudService<StoreCategory> {
         if (category.getStoreCategoryName() == null || category.getStoreCategoryName().isBlank())
             throw new BusinessRuleException("Category name is required");
 
-        categoryRepository.findAll().stream()
-                .filter(c -> !c.getId().equals(category.getId()))
-                .filter(c -> c.getStoreCategoryName().equalsIgnoreCase(category.getStoreCategoryName()))
-                .findFirst()
-                .ifPresent(c -> {
-                    throw new BusinessRuleException("Category already exists: " + category.getStoreCategoryName());
+        String normalizedName = category.getStoreCategoryName().trim();
+        category.setStoreCategoryName(normalizedName);
+
+        categoryRepository.findByStoreCategoryNameIgnoreCase(normalizedName)
+                .filter(existing -> category.getId() == null || !existing.getId().equals(category.getId()))
+                .ifPresent(existing -> {
+                    throw new BusinessRuleException("Category already exists: " + normalizedName);
                 });
     }
 
@@ -46,15 +46,21 @@ public class StoreCategoryService extends AbstractCrudService<StoreCategory> {
 
     @Transactional
     public StoreCategory createFromDTO(StoreCategoryDTO dto) {
+        if (dto == null || dto.getStoreCategoryName() == null || dto.getStoreCategoryName().isBlank()) {
+            throw new BusinessRuleException("Category name is required");
+        }
         StoreCategory cat = new StoreCategory();
-        cat.setStoreCategoryName(dto.getStoreCategoryName().trim());
+        cat.setStoreCategoryName(dto.getStoreCategoryName());
         return create(cat);
     }
 
     @Transactional
     public StoreCategory updateFromDTO(Integer id, StoreCategoryDTO dto) {
+        if (dto == null || dto.getStoreCategoryName() == null || dto.getStoreCategoryName().isBlank()) {
+            throw new BusinessRuleException("Category name is required");
+        }
         StoreCategory cat = getById(id);
-        cat.setStoreCategoryName(dto.getStoreCategoryName().trim());
+        cat.setStoreCategoryName(dto.getStoreCategoryName());
         return update(id, cat);
     }
     @Override
