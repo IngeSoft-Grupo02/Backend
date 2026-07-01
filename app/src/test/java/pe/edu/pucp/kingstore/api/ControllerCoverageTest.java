@@ -15,6 +15,7 @@ import pe.edu.pucp.kingstore.api.controller.customer.CustomerAuthController;
 import pe.edu.pucp.kingstore.api.controller.admin.StoreCategoryController;
 import pe.edu.pucp.kingstore.api.controller.admin.StoreController;
 import pe.edu.pucp.kingstore.api.controller.admin.UserController;
+import pe.edu.pucp.kingstore.domain.dto.bulk.BulkIncidenceDTO;
 import pe.edu.pucp.kingstore.domain.dto.bulk.BulkUploadResponseDTO;
 import pe.edu.pucp.kingstore.domain.dto.store.StoreCategoryDTO;
 import pe.edu.pucp.kingstore.domain.dto.store.StoreDTO;
@@ -296,6 +297,23 @@ class ControllerCoverageTest {
         BulkUploadResponseDTO uploadResponse = new BulkUploadResponseDTO();
         when(bulkUploadService.process(csv, null, null)).thenReturn(uploadResponse);
         assertThat(bulkController.upload(csv, null, null).getBody()).isSameAs(uploadResponse);
+        MultipartFile invalidCsv = new MockMultipartFile("merchants", "invalid.csv", "text/csv", "email\nbad".getBytes());
+        BulkUploadResponseDTO invalidUploadResponse = new BulkUploadResponseDTO();
+        invalidUploadResponse.addIncidence(BulkIncidenceDTO.builder()
+                .block(BulkIncidenceDTO.IncidenceBlock.MERCHANTS)
+                .row(2)
+                .code("VAL_EMAIL")
+                .type(BulkIncidenceDTO.IncidenceType.ERROR)
+                .detail("Email invalido")
+                .origin("invalid.csv")
+                .build());
+        when(bulkUploadService.process(invalidCsv, null, null)).thenReturn(invalidUploadResponse);
+        ResponseEntity<?> invalidUpload = bulkController.upload(invalidCsv, null, null);
+        assertThat(invalidUpload.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(invalidUpload.getBody()).isSameAs(invalidUploadResponse);
+        MultipartFile businessFailure = new MockMultipartFile("merchants", "business.csv", "text/csv", "email\nx@test.com".getBytes());
+        when(bulkUploadService.process(businessFailure, null, null)).thenThrow(new BusinessRuleException("bad data"));
+        assertThat(bulkController.upload(businessFailure, null, null).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         MultipartFile failing = mock(MultipartFile.class);
         when(failing.isEmpty()).thenReturn(false);
         when(bulkUploadService.process(failing, null, null)).thenThrow(new IOException("disk"));

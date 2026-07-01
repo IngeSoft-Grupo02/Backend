@@ -2,6 +2,7 @@ package pe.edu.pucp.kingstore.api.interceptor;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.RequestDispatcher;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.stereotype.Component;
@@ -42,13 +43,15 @@ public class AuditInterceptor implements HandlerInterceptor {
 
         // No registrar el endpoint de auditorÃ­a mismo
         if (request.getRequestURI().contains("/admin/audit")) return;
+        if (request.getRequestURI().equals("/error")) return;
         // Solo registrar acciones del usuario, no cargas automáticas
         if (request.getMethod().equals("GET")) return;
 
         AuditLog log = new AuditLog();
+        int statusCode = resolveStatusCode(request, response, ex);
         log.setHttpMethod(request.getMethod());
         log.setEndpoint(request.getRequestURI());
-        log.setStatusCode(response.getStatus());
+        log.setStatusCode(statusCode);
         String requestEmail = extractRequestEmail(request);
 
         // Extraer info del token si existe
@@ -72,9 +75,9 @@ public class AuditInterceptor implements HandlerInterceptor {
         }
 
         // Determinar nivel segÃºn status code
-        if (response.getStatus() >= 500) {
+        if (statusCode >= 500) {
             log.setLevel(AuditLevel.ERROR);
-        } else if (response.getStatus() >= 400) {
+        } else if (statusCode >= 400) {
             log.setLevel(AuditLevel.WARN);
         } else {
             log.setLevel(AuditLevel.INFO);
@@ -82,9 +85,27 @@ public class AuditInterceptor implements HandlerInterceptor {
 
         // DescripciÃ³n basada en mÃ©todo y endpoint
         log.setDescription(request.getMethod() + " " + request.getRequestURI()
-                + " â†’ " + response.getStatus());
+                + " â†’ " + statusCode);
 
         auditLogService.save(log);
+    }
+
+    private int resolveStatusCode(HttpServletRequest request,
+                                  HttpServletResponse response,
+                                  Exception ex) {
+        Object errorStatus = request.getAttribute(RequestDispatcher.ERROR_STATUS_CODE);
+        if (errorStatus instanceof Integer status) {
+            return status;
+        }
+        if (errorStatus instanceof String statusText) {
+            try {
+                return Integer.parseInt(statusText);
+            } catch (NumberFormatException ignored) {
+                // Fall through to the response status.
+            }
+        }
+        int status = response.getStatus();
+        return ex != null && status < 400 ? 500 : status;
     }
 
     private String extractRequestEmail(HttpServletRequest request) {
