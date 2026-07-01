@@ -134,6 +134,7 @@ public class CustomerQuotationController {
             for (int i = 0; i < associations.size(); i++) {
                 Object entry = associations.get(i);
                 if (entry == null) continue;
+
                 Integer productVariantId = productVariantIdFromAssociation(entry);
                 if (duplicatedVariantIds.contains(productVariantId)) {
                     throw new BusinessRuleException(

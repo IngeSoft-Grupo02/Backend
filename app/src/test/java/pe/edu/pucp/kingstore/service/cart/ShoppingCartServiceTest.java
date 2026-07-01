@@ -655,6 +655,7 @@ class ShoppingCartServiceTest {
         Customer customer = customer(1);
         Store store = store(10);
         Product product = product(1, store, 100.0);
+        product.setImageUrls(List.of("https://cdn.test/producto-1.png"));
         ProductVariant variant = variant(1, product, 50);
         ShoppingCart cart = emptyCart(customer);
         cart.setSubTotal(100.0);
@@ -674,6 +675,7 @@ class ShoppingCartServiceTest {
         assertThat(result.getId()).isEqualTo(1);
         assertThat(result.getItems()).hasSize(1);
         assertThat(result.getItems().get(0).getProductName()).isEqualTo("Producto 1");
+        assertThat(result.getItems().get(0).getProductImageUrl()).isEqualTo("https://cdn.test/producto-1.png");
         assertThat(result.getTotalAmount()).isEqualTo(100.0);
     }
 

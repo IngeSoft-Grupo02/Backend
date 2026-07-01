@@ -50,6 +50,7 @@ public class CartResponseDTO {
         private Integer productId;
         private Integer productVariantId;
         private String productName;
+        private String productImageUrl;
         private String size;
         private Color color;
         private double price;
@@ -73,7 +74,7 @@ public class CartResponseDTO {
                                    CustomDesignResponseDTO customDesign) {
             this(id, productId, productVariantId, productName, size, color,
                     price, quantity, subtotal, discountApplied, customDesign,
-                    price, price * quantity, 0, 0, subtotal, null, false);
+                    null, price, price * quantity, 0, 0, subtotal, null, false);
         }
 
         public CartItemResponseDTO(Integer id, Integer productId,
@@ -82,6 +83,7 @@ public class CartResponseDTO {
                                    int quantity, double subtotal,
                                    double discountApplied,
                                    CustomDesignResponseDTO customDesign,
+                                   String productImageUrl,
                                    double baseUnitPrice, double baseSubtotal,
                                    double discountAmount, double designFeeAmount,
                                    double lineTotal, String discountRuleLabel,
@@ -90,6 +92,7 @@ public class CartResponseDTO {
             this.productId = productId;
             this.productVariantId = productVariantId;
             this.productName = productName;
+            this.productImageUrl = productImageUrl;
             this.size = size;
             this.color = color;
             this.price = price;

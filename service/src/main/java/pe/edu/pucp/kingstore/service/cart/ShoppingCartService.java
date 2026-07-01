@@ -197,10 +197,19 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
     }
 // ── Entity → DTO ──────────────────────────────────────────────────────────────
 
+    @Transactional(readOnly = true)
     public CartResponseDTO toResponseDTO(ShoppingCart cart) {
-        List<CartResponseDTO.CartItemResponseDTO> items = cart.getItems() == null
+        ShoppingCart responseCart = cart;
+        if (cart.getId() != null) {
+            Optional<ShoppingCart> loadedCart = shoppingCartRepository.findWithItemsById(cart.getId());
+            if (loadedCart != null && loadedCart.isPresent()) {
+                responseCart = loadedCart.get();
+            }
+        }
+
+        List<CartResponseDTO.CartItemResponseDTO> items = responseCart.getItems() == null
                 ? List.of()
-                : cart.getItems().stream().map(item -> {
+                : responseCart.getItems().stream().map(item -> {
             ProductVariant variant = item.getProductVariant();
             Product product = variant.getProduct();
             double originalPrice = product.getBasePrice();
@@ -231,6 +240,7 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
                     pricing.lineTotal(),
                     round(discount.percentage()),
                     designDTO,
+                    firstProductImage(product),
                     round(originalPrice),
                     pricing.baseSubtotal(),
                     pricing.discountAmount(),
@@ -252,11 +262,11 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
                 .sum();
 
         return new CartResponseDTO(
-                cart.getId(),
+                responseCart.getId(),
                 items,
-                cart.getSubTotal(),
-                cart.getDiscount(),
-                cart.getTotalAmount(),
+                responseCart.getSubTotal(),
+                responseCart.getDiscount(),
+                responseCart.getTotalAmount(),
                 round(productSubtotal),
                 round(discountTotal),
                 round(designFeeTotal)
@@ -264,6 +274,16 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
     }
 
 // ── Helpers privados ──────────────────────────────────────────────────────────
+
+    private String firstProductImage(Product product) {
+        if (product == null || product.getImageUrls() == null) {
+            return null;
+        }
+        return product.getImageUrls().stream()
+                .filter(url -> url != null && !url.isBlank())
+                .findFirst()
+                .orElse(null);
+    }
 
     /**
      * Busca el descuento por volumen activo más beneficioso para el producto
