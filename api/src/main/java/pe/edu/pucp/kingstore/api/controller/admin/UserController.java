@@ -228,7 +228,9 @@ public class UserController {
             dto.setMaternalSurname(merchant.getMaternalSurname());
             dto.setDocumentNumber(merchant.getDocumentNumber());
             dto.setDocumentType(merchant.getDocumentType() != null ? merchant.getDocumentType().name() : null);
+            dto.setBirthDate(merchant.getBirthDate());
             dto.setPhone(merchant.getPhone());
+            dto.setGender(merchant.getGender() != null ? merchant.getGender().name() : null);
             dto.setRuc(merchant.getRuc());
             Store store = storeByMerchantId.get(merchant.getId());
             if (store != null) { dto.setStoreName(store.getStoreName()); dto.setStoreId(store.getId()); }
@@ -242,7 +244,10 @@ public class UserController {
             dto.setPaternalSurname(customer.getPaternalSurname());
             dto.setMaternalSurname(customer.getMaternalSurname());
             dto.setDocumentNumber(customer.getDocumentNumber());
+            dto.setDocumentType(customer.getDocumentType() != null ? customer.getDocumentType().name() : null);
+            dto.setBirthDate(customer.getBirthDate());
             dto.setPhone(customer.getPhone());
+            dto.setGender(customer.getGender() != null ? customer.getGender().name() : null);
             Store store = storeByCustomerId.get(customer.getId());
             if (store != null) { dto.setStoreName(store.getStoreName()); dto.setStoreId(store.getId()); }
             return dto;
@@ -257,6 +262,8 @@ public class UserController {
             dto.setPhone(admin.getPhone());
             dto.setDocumentNumber(admin.getDocumentNumber());
             dto.setDocumentType(admin.getDocumentType() != null ? admin.getDocumentType().name() : null);
+            dto.setBirthDate(admin.getBirthDate());
+            dto.setGender(admin.getGender() != null ? admin.getGender().name() : null);
             return dto;
         }
 
