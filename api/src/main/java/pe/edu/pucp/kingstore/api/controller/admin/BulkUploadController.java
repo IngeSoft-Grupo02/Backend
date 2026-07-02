@@ -6,7 +6,10 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import pe.edu.pucp.kingstore.domain.dto.bulk.BulkUploadResponseDTO;
+import pe.edu.pucp.kingstore.domain.model.store.Store;
+import pe.edu.pucp.kingstore.domain.model.user.Merchant;
 import pe.edu.pucp.kingstore.repository.store.StoreRepository;
+import pe.edu.pucp.kingstore.repository.user.MerchantRepository;
 import pe.edu.pucp.kingstore.repository.user.UserAccountRepository;
 import pe.edu.pucp.kingstore.service.bulk.BulkUploadService;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
@@ -21,14 +24,17 @@ public class BulkUploadController {
 
     private final BulkUploadService     bulkUploadService;
     private final UserAccountRepository userAccountRepository;
+    private final MerchantRepository    merchantRepository;
     private final StoreRepository       storeRepository;
 
     public BulkUploadController(
             BulkUploadService bulkUploadService,
             UserAccountRepository userAccountRepository,
+            MerchantRepository merchantRepository,
             StoreRepository storeRepository) {
         this.bulkUploadService     = bulkUploadService;
         this.userAccountRepository = userAccountRepository;
+        this.merchantRepository    = merchantRepository;
         this.storeRepository       = storeRepository;
     }
 
@@ -67,12 +73,21 @@ public class BulkUploadController {
     }
 
     @GetMapping("/existing-stores")
-    public ResponseEntity<Map<String, List<String>>> existingStores() {
-        List<String> storeNames = storeRepository.findAll().stream()
+    public ResponseEntity<Map<String, Object>> existingStores() {
+        List<Store> stores = storeRepository.findAll();
+        List<String> storeNames = stores.stream()
+                .filter(s -> s.getStoreName() != null)
                 .map(s -> s.getStoreName().toLowerCase()).toList();
-        List<String> merchantEmails = userAccountRepository.findAll().stream()
-                .map(ua -> ua.getEmail().toLowerCase()).toList();
-        return ResponseEntity.ok(Map.of("storeNames", storeNames, "merchantEmails", merchantEmails));
+        List<Merchant> merchants = merchantRepository.findAll();
+        List<String> merchantEmails = merchants.stream()
+                .filter(m -> m.getUserAccount() != null && m.getUserAccount().getEmail() != null)
+                .map(m -> m.getUserAccount().getEmail().toLowerCase()).toList();
+        return ResponseEntity.ok(Map.of(
+                "storeNames", storeNames,
+                "merchantEmails", merchantEmails,
+                "merchants", merchants.stream().map(this::merchantSnapshot).toList(),
+                "stores", stores.stream().map(this::storeSnapshot).toList()
+        ));
     }
 
     // â”€â”€ Plantillas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -81,8 +96,8 @@ public class BulkUploadController {
     public ResponseEntity<byte[]> templateMerchants() {
         String csv = """
                 email,password,firstName,paternalSurname,maternalSurname,documentType,documentNumber,birthDate,phone,gender,ruc
-                juan.perez@ejemplo.com,Pass1234!,Juan,Perez,Garcia,DNI,12345678,1988-05-15,987654321,MALE,20100000001
-                maria.torres@ejemplo.com,Pass5678!,Maria,Torres,Lopez,DNI,87654321,1992-11-20,912345678,FEMALE,20200000002
+                test_bulk_merchant1@example.com,Pass1234!,TestBulk,MerchantUno,Demo,DNI,12345678,1988-05-15,987654321,MALE,20100000001
+                test_bulk_merchant2@example.com,Pass5678!,TestBulk,MerchantDos,Demo,DNI,87654321,1992-11-20,912345678,FEMALE,20200000002
                 """;
         return csvResponse(csv, "plantilla_comerciantes.csv");
     }
@@ -92,8 +107,8 @@ public class BulkUploadController {
         // Columnas actualizadas: se quitÃ³ colorPalette, se agregÃ³ categoryId + 3 colores individuales
         String csv = """
                 storeName,categoryId,primaryColor,secondaryColor,tertiaryColor,description,merchantEmail,logoFileName
-                Mi Tienda Urbana,1,ONYX_BLACK,SLATE,RAW_GOLD,Ropa urbana para jovenes,juan.perez@ejemplo.com,MiTiendaUrbana.png
-                Luxe Moda,2,MIDNIGHT,SAGE,RAW_GOLD,Alta costura accesible,maria.torres@ejemplo.com,
+                Mi Tienda Urbana,1,ONYX_BLACK,SLATE,RAW_GOLD,Ropa urbana y accesorios,test_bulk_merchant1@example.com,MiTiendaUrbana.jpg
+                Luxe Moda,1,MIDNIGHT,SAGE,COPPER,Moda premium y accesorios,test_bulk_merchant2@example.com,LuxeModa.jpg
                 """;
         return csvResponse(csv, "plantilla_tiendas.csv");
     }
@@ -108,6 +123,40 @@ public class BulkUploadController {
         return e.getMessage() == null || e.getMessage().isBlank()
                 ? "error no especificado"
                 : e.getMessage();
+    }
+
+    private Map<String, Object> merchantSnapshot(Merchant merchant) {
+        Map<String, Object> data = new java.util.LinkedHashMap<>();
+        data.put("email", merchant.getUserAccount() != null ? merchant.getUserAccount().getEmail() : null);
+        data.put("firstName", merchant.getFirstName());
+        data.put("paternalSurname", merchant.getPaternalSurname());
+        data.put("maternalSurname", merchant.getMaternalSurname());
+        data.put("documentType", merchant.getDocumentType() != null ? merchant.getDocumentType().name() : null);
+        data.put("documentNumber", merchant.getDocumentNumber());
+        data.put("birthDate", merchant.getBirthDate() != null ? merchant.getBirthDate().toString() : null);
+        data.put("phone", merchant.getPhone());
+        data.put("gender", merchant.getGender() != null ? merchant.getGender().name() : null);
+        data.put("ruc", merchant.getRuc());
+        data.put("active", merchant.getActive());
+        return data;
+    }
+
+    private Map<String, Object> storeSnapshot(Store store) {
+        Map<String, Object> data = new java.util.LinkedHashMap<>();
+        data.put("storeName", store.getStoreName());
+        data.put("slug", store.getSlug());
+        data.put("description", store.getDescription());
+        data.put("categoryId", store.getCategory() != null ? store.getCategory().getId() : null);
+        data.put("merchantEmail", store.getMerchant() != null
+                && store.getMerchant().getUserAccount() != null
+                ? store.getMerchant().getUserAccount().getEmail()
+                : null);
+        data.put("primaryColor", store.getPrimaryColor() != null ? store.getPrimaryColor().name() : null);
+        data.put("secondaryColor", store.getSecondaryColor() != null ? store.getSecondaryColor().name() : null);
+        data.put("tertiaryColor", store.getTertiaryColor() != null ? store.getTertiaryColor().name() : null);
+        data.put("storeStatus", store.getStoreStatus() != null ? store.getStoreStatus().name() : null);
+        data.put("active", store.getActive());
+        return data;
     }
 
     private ResponseEntity<byte[]> csvResponse(String content, String filename) {

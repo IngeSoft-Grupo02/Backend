@@ -58,6 +58,7 @@ import pe.edu.pucp.kingstore.service.store.StoreService;
 import pe.edu.pucp.kingstore.service.user.UserAccountService;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -290,6 +291,7 @@ class ControllerCoverageTest {
         BulkUploadController bulkController = new BulkUploadController(
                 bulkUploadService,
                 userAccountRepository,
+                merchantRepository,
                 storeRepository
         );
         assertThat(bulkController.upload(null, null, null).getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
@@ -321,12 +323,27 @@ class ControllerCoverageTest {
 
         when(userAccountRepository.findAll()).thenReturn(List.of(account(1, "EMAIL@Test.COM")));
         assertThat(bulkController.existingEmails().getBody()).containsExactly("email@test.com");
-        when(storeRepository.findAll()).thenReturn(List.of(store(1, "Main Store", null)));
-        assertThat(bulkController.existingStores().getBody().get("storeNames")).containsExactly("main store");
+        Merchant existingMerchant = merchant(2, account(2, "merchant@test.com"));
+        when(merchantRepository.findAll()).thenReturn(List.of(existingMerchant));
+        when(storeRepository.findAll()).thenReturn(List.of(store(1, "Main Store", existingMerchant)));
+        Map<String, Object> existingStores = bulkController.existingStores().getBody();
+        assertThat((List<String>) existingStores.get("storeNames")).containsExactly("main store");
+        assertThat((List<String>) existingStores.get("merchantEmails")).containsExactly("merchant@test.com");
+        assertThat((List<Map<String, Object>>) existingStores.get("merchants")).hasSize(1);
+        assertThat((List<Map<String, Object>>) existingStores.get("stores")).hasSize(1);
+        assertThat(((List<Map<String, Object>>) existingStores.get("merchants")).get(0))
+                .doesNotContainKeys("password", "token", "authorization");
+        assertThat(existingStores.toString().toLowerCase()).doesNotContain("secret");
         assertThat(bulkController.templateMerchants().getHeaders().getFirst("Content-Disposition"))
                 .contains("plantilla_comerciantes.csv");
-        assertThat(bulkController.templateStores().getHeaders().getFirst("Content-Disposition"))
+        ResponseEntity<byte[]> storeTemplate = bulkController.templateStores();
+        assertThat(storeTemplate.getHeaders().getFirst("Content-Disposition"))
                 .contains("plantilla_tiendas.csv");
+        String storeTemplateCsv = new String(storeTemplate.getBody(), StandardCharsets.UTF_8);
+        assertThat(storeTemplateCsv)
+                .startsWith("storeName,categoryId,primaryColor,secondaryColor,tertiaryColor,description,merchantEmail,logoFileName")
+                .doesNotContain("OLIVE_DRAB", "RICH_CAMEL", "SILVER_MIST", "STONE", "DEEP_ZINC")
+                .contains("SLATE", "RAW_GOLD", "COPPER", "MiTiendaUrbana.jpg", "LuxeModa.jpg");
     }
 
     @Test

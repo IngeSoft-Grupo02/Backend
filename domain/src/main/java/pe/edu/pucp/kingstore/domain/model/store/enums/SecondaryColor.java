@@ -1,7 +1,6 @@
 package pe.edu.pucp.kingstore.domain.model.store.enums;
 
 public enum SecondaryColor {
-    OLIVE_DRAB,
     SLATE,
     SAGE,
     TERRA,
