@@ -14,8 +14,13 @@ import pe.edu.pucp.kingstore.domain.dto.user.CreateUserDTO;
 import pe.edu.pucp.kingstore.domain.model.store.Store;
 import pe.edu.pucp.kingstore.domain.model.store.StoreCategory;
 import pe.edu.pucp.kingstore.domain.model.store.enums.PrimaryColor;
+import pe.edu.pucp.kingstore.domain.model.store.enums.SecondaryColor;
+import pe.edu.pucp.kingstore.domain.model.store.enums.StoreStatus;
+import pe.edu.pucp.kingstore.domain.model.store.enums.TertiaryColor;
 import pe.edu.pucp.kingstore.domain.model.user.Merchant;
 import pe.edu.pucp.kingstore.domain.model.user.UserAccount;
+import pe.edu.pucp.kingstore.domain.model.user.enums.DocumentType;
+import pe.edu.pucp.kingstore.domain.model.user.enums.Gender;
 import pe.edu.pucp.kingstore.repository.store.StoreCategoryRepository;
 import pe.edu.pucp.kingstore.repository.store.StoreRepository;
 import pe.edu.pucp.kingstore.repository.user.MerchantRepository;
@@ -27,16 +32,19 @@ import pe.edu.pucp.kingstore.service.user.UserAccountService;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.util.Map;
 import java.util.Optional;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -103,17 +111,117 @@ class BulkUploadServiceCoverageTest {
     }
 
     @Test
-    void processCreatesStoresFromCsvWithCategoryColorsAndMerchant() throws Exception {
-        StoreCategory category = new StoreCategory();
-        category.setId(1);
-        UserAccount account = new UserAccount();
-        account.setId(8);
-        account.setEmail("merchant@kingstore.pe");
-        Merchant merchant = new Merchant();
-        merchant.setId(9);
+    void existingMerchantWithSameDataIsSkipped() throws Exception {
+        UserAccount account = account(8, "merchant@kingstore.pe", "secret");
+        Merchant merchant = matchingMerchant(9, account);
+        MockMultipartFile merchants = csv("merchants.csv", """
+                email,password,firstName,paternalSurname,maternalSurname,documentType,documentNumber,birthDate,phone,gender,ruc
+                merchant@kingstore.pe,secret,Ana,Perez,Rojas,DNI,12345678,1990-01-20,999999999,FEMALE,12345678901
+                """);
+        when(userAccountRepository.findByEmail("merchant@kingstore.pe")).thenReturn(Optional.of(account));
+        when(merchantRepository.findByUserAccountId(8)).thenReturn(Optional.of(merchant));
+
+        BulkUploadResponseDTO response = service.process(merchants, null, null);
+
+        assertThat(response.getErrorCount()).isZero();
+        assertThat(response.getMerchantsCreated()).isZero();
+        assertThat(response.getIncidences()).extracting(BulkIncidenceDTO::getCode)
+                .contains("SKIPPED_EXISTING");
+        verify(userAccountService, never()).createWithRole(any());
+    }
+
+    @Test
+    void existingMerchantWithDifferentDataIsConflict() throws Exception {
+        UserAccount account = account(8, "merchant@kingstore.pe", "secret");
+        Merchant merchant = matchingMerchant(9, account);
+        MockMultipartFile merchants = csv("merchants.csv", """
+                email,password,firstName,paternalSurname,maternalSurname,documentType,documentNumber,birthDate,phone,gender,ruc
+                merchant@kingstore.pe,secret,AnaDistinta,Perez,Rojas,DNI,12345678,1990-01-20,999999999,FEMALE,12345678901
+                """);
+        when(userAccountRepository.findByEmail("merchant@kingstore.pe")).thenReturn(Optional.of(account));
+        when(merchantRepository.findByUserAccountId(8)).thenReturn(Optional.of(merchant));
+
+        BulkUploadResponseDTO response = service.process(merchants, null, null);
+
+        assertThat(response.getErrorCount()).isEqualTo(1);
+        assertThat(response.getIncidences()).extracting(BulkIncidenceDTO::getCode).contains("CONFLICT");
+        verify(userAccountService, never()).createWithRole(any());
+    }
+
+    @Test
+    void storesOnlyWithMissingMerchantReturnsValidationError() throws Exception {
+        StoreCategory category = category(1);
         MockMultipartFile stores = csv("stores.csv", """
-                storeName,slug,categoryId,primaryColor,secondaryColor,tertiaryColor,description,merchantEmail,logoFileName
-                King Store,king-store,1,ONYX_BLACK,SLATE,RAW_GOLD,Main store,merchant@kingstore.pe,logo.png
+                storeName,categoryId,primaryColor,secondaryColor,tertiaryColor,description,merchantEmail,logoFileName
+                King Store,1,ONYX_BLACK,SLATE,RAW_GOLD,Main store,missing@kingstore.pe,
+                """);
+        when(categoryRepository.findById(1)).thenReturn(Optional.of(category));
+        when(userAccountRepository.findByEmail("missing@kingstore.pe")).thenReturn(Optional.empty());
+
+        BulkUploadResponseDTO response = service.process(null, stores, null);
+
+        assertThat(response.getStoresCreated()).isZero();
+        assertThat(response.getIncidences()).extracting(BulkIncidenceDTO::getCode).contains("REF_NOT_FOUND");
+        verify(storeService, never()).createFromDTO(any());
+    }
+
+    @Test
+    void merchantsAndStoresAllowsNewValidMerchantFromSameBatch() throws Exception {
+        StoreCategory category = category(1);
+        UserAccount account = account(8, "new@kingstore.pe", "secret");
+        Merchant merchant = matchingMerchant(9, account);
+        MockMultipartFile merchants = csv("merchants.csv", """
+                email,password,firstName,paternalSurname,maternalSurname,documentType,documentNumber,birthDate,phone,gender,ruc
+                new@kingstore.pe,secret,Ana,Perez,Rojas,DNI,12345678,1990-01-20,999999999,FEMALE,12345678901
+                """);
+        MockMultipartFile stores = csv("stores.csv", """
+                storeName,categoryId,primaryColor,secondaryColor,tertiaryColor,description,merchantEmail,logoFileName
+                King Store,1,ONYX_BLACK,SLATE,RAW_GOLD,Main store,new@kingstore.pe,
+                """);
+        when(userAccountRepository.findByEmail("new@kingstore.pe"))
+                .thenReturn(Optional.empty(), Optional.of(account));
+        when(merchantRepository.findByUserAccountId(8)).thenReturn(Optional.of(merchant));
+        when(categoryRepository.findById(1)).thenReturn(Optional.of(category));
+
+        BulkUploadResponseDTO response = service.process(merchants, stores, null);
+
+        assertThat(response.getErrorCount()).isZero();
+        assertThat(response.getMerchantsCreated()).isEqualTo(1);
+        assertThat(response.getStoresCreated()).isEqualTo(1);
+        verify(userAccountService).createWithRole(any());
+        verify(storeService).createFromDTO(any());
+    }
+
+    @Test
+    void merchantsAndStoresRejectsStoreWhenBatchMerchantIsInvalid() throws Exception {
+        StoreCategory category = category(1);
+        MockMultipartFile merchants = csv("merchants.csv", """
+                email,password,firstName,paternalSurname,maternalSurname,documentType,documentNumber,birthDate,phone,gender,ruc
+                bad@kingstore.pe,secret,Ana,Perez,Rojas,DNI,12345678,1990-01-20,999999999,FEMALE,123
+                """);
+        MockMultipartFile stores = csv("stores.csv", """
+                storeName,categoryId,primaryColor,secondaryColor,tertiaryColor,description,merchantEmail,logoFileName
+                King Store,1,ONYX_BLACK,SLATE,RAW_GOLD,Main store,bad@kingstore.pe,
+                """);
+        when(categoryRepository.findById(1)).thenReturn(Optional.of(category));
+
+        BulkUploadResponseDTO response = service.process(merchants, stores, null);
+
+        assertThat(response.getErrorCount()).isGreaterThanOrEqualTo(2);
+        assertThat(response.getIncidences()).extracting(BulkIncidenceDTO::getCode)
+                .contains("VAL_RUC", "REF_INVALID");
+        verify(userAccountService, never()).createWithRole(any());
+        verify(storeService, never()).createFromDTO(any());
+    }
+
+    @Test
+    void processCreatesStoresFromCsvWithCategoryColorsAndMerchantWithoutLogo() throws Exception {
+        StoreCategory category = category(1);
+        UserAccount account = account(8, "merchant@kingstore.pe", "secret");
+        Merchant merchant = matchingMerchant(9, account);
+        MockMultipartFile stores = csv("stores.csv", """
+                storeName,categoryId,primaryColor,secondaryColor,tertiaryColor,description,merchantEmail,logoFileName
+                King Store,1,ONYX_BLACK,SLATE,RAW_GOLD,Main store,merchant@kingstore.pe,
                 """);
         when(categoryRepository.findById(1)).thenReturn(Optional.of(category));
         when(userAccountRepository.findByEmail("merchant@kingstore.pe")).thenReturn(Optional.of(account));
@@ -133,16 +241,60 @@ class BulkUploadServiceCoverageTest {
     }
 
     @Test
-    void bulkUpload_generatesSlugAutomatically() throws Exception {
-        StoreCategory category = new StoreCategory();
-        category.setId(1);
-        UserAccount account = new UserAccount();
-        account.setId(8);
-        Merchant merchant = new Merchant();
-        merchant.setId(9);
+    void existingStoreWithSameDataIsSkipped() throws Exception {
+        StoreCategory category = category(1);
+        UserAccount account = account(8, "merchant@kingstore.pe", "secret");
+        Merchant merchant = matchingMerchant(9, account);
+        Store store = store("King Store", "king-store", "Main store", category, merchant);
         MockMultipartFile stores = csv("stores.csv", """
                 storeName,categoryId,primaryColor,secondaryColor,tertiaryColor,description,merchantEmail,logoFileName
-                Hilos Urbanos,1,ONYX_BLACK,SLATE,RAW_GOLD,Main store,merchant@kingstore.pe,logo.png
+                King Store,1,ONYX_BLACK,SLATE,RAW_GOLD,Main store,merchant@kingstore.pe,
+                """);
+        when(categoryRepository.findById(1)).thenReturn(Optional.of(category));
+        when(userAccountRepository.findByEmail("merchant@kingstore.pe")).thenReturn(Optional.of(account));
+        when(merchantRepository.findByUserAccountId(8)).thenReturn(Optional.of(merchant));
+        when(storeRepository.findBySlug("king-store")).thenReturn(Optional.of(store));
+
+        BulkUploadResponseDTO response = service.process(null, stores, null);
+
+        assertThat(response.getErrorCount()).isZero();
+        assertThat(response.getStoresCreated()).isZero();
+        assertThat(response.getIncidences()).extracting(BulkIncidenceDTO::getCode)
+                .contains("SKIPPED_EXISTING");
+        verify(storeService, never()).createFromDTO(any());
+    }
+
+    @Test
+    void existingStoreWithDifferentDataIsConflict() throws Exception {
+        StoreCategory category = category(1);
+        UserAccount account = account(8, "merchant@kingstore.pe", "secret");
+        Merchant merchant = matchingMerchant(9, account);
+        Store store = store("King Store", "king-store", "Different description", category, merchant);
+        MockMultipartFile stores = csv("stores.csv", """
+                storeName,categoryId,primaryColor,secondaryColor,tertiaryColor,description,merchantEmail,logoFileName
+                King Store,1,ONYX_BLACK,SLATE,RAW_GOLD,Main store,merchant@kingstore.pe,
+                """);
+        when(categoryRepository.findById(1)).thenReturn(Optional.of(category));
+        when(userAccountRepository.findByEmail("merchant@kingstore.pe")).thenReturn(Optional.of(account));
+        when(merchantRepository.findByUserAccountId(8)).thenReturn(Optional.of(merchant));
+        when(storeRepository.findBySlug("king-store")).thenReturn(Optional.of(store));
+
+        BulkUploadResponseDTO response = service.process(null, stores, null);
+
+        assertThat(response.getErrorCount()).isEqualTo(1);
+        assertThat(response.getStoresCreated()).isZero();
+        assertThat(response.getIncidences()).extracting(BulkIncidenceDTO::getCode).contains("CONFLICT");
+        verify(storeService, never()).createFromDTO(any());
+    }
+
+    @Test
+    void storeLogoFileNameWithoutZipIsValidationError() throws Exception {
+        StoreCategory category = category(1);
+        UserAccount account = account(8, "merchant@kingstore.pe", "secret");
+        Merchant merchant = matchingMerchant(9, account);
+        MockMultipartFile stores = csv("stores.csv", """
+                storeName,categoryId,primaryColor,secondaryColor,tertiaryColor,description,merchantEmail,logoFileName
+                King Store,1,ONYX_BLACK,SLATE,RAW_GOLD,Main store,merchant@kingstore.pe,logo.png
                 """);
         when(categoryRepository.findById(1)).thenReturn(Optional.of(category));
         when(userAccountRepository.findByEmail("merchant@kingstore.pe")).thenReturn(Optional.of(account));
@@ -150,36 +302,63 @@ class BulkUploadServiceCoverageTest {
 
         BulkUploadResponseDTO response = service.process(null, stores, null);
 
-        assertThat(response.getStoresProcessed()).isEqualTo(1);
-        assertThat(response.getStoresCreated()).isEqualTo(1);
-        assertThat(response.getErrorCount()).isZero();
-        ArgumentCaptor<StoreDTO> captor = ArgumentCaptor.forClass(StoreDTO.class);
-        verify(storeService).createFromDTO(captor.capture());
-        assertThat(captor.getValue().getStoreName()).isEqualTo("Hilos Urbanos");
-        assertThat(captor.getValue().getSlug()).isNull();
-    }
-
-    @Test
-    void processReportsStoreValidationErrorsAndLogoWarnings() throws Exception {
-        MockMultipartFile stores = csv("stores.csv", """
-                storeName,slug,categoryId,primaryColor,secondaryColor,tertiaryColor,description,merchantEmail,logoFileName
-                ,king-store,abc,BAD,BAD,BAD,Main store,,logo.png
-                """);
-        MockMultipartFile logos = zip("logos.zip", "readme.txt", "not-image".getBytes(StandardCharsets.UTF_8));
-
-        BulkUploadResponseDTO response = service.process(null, stores, logos);
-
-        assertThat(response.getStoresCreated()).isZero();
-        assertThat(response.getLogosUploaded()).isZero();
-        assertThat(response.getErrorCount()).isGreaterThanOrEqualTo(6);
-        assertThat(response.getIncidences())
-                .extracting(BulkIncidenceDTO::getBlock)
-                .contains(BulkIncidenceDTO.IncidenceBlock.STORES, BulkIncidenceDTO.IncidenceBlock.IMAGES);
+        assertThat(response.getErrorCount()).isEqualTo(1);
+        assertThat(response.getIncidences()).extracting(BulkIncidenceDTO::getCode).contains("VAL_LOGO");
         verify(storeService, never()).createFromDTO(any());
     }
 
     @Test
-    void processUploadsReferencedLogoAndUpdatesStore() throws Exception {
+    void storeLogoFileNameMissingFromZipIsValidationError() throws Exception {
+        StoreCategory category = category(1);
+        UserAccount account = account(8, "merchant@kingstore.pe", "secret");
+        Merchant merchant = matchingMerchant(9, account);
+        MockMultipartFile stores = csv("stores.csv", """
+                storeName,categoryId,primaryColor,secondaryColor,tertiaryColor,description,merchantEmail,logoFileName
+                King Store,1,ONYX_BLACK,SLATE,RAW_GOLD,Main store,merchant@kingstore.pe,logo.png
+                """);
+        MockMultipartFile logos = zip("logos.zip", "other.png", "image".getBytes(StandardCharsets.UTF_8));
+        when(categoryRepository.findById(1)).thenReturn(Optional.of(category));
+        when(userAccountRepository.findByEmail("merchant@kingstore.pe")).thenReturn(Optional.of(account));
+        when(merchantRepository.findByUserAccountId(8)).thenReturn(Optional.of(merchant));
+
+        BulkUploadResponseDTO response = service.process(null, stores, logos);
+
+        assertThat(response.getErrorCount()).isEqualTo(1);
+        assertThat(response.getIncidences()).extracting(BulkIncidenceDTO::getCode).contains("REF_NOT_FOUND");
+        verify(storeService, never()).createFromDTO(any());
+        verify(storageService, never()).uploadBytes(any(), any(), any());
+    }
+
+    @Test
+    void processReportsUnsupportedDbColorsBeforePersistingStores() throws Exception {
+        StoreCategory category = category(1);
+        UserAccount account = account(8, "merchant@kingstore.pe", "secret");
+        Merchant merchant = matchingMerchant(9, account);
+        MockMultipartFile stores = csv("stores.csv", """
+                storeName,categoryId,primaryColor,secondaryColor,tertiaryColor,description,merchantEmail,logoFileName
+                Mi Tienda Urbana,1,ONYX_BLACK,OLIVE_DRAB,RICH_CAMEL,Main store,merchant@kingstore.pe,MiTiendaUrbana.jpg
+                """);
+        MockMultipartFile logos = zip("logos.zip", "logos/MiTiendaUrbana.jpg", "image-bytes".getBytes(StandardCharsets.UTF_8));
+        when(categoryRepository.findById(1)).thenReturn(Optional.of(category));
+        when(userAccountRepository.findByEmail("merchant@kingstore.pe")).thenReturn(Optional.of(account));
+        when(merchantRepository.findByUserAccountId(8)).thenReturn(Optional.of(merchant));
+
+        BulkUploadResponseDTO response = service.process(null, stores, logos);
+
+        assertThat(response.getStoresProcessed()).isEqualTo(1);
+        assertThat(response.getStoresCreated()).isZero();
+        assertThat(response.getLogosUploaded()).isZero();
+        assertThat(response.getIncidences()).extracting(BulkIncidenceDTO::getCode)
+                .containsOnly("VAL_COLOR");
+        assertThat(response.getIncidences()).extracting(BulkIncidenceDTO::getDetail)
+                .anySatisfy(detail -> assertThat(detail).contains("secondaryColor", "OLIVE_DRAB"))
+                .anySatisfy(detail -> assertThat(detail).contains("tertiaryColor", "RICH_CAMEL"));
+        verify(storeService, never()).createFromDTO(any());
+        verify(storageService, never()).uploadBytes(any(), any(), any());
+    }
+
+    @Test
+    void processUploadsReferencedLogoAndUpdatesExistingStoreWhenOnlyZipIsProvided() throws Exception {
         Store store = new Store();
         store.setId(7);
         store.setSlug("king-store");
@@ -196,75 +375,58 @@ class BulkUploadServiceCoverageTest {
     }
 
     @Test
-    void processReportsDuplicateReferencesUnexpectedFailuresAndLogoEdgeWarnings() throws Exception {
-        UserAccount duplicate = new UserAccount();
-        duplicate.setId(1);
-        duplicate.setEmail("duplicate@kingstore.pe");
-        when(userAccountRepository.findByEmail("duplicate@kingstore.pe")).thenReturn(Optional.of(duplicate));
-        MockMultipartFile duplicateMerchants = csv("merchants.csv", """
-                email,password,firstName,paternalSurname,maternalSurname,documentType,documentNumber,birthDate,phone,gender,ruc
-                duplicate@kingstore.pe,secret,Ana,Perez,Rojas,DNI,12345678,1990-01-20,999999999,FEMALE,12345678901
+    void processCreatesStoresAndUploadsNestedLogosByLogoFileNameBasename() throws Exception {
+        StoreCategory category = category(1);
+        UserAccount firstAccount = account(8, "merchant1@kingstore.pe", "secret");
+        UserAccount secondAccount = account(10, "merchant2@kingstore.pe", "secret");
+        Merchant firstMerchant = matchingMerchant(9, firstAccount);
+        Merchant secondMerchant = matchingMerchant(11, secondAccount);
+        MockMultipartFile stores = csv("stores.csv", """
+                storeName,categoryId,primaryColor,secondaryColor,tertiaryColor,description,merchantEmail,logoFileName
+                Mi Tienda Urbana,1,ONYX_BLACK,SLATE,RAW_GOLD,Main store,merchant1@kingstore.pe,MiTiendaUrbana.jpg
+                Luxe Moda,1,MIDNIGHT,SAGE,COPPER,Second store,merchant2@kingstore.pe,LuxeModa.jpg
                 """);
+        MockMultipartFile logos = zip("logos.zip", Map.of(
+                "logos/MiTiendaUrbana.jpg", "first-image".getBytes(StandardCharsets.UTF_8),
+                "logos/LuxeModa.jpg", "second-image".getBytes(StandardCharsets.UTF_8)
+        ));
+        when(categoryRepository.findById(1)).thenReturn(Optional.of(category));
+        when(userAccountRepository.findByEmail("merchant1@kingstore.pe")).thenReturn(Optional.of(firstAccount));
+        when(userAccountRepository.findByEmail("merchant2@kingstore.pe")).thenReturn(Optional.of(secondAccount));
+        when(merchantRepository.findByUserAccountId(8)).thenReturn(Optional.of(firstMerchant));
+        when(merchantRepository.findByUserAccountId(10)).thenReturn(Optional.of(secondMerchant));
+        when(storeService.createFromDTO(any())).thenAnswer(invocation -> {
+            StoreDTO dto = invocation.getArgument(0);
+            Store store = new Store();
+            store.setId(dto.getStoreName().startsWith("Mi") ? 1 : 2);
+            store.setSlug(dto.getStoreName().startsWith("Mi") ? "mi-tienda-urbana" : "luxe-moda");
+            return store;
+        });
+        when(storageService.uploadBytes(eq("logos/mi-tienda-urbana.jpg"), any(), eq("image/jpeg")))
+                .thenReturn("https://cdn.test/logos/mi-tienda-urbana.jpg");
+        when(storageService.uploadBytes(eq("logos/luxe-moda.jpg"), any(), eq("image/jpeg")))
+                .thenReturn("https://cdn.test/logos/luxe-moda.jpg");
 
-        BulkUploadResponseDTO duplicateResponse = service.process(duplicateMerchants, null, null);
+        BulkUploadResponseDTO response = service.process(null, stores, logos);
 
-        assertThat(duplicateResponse.getMerchantsCreated()).isZero();
-        assertThat(duplicateResponse.getIncidences()).extracting(BulkIncidenceDTO::getCode).contains("DUPLICATE");
+        assertThat(response.getStoresCreated()).isEqualTo(2);
+        assertThat(response.getLogosUploaded()).isEqualTo(2);
+        assertThat(response.getErrorCount()).isZero();
+        verify(storeRepository, times(2)).save(any(Store.class));
+    }
 
+    @Test
+    void unexpectedPersistenceFailuresStillPropagateForRollback() throws Exception {
         when(userAccountRepository.findByEmail("unexpected@kingstore.pe")).thenReturn(Optional.empty());
         doThrow(new RuntimeException("create failed")).when(userAccountService).createWithRole(any());
         MockMultipartFile unexpectedMerchants = csv("merchants.csv", """
                 email,password,firstName,paternalSurname,maternalSurname,documentType,documentNumber,birthDate,phone,gender,ruc
-
                 unexpected@kingstore.pe,secret,Ana,Perez,Rojas,DNI,12345678,1990-01-20,999999999,FEMALE,12345678901
                 """);
 
-        BulkUploadResponseDTO unexpectedMerchantResponse = service.process(unexpectedMerchants, null, null);
-
-        assertThat(unexpectedMerchantResponse.getMerchantsCreated()).isZero();
-        assertThat(unexpectedMerchantResponse.getIncidences()).extracting(BulkIncidenceDTO::getCode).contains("UNEXPECTED");
-
-        Store existingStore = new Store();
-        existingStore.setId(2);
-        when(categoryRepository.findById(99)).thenReturn(Optional.empty());
-        String longName = "A".repeat(101);
-        MockMultipartFile invalidStores = csv("stores.csv", """
-                storeName,slug,categoryId,primaryColor,secondaryColor,tertiaryColor,description,merchantEmail,logoFileName
-                %s,taken-store,99,ONYX_BLACK,SLATE,RAW_GOLD,Desc,,logo.png
-                """.formatted(longName));
-
-        BulkUploadResponseDTO invalidStoreResponse = service.process(null, invalidStores, null);
-
-        assertThat(invalidStoreResponse.getStoresCreated()).isZero();
-        assertThat(invalidStoreResponse.getIncidences()).extracting(BulkIncidenceDTO::getCode)
-                .contains("VAL_NAME", "REF_NOT_FOUND", "VAL_MERCHANT");
-
-        StoreCategory category = new StoreCategory();
-        category.setId(1);
-        UserAccount account = new UserAccount();
-        account.setId(8);
-        Merchant merchant = new Merchant();
-        merchant.setId(9);
-        when(categoryRepository.findById(1)).thenReturn(Optional.of(category));
-        when(userAccountRepository.findByEmail("owner@kingstore.pe")).thenReturn(Optional.of(account));
-        when(merchantRepository.findByUserAccountId(8)).thenReturn(Optional.of(merchant));
-        doThrow(new RuntimeException("store failed")).when(storeService).createFromDTO(any());
-        MockMultipartFile unexpectedStores = csv("stores.csv", """
-                storeName,slug,categoryId,primaryColor,secondaryColor,tertiaryColor,description,merchantEmail,logoFileName
-                Boom Store,boom-store,1,ONYX_BLACK,SLATE,RAW_GOLD,Desc,owner@kingstore.pe,logo.png
-                """);
-
-        BulkUploadResponseDTO unexpectedStoreResponse = service.process(null, unexpectedStores, null);
-
-        assertThat(unexpectedStoreResponse.getStoresCreated()).isZero();
-        assertThat(unexpectedStoreResponse.getIncidences()).extracting(BulkIncidenceDTO::getCode).contains("UNEXPECTED");
-
-        when(storeRepository.findBySlug("missing-store")).thenReturn(Optional.empty());
-        BulkUploadResponseDTO logoResponse = service.process(null, null, logoEdgeZip());
-
-        assertThat(logoResponse.getLogosUploaded()).isZero();
-        assertThat(logoResponse.getIncidences()).extracting(BulkIncidenceDTO::getCode)
-                .contains("SIZE_EXCEEDED", "REF_NOT_FOUND");
+        assertThatThrownBy(() -> service.process(unexpectedMerchants, null, null))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("create failed");
     }
 
     private MockMultipartFile csv(String name, String content) {
@@ -272,29 +434,64 @@ class BulkUploadServiceCoverageTest {
     }
 
     private MockMultipartFile zip(String name, String entryName, byte[] content) throws Exception {
+        return zip(name, Map.of(entryName, content));
+    }
+
+    private MockMultipartFile zip(String name, Map<String, byte[]> entries) throws Exception {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         try (ZipOutputStream zip = new ZipOutputStream(output)) {
-            zip.putNextEntry(new ZipEntry(entryName));
-            zip.write(content);
-            zip.closeEntry();
+            for (Map.Entry<String, byte[]> entry : entries.entrySet()) {
+                zip.putNextEntry(new ZipEntry(entry.getKey()));
+                zip.write(entry.getValue());
+                zip.closeEntry();
+            }
         }
         return new MockMultipartFile(name, name, "application/zip", output.toByteArray());
     }
 
-    private MockMultipartFile logoEdgeZip() throws Exception {
-        ByteArrayOutputStream output = new ByteArrayOutputStream();
-        try (ZipOutputStream zip = new ZipOutputStream(output)) {
-            zip.putNextEntry(new ZipEntry("folder/"));
-            zip.closeEntry();
+    private StoreCategory category(Integer id) {
+        StoreCategory category = new StoreCategory();
+        category.setId(id);
+        category.setStoreCategoryName("Moda");
+        return category;
+    }
 
-            zip.putNextEntry(new ZipEntry("huge.png"));
-            zip.write(new byte[(2 * 1024 * 1024) + 1]);
-            zip.closeEntry();
+    private UserAccount account(Integer id, String email, String password) {
+        UserAccount account = new UserAccount();
+        account.setId(id);
+        account.setEmail(email);
+        account.setPassword(password);
+        return account;
+    }
 
-            zip.putNextEntry(new ZipEntry("missing-store.jpg"));
-            zip.write("image".getBytes(StandardCharsets.UTF_8));
-            zip.closeEntry();
-        }
-        return new MockMultipartFile("logos", "logos.zip", "application/zip", output.toByteArray());
+    private Merchant matchingMerchant(Integer id, UserAccount account) {
+        Merchant merchant = new Merchant();
+        merchant.setId(id);
+        merchant.setUserAccount(account);
+        merchant.setFirstName("Ana");
+        merchant.setPaternalSurname("Perez");
+        merchant.setMaternalSurname("Rojas");
+        merchant.setDocumentType(DocumentType.DNI);
+        merchant.setDocumentNumber("12345678");
+        merchant.setBirthDate(LocalDate.parse("1990-01-20"));
+        merchant.setPhone("999999999");
+        merchant.setGender(Gender.FEMALE);
+        merchant.setRuc("12345678901");
+        return merchant;
+    }
+
+    private Store store(String name, String slug, String description, StoreCategory category, Merchant merchant) {
+        Store store = new Store();
+        store.setId(20);
+        store.setStoreName(name);
+        store.setSlug(slug);
+        store.setDescription(description);
+        store.setCategory(category);
+        store.setMerchant(merchant);
+        store.setPrimaryColor(PrimaryColor.ONYX_BLACK);
+        store.setSecondaryColor(SecondaryColor.SLATE);
+        store.setTertiaryColor(TertiaryColor.RAW_GOLD);
+        store.setStoreStatus(StoreStatus.ACTIVE);
+        return store;
     }
 }
