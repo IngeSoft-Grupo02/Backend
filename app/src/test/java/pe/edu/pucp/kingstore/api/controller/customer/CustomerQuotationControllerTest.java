@@ -139,7 +139,7 @@ class CustomerQuotationControllerTest {
         assertThat(((QuotationResponseDTO) result.getBody()).getDescription())
                 .isEqualTo("Necesito polos para evento corporativo");
         verify(quotationDesignService)
-                .uploadDesigns(eq(quotation), eq("tienda-luna"), eq(10), anyList(), anyMap());
+                .uploadDesignsWithAssociations(eq(quotation), eq("tienda-luna"), eq(10), anyList(), anyMap());
     }
 
     @Test
@@ -180,16 +180,21 @@ class CustomerQuotationControllerTest {
                 "Necesito variantes",
                 List.of(firstDesign, secondDesign),
                 null,
-                "[{\"productVariantId\":101},{\"productVariantId\":102}]");
+                "[{\"productVariantId\":101,\"overlayX\":45,\"overlayY\":38,\"overlayWidth\":22,\"overlayHeight\":18},"
+                        + "{\"productVariantId\":102}]");
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         @SuppressWarnings({"unchecked", "rawtypes"})
-        ArgumentCaptor<Map<Integer, QuotationItem>> associationsCaptor =
+        ArgumentCaptor<Map<Integer, QuotationDesignService.DesignAssociation>> associationsCaptor =
                 (ArgumentCaptor) ArgumentCaptor.forClass(Map.class);
-        verify(quotationDesignService).uploadDesigns(
+        verify(quotationDesignService).uploadDesignsWithAssociations(
                 eq(quotation), eq("tienda-luna"), eq(10), anyList(), associationsCaptor.capture());
-        assertThat(associationsCaptor.getValue().get(0)).isSameAs(firstItem);
-        assertThat(associationsCaptor.getValue().get(1)).isSameAs(secondItem);
+        assertThat(associationsCaptor.getValue().get(0).item()).isSameAs(firstItem);
+        assertThat(associationsCaptor.getValue().get(0).overlayX()).isEqualTo(45);
+        assertThat(associationsCaptor.getValue().get(0).overlayY()).isEqualTo(38);
+        assertThat(associationsCaptor.getValue().get(0).overlayWidth()).isEqualTo(22);
+        assertThat(associationsCaptor.getValue().get(0).overlayHeight()).isEqualTo(18);
+        assertThat(associationsCaptor.getValue().get(1).item()).isSameAs(secondItem);
     }
 
     @Test
@@ -203,7 +208,7 @@ class CustomerQuotationControllerTest {
         when(quotationService.createFromCart(cart, "Necesito polos")).thenReturn(quotation);
         org.mockito.Mockito.doThrow(new BusinessRuleException("No se pudo subir el diseño. Inténtalo nuevamente."))
                 .when(quotationDesignService)
-                .uploadDesigns(eq(quotation), eq("tienda-luna"), eq(10), anyList(), anyMap());
+                .uploadDesignsWithAssociations(eq(quotation), eq("tienda-luna"), eq(10), anyList(), anyMap());
 
         var result = controller.createMultipart(
                 "tienda-luna",

@@ -45,6 +45,18 @@ public class QuotationDesign extends BaseEntity {
     @Column(name = "size_bytes", nullable = false)
     private Long sizeBytes;
 
+    @Column(name = "overlay_x")
+    private Double overlayX;
+
+    @Column(name = "overlay_y")
+    private Double overlayY;
+
+    @Column(name = "overlay_width")
+    private Double overlayWidth;
+
+    @Column(name = "overlay_height")
+    private Double overlayHeight;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 

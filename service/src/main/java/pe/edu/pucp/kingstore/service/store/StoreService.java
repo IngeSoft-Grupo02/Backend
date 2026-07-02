@@ -258,8 +258,7 @@ public class StoreService extends AbstractCrudService<Store> {
     @Transactional(readOnly = true)
     public StoreResponseDTO toResponseDTO(Store store) {
         long pendingQuotes = quotationRepository
-                .findByStoreIdAndStatus(store.getId(), QuotationStatus.PENDING)
-                .size();
+                .countByStoreIdAndStatus(store.getId(), QuotationStatus.PENDING);
         return new StoreResponseDTO(
                 store.getId(),
                 store.getStoreName(),

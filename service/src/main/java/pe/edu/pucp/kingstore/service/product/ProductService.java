@@ -242,7 +242,11 @@ public class ProductService extends AbstractCrudService<Product> {
     private List<ProductVariant> buildVariants(
             List<ProductRequestDTO.ProductVariantRequestDTO> requests) {
         if (requests == null || requests.isEmpty()) return new ArrayList<>();
-        return requests.stream().map(r -> {
+        return requests.stream().filter(r -> {
+            if (r == null) return false;
+            if (r.getStock() == null || r.getStock() < 0) return true;
+            return r.getStock() > 0;
+        }).map(r -> {
             requireText(r.getSize(), "Variant size");
             if (r.getStock() == null || r.getStock() < 0) {
                 throw new BusinessRuleException("Variant stock cannot be negative");

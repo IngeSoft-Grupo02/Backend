@@ -53,6 +53,20 @@ public class QuotationDesignService {
                                                Integer storeId,
                                                List<MultipartFile> files,
                                                Map<Integer, QuotationItem> fileIndexToItem) {
+        Map<Integer, DesignAssociation> associations = fileIndexToItem.entrySet().stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        Map.Entry::getKey,
+                        entry -> new DesignAssociation(entry.getValue(), null, null, null, null)
+                ));
+        return uploadDesignsWithAssociations(quotation, storeSlug, storeId, files, associations);
+    }
+
+    @Transactional
+    public List<QuotationDesign> uploadDesignsWithAssociations(Quotation quotation,
+                                                               String storeSlug,
+                                                               Integer storeId,
+                                                               List<MultipartFile> files,
+                                                               Map<Integer, DesignAssociation> fileIndexToAssociation) {
         if (files == null || files.isEmpty()) {
             return List.of();
         }
@@ -80,9 +94,15 @@ public class QuotationDesignService {
             design.setContentType(contentType);
             design.setSizeBytes(file.getSize());
 
-            QuotationItem associatedItem = fileIndexToItem.get(i);
-            if (associatedItem != null) {
-                design.setQuotationItem(associatedItem);
+            DesignAssociation association = fileIndexToAssociation.get(i);
+            if (association != null) {
+                if (association.item() != null) {
+                    design.setQuotationItem(association.item());
+                }
+                design.setOverlayX(normalizePercent(association.overlayX(), null));
+                design.setOverlayY(normalizePercent(association.overlayY(), null));
+                design.setOverlayWidth(normalizePercent(association.overlayWidth(), null));
+                design.setOverlayHeight(normalizePercent(association.overlayHeight(), null));
             }
 
             saved.add(quotationDesignRepository.save(design));
@@ -96,6 +116,12 @@ public class QuotationDesignService {
         }
         return saved;
     }
+
+    public record DesignAssociation(QuotationItem item,
+                                    Double overlayX,
+                                    Double overlayY,
+                                    Double overlayWidth,
+                                    Double overlayHeight) {}
 
     private void validate(MultipartFile file) {
         if (file.isEmpty()) {
@@ -138,5 +164,12 @@ public class QuotationDesignService {
                 .replaceAll("-+", "-")
                 .replaceAll("^[.-]+|[.-]+$", "");
         return clean.isBlank() ? "archivo" : clean;
+    }
+
+    private Double normalizePercent(Double value, Double fallback) {
+        if (value == null || value.isNaN() || value.isInfinite()) {
+            return fallback;
+        }
+        return Math.max(0, Math.min(100, value));
     }
 }

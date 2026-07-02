@@ -43,6 +43,19 @@ public interface QuotationRepository
     List<Quotation> findByStoreIdAndStatus(@Param("storeId") Integer storeId,
                                            @Param("status") QuotationStatus status);
 
+    @Query("""
+            select count(distinct q.id)
+            from Quotation q
+            join q.items i,
+            Product p
+            join p.variants v
+            where p.store.id = :storeId
+              and v = i.productVariant
+              and q.status = :status
+            """)
+    long countByStoreIdAndStatus(@Param("storeId") Integer storeId,
+                                 @Param("status") QuotationStatus status);
+
     List<Quotation> findByShoppingCart_Customer_Id(Integer customerId);
 
     /**

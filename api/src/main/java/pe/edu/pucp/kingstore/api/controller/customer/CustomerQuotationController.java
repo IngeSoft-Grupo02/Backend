@@ -90,9 +90,9 @@ public class CustomerQuotationController {
 
             Quotation quotation = quotationService.createFromCart(cart, description);
 
-            Map<Integer, QuotationItem> fileIndexToItem = buildFileItemMap(
+            Map<Integer, QuotationDesignService.DesignAssociation> fileIndexToItem = buildFileItemMap(
                     designAssociationsJson, quotation.getItems());
-            quotationDesignService.uploadDesigns(
+            quotationDesignService.uploadDesignsWithAssociations(
                     quotation, store.getSlug(), store.getId(), designs, fileIndexToItem);
             if (designs != null && !designs.isEmpty()) {
                 quotation = quotationService.applyItemDesignFees(quotation);
@@ -106,7 +106,7 @@ public class CustomerQuotationController {
         }
     }
 
-    private Map<Integer, QuotationItem> buildFileItemMap(
+    private Map<Integer, QuotationDesignService.DesignAssociation> buildFileItemMap(
             String designAssociationsJson,
             List<QuotationItem> quotationItems) {
         if (designAssociationsJson == null || designAssociationsJson.isBlank()
@@ -130,7 +130,7 @@ public class CustomerQuotationController {
                 }
             }
 
-            Map<Integer, QuotationItem> result = new HashMap<>();
+            Map<Integer, QuotationDesignService.DesignAssociation> result = new HashMap<>();
             for (int i = 0; i < associations.size(); i++) {
                 Object entry = associations.get(i);
                 if (entry == null) continue;
@@ -142,7 +142,12 @@ public class CustomerQuotationController {
                 }
                 QuotationItem item = productVariantIdToItem.get(productVariantId);
                 if (item != null) {
-                    result.put(i, item);
+                    result.put(i, new QuotationDesignService.DesignAssociation(
+                            item,
+                            doubleFromAssociation(entry, "overlayX"),
+                            doubleFromAssociation(entry, "overlayY"),
+                            doubleFromAssociation(entry, "overlayWidth"),
+                            doubleFromAssociation(entry, "overlayHeight")));
                 }
             }
             return result;
@@ -167,6 +172,19 @@ public class CustomerQuotationController {
                     : Integer.parseInt(String.valueOf(value));
         }
         return Integer.parseInt(String.valueOf(entry));
+    }
+
+    private Double doubleFromAssociation(Object entry, String key) {
+        if (!(entry instanceof Map<?, ?> map)) {
+            return null;
+        }
+        Object value = map.get(key);
+        if (value == null || String.valueOf(value).isBlank()) {
+            return null;
+        }
+        return value instanceof Number n
+                ? n.doubleValue()
+                : Double.parseDouble(String.valueOf(value));
     }
 
     private List<MultipartFile> mergeFiles(List<MultipartFile> designs, List<MultipartFile> files) {

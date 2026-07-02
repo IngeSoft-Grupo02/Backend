@@ -10,4 +10,8 @@ import lombok.Data;
 public class CustomDesignRequestDTO {
     private String imageUrl;
     private String description;
+    private Double overlayX;
+    private Double overlayY;
+    private Double overlayWidth;
+    private Double overlayHeight;
 }

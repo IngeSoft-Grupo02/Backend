@@ -90,15 +90,23 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
     @Transactional
     public ShoppingCart addItem(ShoppingCart cart, ProductVariant variant,
                                 int quantity, Integer storeId) {
+        return addItem(cart, variant, quantity, storeId, false);
+    }
+
+    @Transactional
+    public ShoppingCart addItem(ShoppingCart cart, ProductVariant variant,
+                                int quantity, Integer storeId, boolean separateItem) {
         if (quantity <= 0) {
             throw new BusinessRuleException("Quantity must be positive");
         }
         // El stock NO bloquea la cotización: el cliente puede solicitar cantidades
         // por encima del stock disponible y el comerciante decide si las acepta o rechaza.
 
-        // Si ya existe ese variant en el carrito, suma la cantidad
-        CartItem existing = cart.getItems().stream()
+        // Solo se acumulan items sin diseño. Si el cliente envía comentario o
+        // archivos de diseño, esa línea debe mantenerse independiente.
+        CartItem existing = separateItem ? null : cart.getItems().stream()
                 .filter(i -> Objects.equals(i.getProductVariant().getId(), variant.getId()))
+                .filter(i -> i.getCustomDesign() == null)
                 .findFirst()
                 .orElse(null);
 
@@ -186,6 +194,10 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
 
         design.setImageUrl(request.getImageUrl());
         design.setDescription(request.getDescription());
+        design.setOverlayX(normalizePercent(request.getOverlayX(), 50));
+        design.setOverlayY(normalizePercent(request.getOverlayY(), 42));
+        design.setOverlayWidth(normalizePercent(request.getOverlayWidth(), 24));
+        design.setOverlayHeight(normalizePercent(request.getOverlayHeight(), 18));
         design.setProduct(item.getProductVariant().getProduct());
 
         item.setCustomDesign(design);
@@ -225,7 +237,11 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
                         d.getImageUrl(),
                         d.getDescription(),
                         d.getObservations(),
-                        d.getSentAt()
+                        d.getSentAt(),
+                        d.getOverlayX(),
+                        d.getOverlayY(),
+                        d.getOverlayWidth(),
+                        d.getOverlayHeight()
                 );
             }
             return new CartResponseDTO.CartItemResponseDTO(
@@ -385,6 +401,13 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
             return false;
         }
         return design.getImageUrl() != null && !design.getImageUrl().isBlank();
+    }
+
+    private double normalizePercent(Double value, double fallback) {
+        if (value == null || value.isNaN() || value.isInfinite()) {
+            return fallback;
+        }
+        return Math.max(0, Math.min(100, value));
     }
 
     private boolean appliesToQuantity(Discount discount, int quantity) {

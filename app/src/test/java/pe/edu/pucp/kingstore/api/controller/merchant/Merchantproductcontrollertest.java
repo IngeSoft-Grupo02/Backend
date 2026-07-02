@@ -3,6 +3,7 @@ package pe.edu.pucp.kingstore.api.controller.merchant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
@@ -10,6 +11,7 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.core.Authentication;
 import pe.edu.pucp.kingstore.api.context.MerchantContext;
 import pe.edu.pucp.kingstore.api.controller.MerchantProductController;
+import pe.edu.pucp.kingstore.domain.dto.product.BulkProductResultDTO;
 import pe.edu.pucp.kingstore.domain.dto.product.ProductRequestDTO;
 import pe.edu.pucp.kingstore.domain.dto.product.ProductResponseDTO;
 import pe.edu.pucp.kingstore.domain.model.product.Product;
@@ -17,11 +19,20 @@ import pe.edu.pucp.kingstore.domain.model.store.Store;
 import pe.edu.pucp.kingstore.service.product.ProductService;
 import pe.edu.pucp.kingstore.service.storage.StorageService;
 
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -57,6 +68,7 @@ class MerchantProductControllerTest {
         authentication = mock(Authentication.class);
         store = new Store();
         store.setId(10);
+        store.setSlug("street-kings");
     }
 
     private Product product(int id, String name, Boolean active) {
@@ -313,5 +325,87 @@ class MerchantProductControllerTest {
         var result = controller.uploadProductImage(authentication, 10, file);
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    // =========================================================================
+    // POST /merchant/products/bulk
+    // =========================================================================
+
+    @Test
+    void bulkProductsUploadsReferencedImagesAndCreatesProducts() throws Exception {
+        when(merchantContext.currentStore(authentication, 10)).thenReturn(store);
+        MockMultipartFile products = new MockMultipartFile(
+                "products",
+                "productos.csv",
+                "text/csv",
+                """
+                NOMBRE,DESCRIPCION,PRECIO,COSTO,TALLA,COLOR,STOCK,IMAGENES
+                Polo White,Polo de algodón,49.00,30.00,S,Blanco,5,productos/polo-white.webp
+                Polo White,Polo de algodón,49.00,30.00,M,Blanco,7,polo-white.webp
+                """.getBytes(StandardCharsets.UTF_8)
+        );
+        MockMultipartFile images = zip("images", "imagenes.zip", Map.of(
+                "productos/polo-white.webp", "image-bytes".getBytes(StandardCharsets.UTF_8)
+        ));
+        when(storageService.uploadBytes(startsWith("products/street-kings/"), any(byte[].class), eq("image/webp")))
+                .thenReturn("https://cdn.test/products/polo-white.webp");
+        when(productService.createForStore(eq(store), any(ProductRequestDTO.class)))
+                .thenReturn(product(99, "Polo White", true));
+
+        var result = controller.bulkProducts(authentication, 10, products, images);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+        BulkProductResultDTO body = (BulkProductResultDTO) result.getBody();
+        assertThat(body.getProductsCreated()).isEqualTo(1);
+        assertThat(body.getVariantsProcessed()).isEqualTo(2);
+        assertThat(body.getImagesUploaded()).isEqualTo(1);
+        assertThat(body.getErrors()).isEmpty();
+
+        ArgumentCaptor<ProductRequestDTO> requestCaptor = ArgumentCaptor.forClass(ProductRequestDTO.class);
+        verify(productService).createForStore(eq(store), requestCaptor.capture());
+        ProductRequestDTO request = requestCaptor.getValue();
+        assertThat(request.getName()).isEqualTo("Polo White");
+        assertThat(request.getPrice()).isEqualTo(49.0);
+        assertThat(request.getCostPrice()).isEqualTo(30.0);
+        assertThat(request.getImageUrls()).containsExactly("https://cdn.test/products/polo-white.webp");
+        assertThat(request.getVariants()).hasSize(2);
+    }
+
+    @Test
+    void bulkProductsDoesNotCreateWhenReferencedImageIsMissing() throws Exception {
+        when(merchantContext.currentStore(authentication, 10)).thenReturn(store);
+        MockMultipartFile products = new MockMultipartFile(
+                "products",
+                "productos.csv",
+                "text/csv",
+                """
+                NOMBRE,DESCRIPCION,PRECIO,TALLA,COLOR,STOCK,IMAGENES
+                Polo White,Polo de algodón,49.00,S,Blanco,5,missing.png
+                """.getBytes(StandardCharsets.UTF_8)
+        );
+        MockMultipartFile images = zip("images", "imagenes.zip", Map.of(
+                "other.png", "image-bytes".getBytes(StandardCharsets.UTF_8)
+        ));
+
+        var result = controller.bulkProducts(authentication, 10, products, images);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+        BulkProductResultDTO body = (BulkProductResultDTO) result.getBody();
+        assertThat(body.getProductsCreated()).isZero();
+        assertThat(body.getErrors()).contains("La imagen \"missing.png\" no existe en el ZIP cargado.");
+        verify(productService, never()).createForStore(any(), any());
+        verify(storageService, never()).uploadBytes(anyString(), any(), anyString());
+    }
+
+    private MockMultipartFile zip(String partName, String filename, Map<String, byte[]> entries) throws Exception {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (ZipOutputStream zip = new ZipOutputStream(out)) {
+            for (Map.Entry<String, byte[]> entry : entries.entrySet()) {
+                zip.putNextEntry(new ZipEntry(entry.getKey()));
+                zip.write(entry.getValue());
+                zip.closeEntry();
+            }
+        }
+        return new MockMultipartFile(partName, filename, "application/zip", out.toByteArray());
     }
 }

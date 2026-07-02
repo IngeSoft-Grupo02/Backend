@@ -117,5 +117,9 @@ public class CartResponseDTO {
         private String description;
         private String observations;
         private LocalDateTime sentAt;
+        private Double overlayX;
+        private Double overlayY;
+        private Double overlayWidth;
+        private Double overlayHeight;
     }
 }

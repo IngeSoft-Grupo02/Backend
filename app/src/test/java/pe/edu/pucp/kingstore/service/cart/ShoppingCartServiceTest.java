@@ -227,6 +227,64 @@ class ShoppingCartServiceTest {
     }
 
     @Test
+    void addItemCreatesSeparateLineWhenRequestedForSameVariant() {
+        Customer customer = customer(1);
+        Store store = store(10);
+        Product product = product(1, store, 100.0);
+        ProductVariant variant = variant(1, product, 50);
+        ShoppingCart cart = emptyCart(customer);
+
+        CartItem existingItem = new CartItem();
+        existingItem.setProductVariant(variant);
+        existingItem.setQuantity(3);
+        existingItem.setPrice(100.0);
+        existingItem.setSubtotal(300.0);
+        cart.getItems().add(existingItem);
+
+        when(discountRepository.findByStoreId(10)).thenReturn(List.of());
+        when(shoppingCartRepository.save(any(ShoppingCart.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ShoppingCart result = service.addItem(cart, variant, 2, 10, true);
+
+        assertThat(result.getItems()).hasSize(2);
+        assertThat(result.getItems()).extracting(CartItem::getQuantity)
+                .containsExactly(3, 2);
+    }
+
+    @Test
+    void addItemDoesNotMergePlainItemIntoDesignedLine() {
+        Customer customer = customer(1);
+        Store store = store(10);
+        Product product = product(1, store, 100.0);
+        ProductVariant variant = variant(1, product, 50);
+        ShoppingCart cart = emptyCart(customer);
+
+        CustomDesign design = new CustomDesign();
+        design.setImageUrl("__pending_cart_design__");
+
+        CartItem designedItem = new CartItem();
+        designedItem.setProductVariant(variant);
+        designedItem.setQuantity(3);
+        designedItem.setPrice(110.0);
+        designedItem.setSubtotal(330.0);
+        designedItem.setCustomDesign(design);
+        cart.getItems().add(designedItem);
+
+        when(discountRepository.findByStoreId(10)).thenReturn(List.of());
+        when(shoppingCartRepository.save(any(ShoppingCart.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ShoppingCart result = service.addItem(cart, variant, 2, 10);
+
+        assertThat(result.getItems()).hasSize(2);
+        assertThat(result.getItems().get(0).getCustomDesign()).isNotNull();
+        assertThat(result.getItems().get(1).getCustomDesign()).isNull();
+        assertThat(result.getItems()).extracting(CartItem::getQuantity)
+                .containsExactly(3, 2);
+    }
+
+    @Test
     void addItemThrowsWhenQuantityZero() {
         Customer customer = customer(1);
         Store store = store(10);

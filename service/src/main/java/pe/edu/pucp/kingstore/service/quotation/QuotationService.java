@@ -450,6 +450,10 @@ public class QuotationService extends AbstractCrudService<Quotation> {
                 design.getFileUrl(),
                 design.getContentType(),
                 design.getSizeBytes(),
-                design.getQuotationItem() != null ? design.getQuotationItem().getId() : null);
+                design.getQuotationItem() != null ? design.getQuotationItem().getId() : null,
+                design.getOverlayX(),
+                design.getOverlayY(),
+                design.getOverlayWidth(),
+                design.getOverlayHeight());
     }
 }

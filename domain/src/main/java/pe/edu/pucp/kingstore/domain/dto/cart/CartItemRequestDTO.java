@@ -10,4 +10,10 @@ import lombok.Data;
 public class CartItemRequestDTO {
     private Integer productVariantId;
     private Integer quantity;
+    /**
+     * Cuando el cliente agrega la misma variante con comentario o archivos de
+     * diseño, se debe crear una línea independiente para no mezclarla con el
+     * producto sin diseño.
+     */
+    private Boolean separateItem;
 }

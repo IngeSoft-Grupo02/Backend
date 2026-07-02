@@ -23,6 +23,18 @@ public class CustomDesign extends BaseEntity {
     @Column(length = 500)
     private String observations;
 
+    @Column(name = "overlay_x")
+    private Double overlayX;
+
+    @Column(name = "overlay_y")
+    private Double overlayY;
+
+    @Column(name = "overlay_width")
+    private Double overlayWidth;
+
+    @Column(name = "overlay_height")
+    private Double overlayHeight;
+
     @Column(nullable = false)
     private LocalDateTime sentAt;
 

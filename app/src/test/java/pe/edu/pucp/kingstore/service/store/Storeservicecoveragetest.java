@@ -377,10 +377,8 @@ class StoreServiceCoverageTest {
         store.setSecondaryColor(SecondaryColor.SAGE);
         store.setTertiaryColor(TertiaryColor.COPPER);
 
-        Quotation q1 = new Quotation();
-        Quotation q2 = new Quotation();
-        when(quotationRepository.findByStoreIdAndStatus(5, QuotationStatus.PENDING))
-                .thenReturn(List.of(q1, q2));
+        when(quotationRepository.countByStoreIdAndStatus(5, QuotationStatus.PENDING))
+                .thenReturn(2L);
 
         var dto = service.toResponseDTO(store);
 
@@ -405,8 +403,8 @@ class StoreServiceCoverageTest {
         store.setStoreStatus(null);
         store.setCategory(null);
 
-        when(quotationRepository.findByStoreIdAndStatus(6, QuotationStatus.PENDING))
-                .thenReturn(List.of());
+        when(quotationRepository.countByStoreIdAndStatus(6, QuotationStatus.PENDING))
+                .thenReturn(0L);
 
         var dto = service.toResponseDTO(store);
 

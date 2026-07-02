@@ -200,6 +200,7 @@ class ProductServiceCoverageTest {
         Product saved = service.createForStore(store(), dto);
 
         assertThat(saved.getStatus()).isEqualTo(ProductStatus.OUT_OF_STOCK);
+        assertThat(saved.getVariants()).isEmpty();
     }
 
     @Test
@@ -233,6 +234,27 @@ class ProductServiceCoverageTest {
         Product saved = service.createForStore(store(), dto);
 
         assertThat(saved.getVariants().get(0).getColor()).isEqualTo(Color.BLACK);
+    }
+
+    @Test
+    void buildVariantsIgnoresZeroStockCombinations() {
+        ProductRequestDTO dto = requestDTO("Polo", 50.0);
+        ProductRequestDTO.ProductVariantRequestDTO zero = new ProductRequestDTO.ProductVariantRequestDTO();
+        zero.setSize("M");
+        zero.setColor(Color.WHITE);
+        zero.setStock(0);
+        ProductRequestDTO.ProductVariantRequestDTO stocked = new ProductRequestDTO.ProductVariantRequestDTO();
+        stocked.setSize("M");
+        stocked.setColor(Color.BLACK);
+        stocked.setStock(8);
+        dto.setVariants(List.of(zero, stocked));
+        when(productRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Product saved = service.createForStore(store(), dto);
+
+        assertThat(saved.getVariants()).hasSize(1);
+        assertThat(saved.getVariants().get(0).getColor()).isEqualTo(Color.BLACK);
+        assertThat(saved.getVariants().get(0).getStock()).isEqualTo(8);
     }
 
     @Test
