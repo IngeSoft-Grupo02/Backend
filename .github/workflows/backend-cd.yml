@@ -137,11 +137,16 @@ jobs:
           set -euo pipefail
           cd ~/kingstore/backend
           export BACKEND_IMAGE
+          df -h || true
+          docker system df || true
+          docker compose -f docker-compose.production.yml down --remove-orphans || true
+          docker image prune -af || true
           docker load --input backend-image.tar.gz
-          docker compose -f docker-compose.production.yml up -d --remove-orphans
+          docker compose -f docker-compose.production.yml up -d --force-recreate --remove-orphans
           rm -f backend-image.tar.gz
           docker image prune -f
           docker compose -f docker-compose.production.yml ps
+          docker compose -f docker-compose.production.yml logs backend --tail=80 || true
           REMOTE
 
       - name: Verify deployment
