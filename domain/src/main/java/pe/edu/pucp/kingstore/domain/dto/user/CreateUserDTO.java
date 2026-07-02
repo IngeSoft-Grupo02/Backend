@@ -6,6 +6,7 @@ import pe.edu.pucp.kingstore.domain.model.user.enums.Gender;
 import pe.edu.pucp.kingstore.domain.model.user.enums.Role;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @Data
 public class CreateUserDTO {
@@ -33,4 +34,7 @@ public class CreateUserDTO {
 
     // Solo obligatorio si role == CUSTOMER
     private Integer storeId;
+
+    // Opcional para comerciantes: permite asignar cero, una o varias tiendas.
+    private List<Integer> storeIds;
 }

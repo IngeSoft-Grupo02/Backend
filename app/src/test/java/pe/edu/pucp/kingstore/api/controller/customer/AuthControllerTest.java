@@ -118,17 +118,21 @@ class AuthControllerTest {
     }
 
     @Test
-    void loginMapsMerchantWithoutStoreToForbidden() {
+    void loginAllowsMerchantWithoutStore() {
         AuthController controller = new AuthController(userAccountService, jwtUtil, storeService);
         LoginRequestDTO request = new LoginRequestDTO();
         LoginResponseDTO login = response(9, "merchant@test.com", Role.MERCHANT);
         when(userAccountService.authenticate(request)).thenReturn(login);
         when(storeService.findLoginSlugByUserAccountId(9)).thenReturn(Optional.empty());
+        when(jwtUtil.generateToken(9, "merchant@test.com", Role.MERCHANT, null))
+                .thenReturn("jwt-token");
 
         ResponseEntity<?> response = controller.login(request);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
-        assertThat(((Map<?, ?>) response.getBody()).get("code")).isEqualTo("MERCHANT_NO_STORE");
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        LoginResponseDTO body = (LoginResponseDTO) response.getBody();
+        assertThat(body.getToken()).isEqualTo("jwt-token");
+        assertThat(body.getStoreSlug()).isNull();
     }
 
     private LoginResponseDTO response(Integer id, String email, Role role) {

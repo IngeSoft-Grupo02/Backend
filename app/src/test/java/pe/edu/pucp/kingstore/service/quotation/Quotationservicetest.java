@@ -7,6 +7,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import pe.edu.pucp.kingstore.domain.model.cart.ShoppingCart;
 import pe.edu.pucp.kingstore.domain.model.product.CustomDesign;
+import pe.edu.pucp.kingstore.domain.model.product.Product;
 import pe.edu.pucp.kingstore.domain.model.product.ProductVariant;
 import pe.edu.pucp.kingstore.domain.model.product.enums.Color;
 import pe.edu.pucp.kingstore.domain.model.quotation.Quotation;
@@ -327,6 +328,12 @@ class QuotationServiceTest {
         item.setId(15);
         item.setSubTotal(30.0);
         item.setCustomerDescription("Bordado al frente");
+        Product product = new Product();
+        product.setId(20);
+        product.setName("Polo Classic White");
+        product.setBasePrice(15.0);
+        product.setImageUrls(List.of(" ", "https://bucket.s3.amazonaws.com/products/polo-white.jpeg"));
+        item.getProductVariant().setProduct(product);
 
         Quotation quotation = quotation(1, cart, List.of(item), 5);
         quotation.setStatus(QuotationStatus.APPROVED);
@@ -362,6 +369,8 @@ class QuotationServiceTest {
         assertThat(dto.getDesigns().get(0).getFileName()).isEqualTo("brief-general.pdf");
         assertThat(dto.getDesigns().get(0).getQuotationItemId()).isNull();
         assertThat(dto.getItems()).hasSize(1);
+        assertThat(dto.getItems().get(0).getProductName()).isEqualTo("Polo Classic White");
+        assertThat(dto.getItems().get(0).getProductImageUrl()).isEqualTo("https://bucket.s3.amazonaws.com/products/polo-white.jpeg");
         assertThat(dto.getItems().get(0).getVariant()).isEqualTo("M / BLACK");
         assertThat(dto.getItems().get(0).getSubTotal()).isEqualTo(30.0);
         assertThat(dto.getItems().get(0).getCustomerDescription()).isEqualTo("Bordado al frente");
