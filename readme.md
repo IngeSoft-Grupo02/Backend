@@ -205,13 +205,12 @@ Para más detalles sobre el cifrado de propiedades, ver [`ENCRYPTION_GUIDE.md`](
 
 ## Despliegue del Backend
 
-El backend es una aplicación Spring Boot multi-módulo (Maven). Se despliega automáticamente en EC2 mediante GitHub Actions al hacer push a `main`. No se requiere Docker Hub ni intervención manual.
-El backend es una aplicación Spring Boot multi-módulo (Maven). Se despliega automáticamente en EC2 mediante GitHub Actions al hacer push a `main`. No se requiere Docker Hub ni intervención manual.
+El backend es una aplicación Spring Boot multi-módulo (Maven). Se despliega automáticamente en EC2 mediante GitHub Actions al hacer push a `main` o `Development`. No se requiere Docker Hub ni intervención manual.
 
 ### Arquitectura
 
 ```
-push a main
+push a main o Development
      │
 GitHub Actions
      ├── ./mvnw package -DskipTests   → app/target/*.jar
@@ -262,7 +261,7 @@ ssh-keyscan 100.57.218.181
 
 ### Publicar nueva versión
 
-Solo hace falta hacer merge a `main`. El workflow `.github/workflows/backend-cd.yml` se activa automáticamente y:
+Solo hace falta hacer push o merge a `main` o `Development`. El workflow `.github/workflows/backend-cd.yml` se activa automáticamente y:
 
 1. Compila el JAR en el runner de GitHub Actions
 2. Construye la imagen Docker
