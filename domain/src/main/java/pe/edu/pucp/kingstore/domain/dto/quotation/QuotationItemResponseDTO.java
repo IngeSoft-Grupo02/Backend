@@ -22,6 +22,7 @@ public class QuotationItemResponseDTO {
     private Integer id;
     private Integer productId;
     private String productName;
+    private String productImageUrl;
     private Integer productVariantId;
     private String size;
     private String color;

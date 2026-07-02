@@ -6,6 +6,7 @@ import pe.edu.pucp.kingstore.domain.model.quotation.Quotation;
 import pe.edu.pucp.kingstore.domain.model.quotation.QuotationDesign;
 import pe.edu.pucp.kingstore.domain.model.quotation.QuotationItem;
 import pe.edu.pucp.kingstore.domain.model.quotation.enums.QuotationStatus;
+import pe.edu.pucp.kingstore.domain.model.product.Product;
 import pe.edu.pucp.kingstore.repository.quotation.QuotationRepository;
 import pe.edu.pucp.kingstore.repository.product.DiscountRepository;
 import pe.edu.pucp.kingstore.service.common.AbstractCrudService;
@@ -333,6 +334,7 @@ public class QuotationService extends AbstractCrudService<Quotation> {
         dto.setId(item.getId());
         dto.setProductId(product != null ? product.getId() : null);
         dto.setProductName(productName);
+        dto.setProductImageUrl(firstProductImageUrl(product));
         dto.setProductVariantId(variant != null ? variant.getId() : null);
         dto.setSize(size);
         dto.setColor(color);
@@ -349,6 +351,18 @@ public class QuotationService extends AbstractCrudService<Quotation> {
         dto.setVariant(variantLabel);
         dto.setPrice(item.getPrice());
         return dto;
+    }
+
+    private String firstProductImageUrl(Product product) {
+        if (product == null || product.getImageUrls() == null) {
+            return null;
+        }
+        return product.getImageUrls().stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(url -> !url.isBlank())
+                .findFirst()
+                .orElse(null);
     }
 
     private void applyPricingBreakdown(QuotationItemResponseDTO dto, QuotationItem item,

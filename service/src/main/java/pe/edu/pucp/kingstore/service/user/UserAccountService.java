@@ -26,7 +26,10 @@ import pe.edu.pucp.kingstore.domain.model.user.Person;
 import pe.edu.pucp.kingstore.domain.model.user.SystemAdministrator;
 
 import java.time.LocalDate;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 @Service
@@ -192,12 +195,7 @@ public class UserAccountService extends AbstractCrudService<UserAccount> {
                 merchant.setRuc(dto.getRuc());
                 merchant.setActive(true);
                 Merchant savedMerchant = merchantRepository.save(merchant);
-                if(dto.getStoreId() != null){
-                    Store store = storeRepository.findById(dto.getStoreId())
-                            .orElseThrow(() -> new BusinessRuleException("Store not found"));
-                    store.setMerchant(savedMerchant);
-                    storeRepository.save(store);
-                }
+                assignStoresToMerchant(savedMerchant, merchantStoreIds(dto));
             }
             case SYSTEM_ADMIN -> {
                 SystemAdministrator admin = new SystemAdministrator();
@@ -301,6 +299,9 @@ public class UserAccountService extends AbstractCrudService<UserAccount> {
             applyPersonUpdates(m, dto);
             if (dto.getRuc() != null) m.setRuc(dto.getRuc());
             merchantRepository.save(m);
+            if (dto.getStoreIds() != null || dto.getStoreId() != null) {
+                syncMerchantStores(m, merchantStoreIds(dto));
+            }
         });
         customerRepository.findAllByUserAccountId(id).forEach(c -> {
             applyPersonUpdates(c, dto);
@@ -323,6 +324,39 @@ public class UserAccountService extends AbstractCrudService<UserAccount> {
         if (dto.getBirthDate() != null) person.setBirthDate(dto.getBirthDate());
         if (dto.getPhone() != null) person.setPhone(dto.getPhone());
         if (dto.getGender() != null) person.setGender(dto.getGender());
+    }
+
+    private List<Integer> merchantStoreIds(CreateUserDTO dto) {
+        Set<Integer> ids = new LinkedHashSet<>();
+        if (dto.getStoreIds() != null) {
+            dto.getStoreIds().stream()
+                    .filter(id -> id != null && id > 0)
+                    .forEach(ids::add);
+        }
+        if (dto.getStoreId() != null && dto.getStoreId() > 0) {
+            ids.add(dto.getStoreId());
+        }
+        return List.copyOf(ids);
+    }
+
+    private void assignStoresToMerchant(Merchant merchant, List<Integer> storeIds) {
+        for (Integer storeId : storeIds) {
+            Store store = storeRepository.findById(storeId)
+                    .orElseThrow(() -> new BusinessRuleException("Store not found"));
+            store.setMerchant(merchant);
+            storeRepository.save(store);
+        }
+    }
+
+    private void syncMerchantStores(Merchant merchant, List<Integer> selectedStoreIds) {
+        Set<Integer> selected = new LinkedHashSet<>(selectedStoreIds);
+        storeRepository.findAllByMerchant_UserAccount_Id(merchant.getUserAccount().getId()).forEach(store -> {
+            if (!selected.contains(store.getId())) {
+                store.setMerchant(null);
+                storeRepository.save(store);
+            }
+        });
+        assignStoresToMerchant(merchant, selectedStoreIds);
     }
 
     @Transactional

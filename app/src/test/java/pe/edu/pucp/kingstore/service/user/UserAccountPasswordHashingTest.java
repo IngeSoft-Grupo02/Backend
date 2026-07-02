@@ -92,7 +92,6 @@ class UserAccountPasswordHashingTest {
     void updateUserHashesNewPasswordOnlyOnce() {
         UserAccount existing = account(20, "user@test.com", "Old12345*");
         when(userAccountRepository.findById(20)).thenReturn(Optional.of(existing));
-        when(userAccountRepository.findByEmail("user@test.com")).thenReturn(Optional.of(existing));
         when(userAccountRepository.save(any(UserAccount.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         CreateUserDTO update = new CreateUserDTO();
@@ -287,6 +286,27 @@ class UserAccountPasswordHashingTest {
         assertThat(service.createWithRole(merchant).getId()).isEqualTo(50);
 
         assertThat(store.getMerchant()).isNotNull();
+    }
+
+    @Test
+    void createWithRoleAllowsMerchantWithoutStores() {
+        when(userAccountRepository.findByEmail(any())).thenReturn(Optional.empty());
+        when(userAccountRepository.save(any(UserAccount.class))).thenAnswer(invocation -> {
+            UserAccount saved = invocation.getArgument(0);
+            saved.setId(51);
+            return saved;
+        });
+        when(merchantRepository.save(any(Merchant.class))).thenAnswer(invocation -> {
+            Merchant saved = invocation.getArgument(0);
+            saved.setId(10);
+            return saved;
+        });
+
+        CreateUserDTO merchant = createUser(Role.MERCHANT, "Merchant123!");
+        merchant.setRuc("20123456789");
+
+        assertThat(service.createWithRole(merchant).getId()).isEqualTo(51);
+        verify(merchantRepository).save(any(Merchant.class));
     }
 
     @Test
