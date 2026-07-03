@@ -22,6 +22,7 @@ public class ProductPublicDTO {
     private String description;
     private double basePrice;
     private List<String> imageUrls;
+    private Boolean customizable;
     private List<ProductVariantPublicDTO> variants;
     private List<DiscountPublicDTO> discounts;
 

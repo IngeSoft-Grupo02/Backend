@@ -15,6 +15,7 @@ public class ProductResponseDTO {
     private double price;
     private double costPrice;
     private List<String> imageUrls;
+    private Boolean customizable;
     private Boolean active;
     private String status;
     private int stock;

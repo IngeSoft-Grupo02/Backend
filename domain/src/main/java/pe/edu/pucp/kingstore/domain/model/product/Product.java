@@ -33,6 +33,9 @@ public class Product extends BaseEntity {
     @Column(nullable = false)
     private double basePrice;
 
+    @Column(nullable = false)
+    private Boolean customizable = true;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ProductStatus status = ProductStatus.ACTIVE;

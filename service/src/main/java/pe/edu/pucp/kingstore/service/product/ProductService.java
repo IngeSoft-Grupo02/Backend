@@ -153,6 +153,7 @@ public class ProductService extends AbstractCrudService<Product> {
                 product.getDescription(),
                 product.getBasePrice(),
                 product.getImageUrls() == null ? List.of() : product.getImageUrls(),
+                customizableOrDefault(product),
                 variants,
                 discounts
         );
@@ -179,6 +180,7 @@ public class ProductService extends AbstractCrudService<Product> {
                 product.getBasePrice(),
                 product.getCostPrice(),
                 product.getImageUrls() == null ? List.of() : product.getImageUrls(),
+                customizableOrDefault(product),
                 product.getActive(),
                 resolveStatusLabel(product, stock),
                 stock,
@@ -202,6 +204,11 @@ public class ProductService extends AbstractCrudService<Product> {
         product.setDescription(MerchantStringUtil.blankToNull(request.getDescription()));
         product.setBasePrice(request.getPrice()     == null ? 0 : request.getPrice());
         product.setCostPrice(request.getCostPrice() == null ? 0 : request.getCostPrice());
+        Boolean customizable = request.getCustomizable();
+        if (customizable == null) {
+            customizable = product.getId() == null ? Boolean.FALSE : customizableOrDefault(product);
+        }
+        product.setCustomizable(customizable);
         replaceCollection(product.getImageUrls(),  buildImageUrls(request.getImageUrls()),   product::setImageUrls);
         replaceCollection(product.getAttributes(), List.of(),                                product::setAttributes);
         replaceCollection(product.getVariants(),   buildVariants(request.getVariants()),     product::setVariants);
@@ -280,6 +287,11 @@ public class ProductService extends AbstractCrudService<Product> {
             case INACTIVE     -> "Inactivo";
         };
     }
+
+    private Boolean customizableOrDefault(Product product) {
+        return product.getCustomizable() == null ? Boolean.TRUE : product.getCustomizable();
+    }
+
     @Override
     protected void validateForSave(Product product) {
         if (product.getStore() == null || product.getStore().getId() == null) {

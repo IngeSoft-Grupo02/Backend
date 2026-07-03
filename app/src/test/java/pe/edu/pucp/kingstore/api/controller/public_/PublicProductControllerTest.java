@@ -44,7 +44,7 @@ class PublicProductControllerTest {
         product.setStore(store);
 
         productDTO = new ProductPublicDTO(1, "Polo Clásico", "desc", 89.0,
-                List.of(), List.of(), List.of());
+                List.of(), true, List.of(), List.of());
     }
 
     // ── GET /stores/public/{slug}/products ────────────────────────────────────

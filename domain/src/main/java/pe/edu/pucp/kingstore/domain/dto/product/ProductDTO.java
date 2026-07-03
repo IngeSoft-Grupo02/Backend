@@ -15,6 +15,7 @@ public class ProductDTO extends BaseEntityDTO {
     private List<String> imageUrls;
     private double costPrice;
     private double basePrice;
+    private Boolean customizable;
     private ProductStatus status;
     private List <ProductVariantDTO> variants;
     private String description;

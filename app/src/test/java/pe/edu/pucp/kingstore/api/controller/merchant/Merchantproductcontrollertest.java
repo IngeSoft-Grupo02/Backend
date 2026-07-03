@@ -82,7 +82,7 @@ class MerchantProductControllerTest {
 
     private ProductResponseDTO responseDTO(int id) {
         return new ProductResponseDTO(id, "Polo", "desc", 50.0, 20.0,
-                List.of(), true, "Activo", 5, List.of(), store.getId());
+                List.of(), true, true, "Activo", 5, List.of(), store.getId());
     }
 
     // =========================================================================

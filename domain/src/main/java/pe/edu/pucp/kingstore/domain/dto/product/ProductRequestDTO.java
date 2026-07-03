@@ -12,6 +12,7 @@ public class ProductRequestDTO {
     private Double price;
     private Double costPrice;
     private List<String> imageUrls;
+    private Boolean customizable;
     private List<ProductVariantRequestDTO> variants;
     private Boolean active;
     private String status;
