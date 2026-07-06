@@ -29,17 +29,20 @@ public class MerchantStoreController extends BaseMerchantController {
     private final StoreCategoryService  storeCategoryService;
     private final StorageService        storageService;
     private final DashboardService dashboardService;
+    private final StoreLogoResourceResolver storeLogoResourceResolver;
 
     public MerchantStoreController(MerchantContext merchantContext,
                                    StoreService storeService,
                                    StoreCategoryService storeCategoryService,
                                    StorageService storageService,
-                                    DashboardService dashboardService) {
+                                   DashboardService dashboardService,
+                                   StoreLogoResourceResolver storeLogoResourceResolver) {
         super(merchantContext);
         this.storeService         = storeService;
         this.storeCategoryService = storeCategoryService;
         this.storageService       = storageService;
         this.dashboardService = dashboardService;
+        this.storeLogoResourceResolver = storeLogoResourceResolver;
     }
 
     @GetMapping("/stores")
@@ -78,6 +81,20 @@ public class MerchantStoreController extends BaseMerchantController {
         return handle(() -> {
             currentMerchant(authentication);
             return ResponseEntity.ok(Map.of("logoUrl", uploadLogo(logo)));
+        });
+    }
+
+    @GetMapping("/stores/{id}/logo")
+    public ResponseEntity<?> storeLogo(Authentication authentication,
+                                       @PathVariable Integer id) {
+        return handle(() -> {
+            Store store = storeInMerchantScope(authentication, id);
+            return storeLogoResourceResolver.resolve(store.getLogoUrl())
+                    .<ResponseEntity<?>>map(logo -> ResponseEntity.ok()
+                            .contentType(logo.mediaType())
+                            .body(logo.bytes()))
+                    .orElseGet(() -> ResponseEntity.status(404)
+                            .body(Map.of("error", "Store logo not found")));
         });
     }
 
