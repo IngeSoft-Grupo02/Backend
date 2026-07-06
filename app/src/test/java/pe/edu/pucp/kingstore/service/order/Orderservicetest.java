@@ -841,7 +841,7 @@ class OrderServiceTest {
 
         assertThatThrownBy(() -> service.setShippingAddress(1, shippingRequest("Av. Lima 123", "INVALID_DISTRICT", null)))
                 .isInstanceOf(BusinessRuleException.class)
-                .hasMessageContaining("Invalid district");
+                .hasMessageContaining("Distrito inválido");
     }
 
     @Test
@@ -899,6 +899,71 @@ class OrderServiceTest {
 
         Order result = service.setShippingAddress(1, shippingRequest("Av. Lima 123", "San Miguel", null));
         assertThat(result.getShippingDetail().getDistrict()).isEqualTo(District.SAN_MIGUEL);
+    }
+
+    @Test
+    void setShippingAddressAcceptsJesusMariaEnum() {
+        Order order = new Order();
+        order.setId(1);
+        order.setStatus(OrderStatus.PAYMENT_CONFIRMED);
+        when(orderRepository.findById(1)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Order result = service.setShippingAddress(1, shippingRequest("Jr. Hortencia 123", "JESUS_MARIA", null));
+        assertThat(result.getShippingDetail().getDistrict()).isEqualTo(District.JESUS_MARIA);
+    }
+
+    @Test
+    void setShippingAddressAcceptsJesusMariaWithAccent() {
+        Order order = new Order();
+        order.setId(1);
+        order.setStatus(OrderStatus.PAYMENT_CONFIRMED);
+        when(orderRepository.findById(1)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Order result = service.setShippingAddress(1, shippingRequest("Jr. Hortencia 123", "Jesús María", null));
+        assertThat(result.getShippingDetail().getDistrict()).isEqualTo(District.JESUS_MARIA);
+    }
+
+    @Test
+    void setShippingAddressAcceptsJesusMariaWithoutAccent() {
+        Order order = new Order();
+        order.setId(1);
+        order.setStatus(OrderStatus.PAYMENT_CONFIRMED);
+        when(orderRepository.findById(1)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Order result = service.setShippingAddress(1, shippingRequest("Jr. Hortencia 123", "Jesus Maria", null));
+        assertThat(result.getShippingDetail().getDistrict()).isEqualTo(District.JESUS_MARIA);
+    }
+
+    @Test
+    void setShippingAddressAcceptsJesusMariaLowercaseAccent() {
+        Order order = new Order();
+        order.setId(1);
+        order.setStatus(OrderStatus.PAYMENT_CONFIRMED);
+        when(orderRepository.findById(1)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Order result = service.setShippingAddress(1, shippingRequest("Jr. Hortencia 123", "jesús maría", null));
+        assertThat(result.getShippingDetail().getDistrict()).isEqualTo(District.JESUS_MARIA);
+    }
+
+    @Test
+    void setShippingAddressAcceptsDistrictWithLongLabel() {
+        Order order = new Order();
+        order.setId(1);
+        order.setStatus(OrderStatus.PAYMENT_CONFIRMED);
+        when(orderRepository.findById(1)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Order result = service.setShippingAddress(1, shippingRequest("Av. Lima 123", "San Juan de Lurigancho", null));
+        assertThat(result.getShippingDetail().getDistrict()).isEqualTo(District.SAN_JUAN_DE_LURIGANCHO);
     }
 
     @Test

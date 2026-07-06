@@ -39,6 +39,18 @@ SET @col = (SELECT COUNT(*) FROM information_schema.COLUMNS
 SET @sql = IF(@col = 0, 'ALTER TABLE shipping_detail ADD COLUMN district VARCHAR(255) NOT NULL DEFAULT ''OTRO''', 'SELECT 1');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
+SET @district_fix = (SELECT COUNT(*) FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE()
+    AND TABLE_NAME = 'shipping_detail'
+    AND COLUMN_NAME = 'district'
+    AND (DATA_TYPE <> 'varchar'
+      OR CHARACTER_MAXIMUM_LENGTH < 255
+      OR IS_NULLABLE <> 'NO'));
+SET @sql = IF(@district_fix > 0, 'UPDATE shipping_detail SET district = ''OTRO'' WHERE district IS NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+SET @sql = IF(@district_fix > 0, 'ALTER TABLE shipping_detail MODIFY COLUMN district VARCHAR(255) NOT NULL DEFAULT ''OTRO''', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
 SET @col = (SELECT COUNT(*) FROM information_schema.COLUMNS
   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'shipping_detail' AND COLUMN_NAME = 'description');
 SET @sql = IF(@col = 0, 'ALTER TABLE shipping_detail ADD COLUMN description VARCHAR(500) NULL', 'SELECT 1');
