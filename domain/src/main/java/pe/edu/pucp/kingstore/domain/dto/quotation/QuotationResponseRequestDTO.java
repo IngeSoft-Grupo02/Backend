@@ -10,4 +10,5 @@ import pe.edu.pucp.kingstore.domain.model.quotation.enums.QuotationStatus;
 public class QuotationResponseRequestDTO {
     private QuotationStatus status;
     private String observations;
+    private Double discountAmount;
 }

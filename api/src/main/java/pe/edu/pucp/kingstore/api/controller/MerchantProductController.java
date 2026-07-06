@@ -210,6 +210,7 @@ public class MerchantProductController extends BaseMerchantController {
                 request.setDescription(productDraft.description());
                 request.setPrice(productDraft.price());
                 request.setCostPrice(productDraft.costPrice());
+                request.setCustomizable(productDraft.customizable());
                 request.setImageUrls(productDraft.imageNames().stream()
                         .map(uploadedImageUrls::get)
                         .filter(Objects::nonNull)
@@ -258,6 +259,7 @@ public class MerchantProductController extends BaseMerchantController {
             boolean hasPriceColumn = index.containsKey("PRECIO");
             boolean hasCostColumn = index.containsKey("COSTO");
             boolean hasImagesColumn = index.containsKey("IMAGENES");
+            boolean hasCustomizableColumn = index.containsKey("PERSONALIZABLE");
             String line;
             int rowNumber = 2;
 
@@ -277,6 +279,7 @@ public class MerchantProductController extends BaseMerchantController {
                 String imageText = hasImagesColumn ? bulkValue(cols, index, "IMAGENES") : null;
                 String priceText = hasPriceColumn ? bulkValue(cols, index, "PRECIO") : null;
                 String costText = hasCostColumn ? bulkValue(cols, index, "COSTO") : null;
+                String customizableText = hasCustomizableColumn ? bulkValue(cols, index, "PERSONALIZABLE") : null;
 
                 if (name == null) errors.add("Fila " + rowNumber + ": el nombre del producto es obligatorio.");
                 if (description == null) errors.add("Fila " + rowNumber + ": la descripción es obligatoria.");
@@ -312,6 +315,13 @@ public class MerchantProductController extends BaseMerchantController {
                     errors.add("Fila " + rowNumber + ": el costo no puede ser mayor que el precio.");
                 }
 
+                Boolean customizable = hasCustomizableColumn
+                        ? parseBulkBoolean(customizableText)
+                        : Boolean.FALSE;
+                if (hasCustomizableColumn && customizableText != null && customizable == null) {
+                    errors.add("Fila " + rowNumber + ": PERSONALIZABLE debe ser SI o NO.");
+                }
+
                 List<String> imageNames = bulkImageNames(imageText);
                 if (imageNames.size() > MAX_PRODUCT_IMAGES) {
                     errors.add("Fila " + rowNumber + ": máximo 5 imágenes por producto.");
@@ -330,8 +340,8 @@ public class MerchantProductController extends BaseMerchantController {
                 }
 
                 BulkProductBuilder builder = products.computeIfAbsent(name, key ->
-                        new BulkProductBuilder(name, description, price, costPrice));
-                builder.validateStaticData(rowNumber, description, price, costPrice, errors);
+                        new BulkProductBuilder(name, description, price, costPrice, customizable));
+                builder.validateStaticData(rowNumber, description, price, costPrice, customizable, errors);
                 builder.addImages(imageNames);
                 ProductRequestDTO.ProductVariantRequestDTO variant =
                         new ProductRequestDTO.ProductVariantRequestDTO();
@@ -447,6 +457,19 @@ public class MerchantProductController extends BaseMerchantController {
         return names;
     }
 
+    private Boolean parseBulkBoolean(String value) {
+        if (value == null || value.isBlank()) {
+            return Boolean.FALSE;
+        }
+        String normalized = value.trim().toUpperCase(Locale.ROOT)
+                .replace("Í", "I");
+        return switch (normalized) {
+            case "SI", "S", "TRUE", "YES", "Y", "1" -> Boolean.TRUE;
+            case "NO", "N", "FALSE", "0" -> Boolean.FALSE;
+            default -> null;
+        };
+    }
+
     private boolean ignoredZipEntry(String path) {
         String normalizedPath = path == null ? "" : path.replace('\\', '/');
         String filename = baseName(normalizedPath);
@@ -492,6 +515,7 @@ public class MerchantProductController extends BaseMerchantController {
                                     String description,
                                     Double price,
                                     Double costPrice,
+                                    Boolean customizable,
                                     List<String> imageNames,
                                     List<ProductRequestDTO.ProductVariantRequestDTO> variants) {}
 
@@ -500,18 +524,21 @@ public class MerchantProductController extends BaseMerchantController {
         private final String description;
         private final Double price;
         private final Double costPrice;
+        private final Boolean customizable;
         private final LinkedHashSet<String> imageNames = new LinkedHashSet<>();
         private final List<ProductRequestDTO.ProductVariantRequestDTO> variants = new ArrayList<>();
 
-        private BulkProductBuilder(String name, String description, Double price, Double costPrice) {
+        private BulkProductBuilder(String name, String description, Double price, Double costPrice,
+                                   Boolean customizable) {
             this.name = name;
             this.description = description;
             this.price = price;
             this.costPrice = costPrice;
+            this.customizable = customizable;
         }
 
         private void validateStaticData(int rowNumber, String rowDescription, Double rowPrice,
-                                        Double rowCostPrice, List<String> errors) {
+                                        Double rowCostPrice, Boolean rowCustomizable, List<String> errors) {
             if (!Objects.equals(description, rowDescription)) {
                 errors.add("Fila " + rowNumber + ": el producto \"" + name
                         + "\" tiene una descripción distinta a otra fila del mismo producto.");
@@ -523,6 +550,10 @@ public class MerchantProductController extends BaseMerchantController {
             if (!Objects.equals(costPrice, rowCostPrice)) {
                 errors.add("Fila " + rowNumber + ": el producto \"" + name
                         + "\" tiene un costo distinto a otra fila del mismo producto.");
+            }
+            if (!Objects.equals(customizable, rowCustomizable)) {
+                errors.add("Fila " + rowNumber + ": el producto \"" + name
+                        + "\" tiene un valor PERSONALIZABLE distinto a otra fila del mismo producto.");
             }
         }
 
@@ -540,6 +571,7 @@ public class MerchantProductController extends BaseMerchantController {
                     description,
                     price,
                     costPrice,
+                    customizable,
                     imageNames.stream().limit(MAX_PRODUCT_IMAGES).toList(),
                     List.copyOf(variants)
             );

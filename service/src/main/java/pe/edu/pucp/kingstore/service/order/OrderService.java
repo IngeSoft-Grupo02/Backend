@@ -207,7 +207,7 @@ public class OrderService extends AbstractCrudService<Order> {
             oi.setProductVariant(qi.getProductVariant());
             oi.setQuantity(qi.getQuantity());
             oi.setUnitPrice(qi.getPrice());
-            oi.setSubTotal(qi.getSubTotal()*1.18);
+            oi.setSubTotal(qi.getSubTotal());
             return oi;
         }).toList();
 
@@ -353,7 +353,7 @@ public class OrderService extends AbstractCrudService<Order> {
                 if (item.getUnitPrice() == null || item.getUnitPrice() < 0) {
                     throw new BusinessRuleException("Order item price cannot be negative");
                 }
-                item.setSubTotal(item.getUnitPrice() * item.getQuantity());
+                item.setSubTotal(round(item.getUnitPrice() * item.getQuantity()));
                 partialTotal += item.getSubTotal();
             }
         }
@@ -362,9 +362,14 @@ public class OrderService extends AbstractCrudService<Order> {
         if (totalDiscount < 0 || totalDiscount > partialTotal) {
             throw new BusinessRuleException("Order discount must be between zero and partial total");
         }
-        order.setPartialTotal(partialTotal);
-        order.setTotalDiscount(totalDiscount);
-        order.setFinalTotal(partialTotal - totalDiscount);
+        double taxableTotal = round(partialTotal - totalDiscount);
+        order.setPartialTotal(round(partialTotal));
+        order.setTotalDiscount(round(totalDiscount));
+        order.setFinalTotal(round(taxableTotal * 1.18));
+    }
+
+    private double round(double value) {
+        return Math.round(value * 100.0) / 100.0;
     }
 
 }

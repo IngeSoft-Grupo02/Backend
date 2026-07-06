@@ -53,7 +53,8 @@ public class MerchantQuotationController extends BaseMerchantController {
             var responded = quotationService.respond(
                     quotation.getId(),
                     request.getStatus(),
-                    request.getObservations()
+                    request.getObservations(),
+                    request.getDiscountAmount()
             );
             // Merchant aprueba → orden creada automáticamente
             if (responded.getStatus() == QuotationStatus.APPROVED) {

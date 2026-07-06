@@ -8,7 +8,6 @@ import pe.edu.pucp.kingstore.domain.model.quotation.QuotationItem;
 import pe.edu.pucp.kingstore.domain.model.quotation.enums.QuotationStatus;
 import pe.edu.pucp.kingstore.domain.model.product.Product;
 import pe.edu.pucp.kingstore.repository.quotation.QuotationRepository;
-import pe.edu.pucp.kingstore.repository.product.DiscountRepository;
 import pe.edu.pucp.kingstore.service.common.AbstractCrudService;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
 import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
@@ -28,18 +27,10 @@ import java.util.Optional;
 public class QuotationService extends AbstractCrudService<Quotation> {
 
     private final QuotationRepository quotationRepository;
-    private final DiscountRepository discountRepository;
 
     public QuotationService(QuotationRepository quotationRepository) {
-        this(quotationRepository, null);
-    }
-
-    @org.springframework.beans.factory.annotation.Autowired
-    public QuotationService(QuotationRepository quotationRepository,
-                            DiscountRepository discountRepository) {
         super(quotationRepository, "Quotation");
         this.quotationRepository = quotationRepository;
-        this.discountRepository = discountRepository;
     }
     /**
      * Crea una cotización a partir del carrito del cliente.
@@ -65,7 +56,7 @@ public class QuotationService extends AbstractCrudService<Quotation> {
         Quotation quotation = new Quotation();
         quotation.setShoppingCart(cart);
         quotation.setStatus(QuotationStatus.PENDING);
-        quotation.setDiscount(cart.getDiscount());
+        quotation.setDiscount(0);
         quotation.setDescription(normalizeDescription(description));
 
         List<QuotationItem> items = cart.getItems().stream().map(cartItem -> {
@@ -191,6 +182,11 @@ public class QuotationService extends AbstractCrudService<Quotation> {
 
     @Transactional
     public Quotation respond(Integer id, QuotationStatus status, String observations) {
+        return respond(id, status, observations, null);
+    }
+
+    @Transactional
+    public Quotation respond(Integer id, QuotationStatus status, String observations, Double discountAmount) {
         if (status == null || status == QuotationStatus.PENDING) {
             throw new BusinessRuleException("Quotation response must approve or reject the quotation");
         }
@@ -198,6 +194,12 @@ public class QuotationService extends AbstractCrudService<Quotation> {
             throw new BusinessRuleException("Observations are required when rejecting a quotation");
         }
         Quotation quotation = getById(id);
+        double appliedDiscount = discountAmount == null ? 0 : round(discountAmount);
+        if (appliedDiscount < 0 || appliedDiscount > quotation.getSubTotal()) {
+            throw new BusinessRuleException("Quotation discount must be between zero and subtotal");
+        }
+        quotation.setDiscount(appliedDiscount);
+        quotation.setTotalAmount(round(quotation.getSubTotal() - appliedDiscount));
         quotation.setStatus(status);
         quotation.setObservations(observations);
         quotation.setResponseAt(LocalDateTime.now());
@@ -257,7 +259,7 @@ public class QuotationService extends AbstractCrudService<Quotation> {
             throw new BusinessRuleException("Quotation discount must be between zero and subtotal");
         }
         quotation.setSubTotal(subTotal);
-        quotation.setTotalAmount(subTotal - quotation.getDiscount());
+        quotation.setTotalAmount(round(subTotal - quotation.getDiscount()));
     }
 
     @Transactional(readOnly = true)
@@ -285,13 +287,15 @@ public class QuotationService extends AbstractCrudService<Quotation> {
             case APPROVED -> "Aprobada";
             case REJECTED -> "Rechazada";
         });
+        double discount = round(quotation.getDiscount());
+        double totalAmount = round(quotation.getSubTotal() - discount);
         dto.setSubTotal(quotation.getSubTotal());
-        dto.setDiscount(quotation.getDiscount());
-        dto.setTotalAmount(quotation.getTotalAmount());
+        dto.setDiscount(discount);
+        dto.setTotalAmount(totalAmount);
         dto.setProductSubtotal(round(items.stream()
                 .mapToDouble(QuotationItemResponseDTO::getBaseSubtotal)
                 .sum()));
-        dto.setDiscountTotal(round(quotation.getDiscount()));
+        dto.setDiscountTotal(discount);
         dto.setDesignFeeTotal(round(quotation.getSubTotal() - dto.getProductSubtotal()));
         dto.setRequestedAt(quotation.getRequestedAt());
         dto.setResponseAt(quotation.getResponseAt());
@@ -376,9 +380,8 @@ public class QuotationService extends AbstractCrudService<Quotation> {
         double designFeeAmount = hasDesignFee
                 ? round(baseSubtotal * ShoppingCartService.DESIGN_FEE_PERCENTAGE / 100)
                 : 0;
-        double discountPercentage = resolveDiscountPercentage(item);
-        double discountAmount = round(baseSubtotal * discountPercentage / 100);
-        double lineTotal = round(item.getSubTotal() - discountAmount);
+        double discountAmount = 0;
+        double lineTotal = round(item.getSubTotal());
 
         dto.setBaseUnitPrice(round(baseUnitPrice));
         dto.setBaseSubtotal(baseSubtotal);
@@ -386,9 +389,6 @@ public class QuotationService extends AbstractCrudService<Quotation> {
         dto.setDesignFeeAmount(designFeeAmount);
         dto.setLineTotal(lineTotal);
         dto.setHasDesignFee(hasDesignFee);
-        if (discountPercentage > 0) {
-            dto.setDiscountRuleLabel("Descuento aplicado: -" + round(discountPercentage) + "%");
-        }
     }
 
     private boolean isDesignForItem(QuotationDesign design, QuotationItem item) {
@@ -413,30 +413,6 @@ public class QuotationService extends AbstractCrudService<Quotation> {
                 ? item.getProductVariant().getProduct().getBasePrice()
                 : item.getPrice();
         return round(baseUnitPrice * item.getQuantity());
-    }
-
-    private double resolveDiscountPercentage(QuotationItem item) {
-        if (discountRepository == null
-                || item == null
-                || item.getProductVariant() == null
-                || item.getProductVariant().getProduct() == null
-                || item.getProductVariant().getProduct().getStore() == null) {
-            return 0;
-        }
-        var product = item.getProductVariant().getProduct();
-        return Optional.ofNullable(discountRepository.findByStoreId(product.getStore().getId()))
-                .orElse(List.of())
-                .stream()
-                .filter(d -> Boolean.TRUE.equals(d.getActive()))
-                .filter(d -> !Boolean.TRUE.equals(d.getDeleted()))
-                .filter(d -> d.getProduct() == null
-                        || Objects.equals(d.getProduct().getId(), product.getId()))
-                .filter(d -> item.getQuantity() >= d.getMinQuantity()
-                        && (d.getMaxQuantity() <= d.getMinQuantity()
-                        || item.getQuantity() <= d.getMaxQuantity()))
-                .mapToDouble(d -> d.getDiscountPercentage())
-                .max()
-                .orElse(0);
     }
 
     private double round(double value) {
