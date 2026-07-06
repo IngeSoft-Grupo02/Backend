@@ -11,6 +11,7 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.core.Authentication;
 import pe.edu.pucp.kingstore.api.context.MerchantContext;
 import pe.edu.pucp.kingstore.api.controller.MerchantStoreController;
+import pe.edu.pucp.kingstore.api.controller.StoreLogoResourceResolver;
 import pe.edu.pucp.kingstore.domain.dto.store.DashboardResponse;
 import pe.edu.pucp.kingstore.domain.dto.store.MerchantStoreRequestDTO;
 import pe.edu.pucp.kingstore.domain.dto.store.StoreCategoryResponse;
@@ -26,6 +27,7 @@ import pe.edu.pucp.kingstore.service.store.StoreService;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -54,6 +56,7 @@ class MerchantStoreControllerTest {
     @Mock private StoreCategoryService storeCategoryService;
     @Mock private StorageService storageService;
     @Mock private DashboardService dashboardService;
+    @Mock private StoreLogoResourceResolver storeLogoResourceResolver;
 
     private MerchantStoreController controller;
     private Authentication authentication;
@@ -62,7 +65,8 @@ class MerchantStoreControllerTest {
     @BeforeEach
     void setUp() {
         controller = new MerchantStoreController(
-                merchantContext, storeService, storeCategoryService, storageService, dashboardService);
+                merchantContext, storeService, storeCategoryService, storageService, dashboardService,
+                storeLogoResourceResolver);
         authentication = mock(Authentication.class);
         store = new Store();
         store.setId(10);
@@ -212,6 +216,32 @@ class MerchantStoreControllerTest {
         verify(storageService).uploadBytes(keyCaptor.capture(), any(), anyString());
         assertThat(keyCaptor.getValue()).startsWith("logos/");
         assertThat(keyCaptor.getValue()).endsWith("-logo.png");
+    }
+
+    @Test
+    void storeLogoReturnsResolvedLogoForStoreInMerchantScope() throws Exception {
+        store.setLogoUrl("https://bucket.s3.amazonaws.com/logos/logo.png");
+        when(merchantContext.storeById(authentication, 10)).thenReturn(store);
+        when(storeLogoResourceResolver.resolve(store.getLogoUrl()))
+                .thenReturn(Optional.of(new StoreLogoResourceResolver.ResolvedLogo(
+                        "png".getBytes(), org.springframework.http.MediaType.IMAGE_PNG)));
+
+        var result = controller.storeLogo(authentication, 10);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(result.getHeaders().getContentType()).isEqualTo(org.springframework.http.MediaType.IMAGE_PNG);
+        assertThat((byte[]) result.getBody()).containsExactly("png".getBytes());
+    }
+
+    @Test
+    void storeLogoReturns404WhenStoreHasNoReadableLogo() throws Exception {
+        store.setLogoUrl(null);
+        when(merchantContext.storeById(authentication, 10)).thenReturn(store);
+        when(storeLogoResourceResolver.resolve(null)).thenReturn(Optional.empty());
+
+        var result = controller.storeLogo(authentication, 10);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
 
     // =========================================================================
