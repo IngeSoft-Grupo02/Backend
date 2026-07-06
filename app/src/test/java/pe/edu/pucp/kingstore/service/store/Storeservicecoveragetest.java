@@ -490,6 +490,16 @@ class StoreServiceCoverageTest {
     }
 
     @Test
+    void toPublicDTOFallsBackToDefaultForLegacyInvalidDesignFee() {
+        Store store = storeWithCategory(7, "legacy-store");
+        store.setDesignFeePercentage(0.0);
+
+        var dto = service.toPublicDTO(store);
+
+        assertThat(dto.getDesignFeePercentage()).isEqualTo(StoreService.DEFAULT_DESIGN_FEE_PERCENTAGE);
+    }
+
+    @Test
     void generateUniqueSlugUsesSuffixAndAllowsSameStoreIdOnUpdate() {
         Store existing = storeWithCategory(9, "mi-tienda");
         when(storeRepository.findBySlug("mi-tienda")).thenReturn(Optional.of(existing));

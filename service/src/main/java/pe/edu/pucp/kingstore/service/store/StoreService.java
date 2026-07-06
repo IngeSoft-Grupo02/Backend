@@ -273,7 +273,7 @@ public class StoreService extends AbstractCrudService<Store> {
                 store.getDescription(),
                 store.getLogoUrl(),
                 store.getStoreStatus() != null ? store.getStoreStatus().name() : null,
-                normalizeDesignFeePercentage(store.getDesignFeePercentage()),
+                effectiveDesignFeePercentage(store.getDesignFeePercentage()),
                 store.getPrimaryColor() != null ? store.getPrimaryColor().name() : null,
                 store.getSecondaryColor() != null ? store.getSecondaryColor().name() : null,
                 store.getTertiaryColor() != null ? store.getTertiaryColor().name() : null,
@@ -289,7 +289,7 @@ public class StoreService extends AbstractCrudService<Store> {
         dto.setSlug(store.getSlug());
         dto.setDescription(store.getDescription());
         dto.setLogoUrl(store.getLogoUrl());
-        dto.setDesignFeePercentage(normalizeDesignFeePercentage(store.getDesignFeePercentage()));
+        dto.setDesignFeePercentage(effectiveDesignFeePercentage(store.getDesignFeePercentage()));
         dto.setCategory(store.getCategory() != null
                 ? store.getCategory().getStoreCategoryName() : null);
         dto.setContactPhone(store.getMerchant() != null ? store.getMerchant().getPhone() : null);
@@ -356,10 +356,22 @@ public class StoreService extends AbstractCrudService<Store> {
             throw new BusinessRuleException("Invalid design fee percentage");
         }
         double rounded = Math.round(percentage * 100.0) / 100.0;
-        if (rounded == 5.0 || rounded == 10.0 || rounded == 15.0) {
+        if (isAllowedDesignFeePercentage(rounded)) {
             return rounded;
         }
         throw new BusinessRuleException("Design fee percentage must be 5, 10 or 15");
+    }
+
+    public static double effectiveDesignFeePercentage(Double value) {
+        if (value == null || Double.isNaN(value) || Double.isInfinite(value)) {
+            return DEFAULT_DESIGN_FEE_PERCENTAGE;
+        }
+        double rounded = Math.round(value * 100.0) / 100.0;
+        return isAllowedDesignFeePercentage(rounded) ? rounded : DEFAULT_DESIGN_FEE_PERCENTAGE;
+    }
+
+    private static boolean isAllowedDesignFeePercentage(double value) {
+        return value == 5.0 || value == 10.0 || value == 15.0;
     }
 
     private String normalizeSlug(String slug) {

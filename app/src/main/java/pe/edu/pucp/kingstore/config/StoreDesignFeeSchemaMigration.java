@@ -32,7 +32,12 @@ public class StoreDesignFeeSchemaMigration implements ApplicationRunner {
                 jdbcTemplate.execute(
                         "ALTER TABLE store ADD COLUMN design_fee_percentage DOUBLE NOT NULL DEFAULT 10");
             } else {
-                jdbcTemplate.execute("UPDATE store SET design_fee_percentage = 10 WHERE design_fee_percentage IS NULL");
+                jdbcTemplate.execute("""
+                        UPDATE store
+                        SET design_fee_percentage = 10
+                        WHERE design_fee_percentage IS NULL
+                           OR ROUND(design_fee_percentage, 2) NOT IN (5.00, 10.00, 15.00)
+                        """);
                 jdbcTemplate.execute(
                         "ALTER TABLE store MODIFY COLUMN design_fee_percentage DOUBLE NOT NULL DEFAULT 10");
             }
@@ -50,8 +55,15 @@ public class StoreDesignFeeSchemaMigration implements ApplicationRunner {
         }
         try (Connection connection = dataSource.getConnection()) {
             String productName = connection.getMetaData().getDatabaseProductName();
-            return productName != null
-                    && productName.toLowerCase(Locale.ROOT).contains("mysql");
+            return isMySqlCompatible(productName);
         }
+    }
+
+    static boolean isMySqlCompatible(String productName) {
+        if (productName == null) {
+            return false;
+        }
+        String normalized = productName.toLowerCase(Locale.ROOT);
+        return normalized.contains("mysql") || normalized.contains("mariadb");
     }
 }

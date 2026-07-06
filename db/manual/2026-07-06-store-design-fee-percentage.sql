@@ -1,7 +1,7 @@
 -- KingStore manual migration
 -- Purpose: persist the store-level design/customization fee percentage.
 -- Target: MySQL 8.x
--- Safe to rerun: adds the column only when missing and backfills nulls to 10.
+-- Safe to rerun: adds the column only when missing and backfills invalid legacy values to 10.
 
 DELIMITER //
 
@@ -34,6 +34,7 @@ CALL ks_add_column_if_missing('store', 'design_fee_percentage', 'DOUBLE NOT NULL
 
 UPDATE store
 SET design_fee_percentage = 10
-WHERE design_fee_percentage IS NULL;
+WHERE design_fee_percentage IS NULL
+   OR ROUND(design_fee_percentage, 2) NOT IN (5.00, 10.00, 15.00);
 
 DROP PROCEDURE IF EXISTS ks_add_column_if_missing;

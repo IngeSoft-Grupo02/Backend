@@ -429,7 +429,7 @@ public class QuotationService extends AbstractCrudService<Quotation> {
         if (product == null || product.getStore() == null) {
             return StoreService.DEFAULT_DESIGN_FEE_PERCENTAGE;
         }
-        return StoreService.normalizeDesignFeePercentage(product.getStore().getDesignFeePercentage());
+        return StoreService.effectiveDesignFeePercentage(product.getStore().getDesignFeePercentage());
     }
 
     private double historicalDesignFeeAmount(QuotationItem item, double baseSubtotal) {
