@@ -46,6 +46,9 @@ public class OrderResponseDTO {
     private Double partialTotal;
     private Double totalDiscount;
     private Double finalTotal;
+    private Double productSubtotal;
+    private Double designFeeTotal;
+    private Double designFeePercentage;
 
     // Observaciones provenientes de la cotización asociada (si existen).
     private String observations;

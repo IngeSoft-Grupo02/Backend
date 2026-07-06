@@ -12,6 +12,7 @@ public class StorePublicDTO {
     private String slug;
     private String description;
     private String logoUrl;
+    private Double designFeePercentage;
     private String category;
     private String contactPhone;
     private PrimaryColor primaryColor;

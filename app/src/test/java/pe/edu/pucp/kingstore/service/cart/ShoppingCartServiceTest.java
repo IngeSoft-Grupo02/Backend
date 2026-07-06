@@ -645,6 +645,96 @@ class ShoppingCartServiceTest {
     }
 
     @Test
+    void addDesignToItemUsesStoreDesignFeePercentageFive() {
+        Store store = store(10);
+        store.setDesignFeePercentage(5.0);
+        Product product = product(1, store, 100.0);
+        ProductVariant variant = variant(1, product, 50);
+        ShoppingCart cart = emptyCart(customer(1));
+
+        CartItem item = new CartItem();
+        item.setId(1);
+        item.setProductVariant(variant);
+        item.setQuantity(2);
+        item.setPrice(100.0);
+        item.setSubtotal(200.0);
+        cart.getItems().add(item);
+
+        CustomDesignRequestDTO request = new CustomDesignRequestDTO();
+        request.setImageUrl("https://cdn.test/logo.png");
+        when(discountRepository.findByStoreId(10)).thenReturn(List.of());
+        when(shoppingCartRepository.save(any(ShoppingCart.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ShoppingCart result = service.addDesignToItem(cart, 1, request);
+        CartResponseDTO dto = service.toResponseDTO(result);
+
+        assertThat(result.getItems().get(0).getSubtotal()).isEqualTo(210.0);
+        assertThat(result.getTotalAmount()).isEqualTo(210.0);
+        assertThat(dto.getDesignFeeTotal()).isEqualTo(10.0);
+        assertThat(dto.getDesignFeePercentage()).isEqualTo(5.0);
+        assertThat(dto.getItems().get(0).getDesignFeePercentage()).isEqualTo(5.0);
+    }
+
+    @Test
+    void addDesignToItemUsesStoreDesignFeePercentageFifteen() {
+        Store store = store(10);
+        store.setDesignFeePercentage(15.0);
+        Product product = product(1, store, 100.0);
+        ProductVariant variant = variant(1, product, 50);
+        ShoppingCart cart = emptyCart(customer(1));
+
+        CartItem item = new CartItem();
+        item.setId(1);
+        item.setProductVariant(variant);
+        item.setQuantity(2);
+        item.setPrice(100.0);
+        item.setSubtotal(200.0);
+        cart.getItems().add(item);
+
+        CustomDesignRequestDTO request = new CustomDesignRequestDTO();
+        request.setImageUrl("https://cdn.test/logo.png");
+        when(discountRepository.findByStoreId(10)).thenReturn(List.of());
+        when(shoppingCartRepository.save(any(ShoppingCart.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ShoppingCart result = service.addDesignToItem(cart, 1, request);
+
+        assertThat(result.getItems().get(0).getSubtotal()).isEqualTo(230.0);
+        assertThat(result.getTotalAmount()).isEqualTo(230.0);
+    }
+
+    @Test
+    void addDesignToItemKeepsQuantityDiscountBasedOnBaseSubtotal() {
+        Store store = store(10);
+        store.setDesignFeePercentage(15.0);
+        Product product = product(1, store, 100.0);
+        ProductVariant variant = variant(1, product, 50);
+        ShoppingCart cart = emptyCart(customer(1));
+
+        CartItem item = new CartItem();
+        item.setId(1);
+        item.setProductVariant(variant);
+        item.setQuantity(2);
+        item.setPrice(100.0);
+        item.setSubtotal(200.0);
+        cart.getItems().add(item);
+
+        Discount discount = discount(null, 2, 2, 10.0, true);
+        CustomDesignRequestDTO request = new CustomDesignRequestDTO();
+        request.setImageUrl("https://cdn.test/logo.png");
+        when(discountRepository.findByStoreId(10)).thenReturn(List.of(discount));
+        when(shoppingCartRepository.save(any(ShoppingCart.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ShoppingCart result = service.addDesignToItem(cart, 1, request);
+
+        assertThat(result.getSubTotal()).isEqualTo(230.0);
+        assertThat(result.getDiscount()).isEqualTo(20.0);
+        assertThat(result.getTotalAmount()).isEqualTo(210.0);
+    }
+
+    @Test
     void addDesignToItemRejectsNullRequestAndReusesExistingDesign() {
         Customer customer = customer(1);
         Store store = store(10);

@@ -12,7 +12,7 @@ import pe.edu.pucp.kingstore.service.common.AbstractCrudService;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
 import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
 import pe.edu.pucp.kingstore.domain.model.cart.ShoppingCart;
-import pe.edu.pucp.kingstore.service.cart.ShoppingCartService;
+import pe.edu.pucp.kingstore.service.store.StoreService;
 
 import pe.edu.pucp.kingstore.domain.dto.quotation.QuotationItemResponseDTO;
 import pe.edu.pucp.kingstore.domain.dto.quotation.QuotationDesignDTO;
@@ -303,6 +303,7 @@ public class QuotationService extends AbstractCrudService<Quotation> {
                 .sum()));
         dto.setDiscountTotal(discount);
         dto.setDesignFeeTotal(round(quotation.getSubTotal() - dto.getProductSubtotal()));
+        dto.setDesignFeePercentage(representativeDesignFeePercentage(items));
         dto.setRequestedAt(quotation.getRequestedAt());
         dto.setResponseAt(quotation.getResponseAt());
         dto.setDescription(quotation.getDescription());
@@ -383,9 +384,9 @@ public class QuotationService extends AbstractCrudService<Quotation> {
                 : item.getPrice();
         double baseSubtotal = round(baseUnitPrice * item.getQuantity());
         boolean hasDesignFee = !itemDesigns.isEmpty();
-        double designFeeAmount = hasDesignFee
-                ? round(baseSubtotal * ShoppingCartService.DESIGN_FEE_PERCENTAGE / 100)
-                : 0;
+        double designFeeAmount = hasDesignFee ? historicalDesignFeeAmount(item, baseSubtotal) : 0;
+        double designFeePercentage = hasDesignFee ? percentageFromAmount(baseSubtotal, designFeeAmount)
+                : designFeePercentage(item);
         double discountAmount = 0;
         double lineTotal = round(item.getSubTotal());
 
@@ -393,6 +394,7 @@ public class QuotationService extends AbstractCrudService<Quotation> {
         dto.setBaseSubtotal(baseSubtotal);
         dto.setDiscountAmount(discountAmount);
         dto.setDesignFeeAmount(designFeeAmount);
+        dto.setDesignFeePercentage(designFeePercentage);
         dto.setLineTotal(lineTotal);
         dto.setHasDesignFee(hasDesignFee);
     }
@@ -409,8 +411,7 @@ public class QuotationService extends AbstractCrudService<Quotation> {
     }
 
     private double designFeeAmount(QuotationItem item) {
-        return round(baseSubtotal(item)
-                * ShoppingCartService.DESIGN_FEE_PERCENTAGE / 100);
+        return round(baseSubtotal(item) * designFeePercentage(item) / 100);
     }
 
     private double baseSubtotal(QuotationItem item) {
@@ -419,6 +420,35 @@ public class QuotationService extends AbstractCrudService<Quotation> {
                 ? item.getProductVariant().getProduct().getBasePrice()
                 : item.getPrice();
         return round(baseUnitPrice * item.getQuantity());
+    }
+
+    private double designFeePercentage(QuotationItem item) {
+        Product product = item.getProductVariant() != null
+                ? item.getProductVariant().getProduct()
+                : null;
+        if (product == null || product.getStore() == null) {
+            return StoreService.DEFAULT_DESIGN_FEE_PERCENTAGE;
+        }
+        return StoreService.normalizeDesignFeePercentage(product.getStore().getDesignFeePercentage());
+    }
+
+    private double historicalDesignFeeAmount(QuotationItem item, double baseSubtotal) {
+        return round(Math.max(0, item.getSubTotal() - baseSubtotal));
+    }
+
+    private double percentageFromAmount(double baseSubtotal, double designFeeAmount) {
+        if (baseSubtotal <= 0 || designFeeAmount <= 0) {
+            return StoreService.DEFAULT_DESIGN_FEE_PERCENTAGE;
+        }
+        return round(designFeeAmount * 100 / baseSubtotal);
+    }
+
+    private double representativeDesignFeePercentage(List<QuotationItemResponseDTO> items) {
+        return items.stream()
+                .filter(QuotationItemResponseDTO::isHasDesignFee)
+                .mapToDouble(QuotationItemResponseDTO::getDesignFeePercentage)
+                .findFirst()
+                .orElse(StoreService.DEFAULT_DESIGN_FEE_PERCENTAGE);
     }
 
     private double round(double value) {

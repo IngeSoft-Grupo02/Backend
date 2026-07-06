@@ -15,6 +15,7 @@ public class StoreResponseDTO {
     private String description;
     private String logoUrl;
     private String status;
+    private Double designFeePercentage;
     private String primaryColor;
     private String secondaryColor;
     private String tertiaryColor;

@@ -18,6 +18,7 @@ import pe.edu.pucp.kingstore.domain.model.quotation.Quotation;
 import pe.edu.pucp.kingstore.domain.model.quotation.QuotationItem;
 import pe.edu.pucp.kingstore.domain.model.quotation.enums.QuotationStatus;
 import pe.edu.pucp.kingstore.repository.quotation.QuotationRepository;
+import pe.edu.pucp.kingstore.service.store.StoreService;
 
 
 import java.util.List;
@@ -152,6 +153,13 @@ public class OrderService extends AbstractCrudService<Order> {
         dto.setPartialTotal(order.getPartialTotal());
         dto.setTotalDiscount(order.getTotalDiscount());
         dto.setFinalTotal(order.getFinalTotal());
+        dto.setProductSubtotal(round(itemsDetail.stream()
+                .mapToDouble(item -> item.getBaseSubtotal() == null ? 0 : item.getBaseSubtotal())
+                .sum()));
+        dto.setDesignFeeTotal(round(itemsDetail.stream()
+                .mapToDouble(item -> item.getDesignFeeAmount() == null ? 0 : item.getDesignFeeAmount())
+                .sum()));
+        dto.setDesignFeePercentage(representativeDesignFeePercentage(itemsDetail));
 
         // Observaciones provenientes de la cotización asociada (si existen).
         dto.setObservations(quotation != null ? quotation.getObservations() : null);
@@ -172,7 +180,35 @@ public class OrderService extends AbstractCrudService<Order> {
         dto.setQuantity(item.getQuantity());
         dto.setUnitPrice(item.getUnitPrice());
         dto.setSubTotal(item.getSubTotal());
+        double baseUnitPrice = product != null ? product.getBasePrice()
+                : (item.getUnitPrice() == null ? 0 : item.getUnitPrice());
+        double baseSubtotal = round(baseUnitPrice * (item.getQuantity() == null ? 0 : item.getQuantity()));
+        double itemSubtotal = item.getSubTotal() == null ? 0 : item.getSubTotal();
+        double designFeeAmount = round(Math.max(0, itemSubtotal - baseSubtotal));
+        dto.setBaseUnitPrice(round(baseUnitPrice));
+        dto.setBaseSubtotal(baseSubtotal);
+        dto.setDesignFeeAmount(designFeeAmount);
+        dto.setDesignFeePercentage(percentageFromAmount(baseSubtotal, designFeeAmount));
+        dto.setLineTotal(item.getSubTotal());
+        dto.setHasDesignFee(designFeeAmount > 0);
         return dto;
+    }
+
+    private double percentageFromAmount(double baseSubtotal, double designFeeAmount) {
+        if (baseSubtotal <= 0 || designFeeAmount <= 0) {
+            return StoreService.DEFAULT_DESIGN_FEE_PERCENTAGE;
+        }
+        return round(designFeeAmount * 100 / baseSubtotal);
+    }
+
+    private double representativeDesignFeePercentage(List<OrderItemResponseDTO> items) {
+        return items.stream()
+                .filter(item -> Boolean.TRUE.equals(item.getHasDesignFee()))
+                .map(OrderItemResponseDTO::getDesignFeePercentage)
+                .filter(Objects::nonNull)
+                .mapToDouble(Double::doubleValue)
+                .findFirst()
+                .orElse(StoreService.DEFAULT_DESIGN_FEE_PERCENTAGE);
     }
 
     private OrderShippingResponseDTO toShippingResponseDTO(ShippingDetail shipping) {

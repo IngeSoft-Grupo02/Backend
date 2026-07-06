@@ -71,7 +71,7 @@ class MerchantStoreControllerTest {
 
     private StoreResponseDTO responseDTO(int id) {
         return new StoreResponseDTO(id, "Mi Tienda", "mi-tienda", "desc", "logo.png",
-                "ACTIVE", "ONYX_BLACK", "SLATE", "RAW_GOLD", 1, "Ropa", 0L);
+                "ACTIVE", 10.0, "ONYX_BLACK", "SLATE", "RAW_GOLD", 1, "Ropa", 0L);
     }
 
     private StoreCategory category(int id, String name) {

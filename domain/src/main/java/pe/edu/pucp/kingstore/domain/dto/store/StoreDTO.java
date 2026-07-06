@@ -19,6 +19,7 @@ public class StoreDTO extends BaseEntityDTO {
     private String slug;
     private String description;
     private String logoUrl;
+    private Double designFeePercentage;
     private LocalDateTime createdAt;
     private PrimaryColor primaryColor;
     private SecondaryColor secondaryColor;
