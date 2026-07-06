@@ -405,7 +405,7 @@ public class OrderService extends AbstractCrudService<Order> {
         }
         District district;
         try {
-            district = District.valueOf(districtStr);
+            district = District.valueOf(districtStr.toUpperCase().replace(' ', '_'));
         } catch (IllegalArgumentException e) {
             throw new BusinessRuleException("Invalid district: " + districtStr);
         }

@@ -875,4 +875,30 @@ class OrderServiceTest {
         assertThat(result.getShippingDetail().getPhone()).isEqualTo("987654321");
     }
 
+    @Test
+    void setShippingAddressAcceptsCaseInsensitiveDistrict() {
+        Order order = new Order();
+        order.setId(1);
+        order.setStatus(OrderStatus.PAYMENT_CONFIRMED);
+        when(orderRepository.findById(1)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Order result = service.setShippingAddress(1, shippingRequest("Av. Lima 123", "lince", null));
+        assertThat(result.getShippingDetail().getDistrict()).isEqualTo(District.LINCE);
+    }
+
+    @Test
+    void setShippingAddressAcceptsDistrictWithSpaces() {
+        Order order = new Order();
+        order.setId(1);
+        order.setStatus(OrderStatus.PAYMENT_CONFIRMED);
+        when(orderRepository.findById(1)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Order result = service.setShippingAddress(1, shippingRequest("Av. Lima 123", "San Miguel", null));
+        assertThat(result.getShippingDetail().getDistrict()).isEqualTo(District.SAN_MIGUEL);
+    }
+
 }
