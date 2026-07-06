@@ -19,6 +19,8 @@ public class OrderShippingResponseDTO {
     private String address;
     private String district;
     private String reference;
+    private String recipientName;
+    private String phone;
     private LocalDate estimatedDeliveryDate;
     private LocalDate actualDeliveryDate;
 }

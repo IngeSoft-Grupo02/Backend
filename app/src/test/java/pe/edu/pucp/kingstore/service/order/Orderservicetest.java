@@ -17,6 +17,7 @@ import pe.edu.pucp.kingstore.domain.model.quotation.Quotation;
 import pe.edu.pucp.kingstore.domain.model.user.Customer;
 import pe.edu.pucp.kingstore.repository.order.OrderRepository;
 import pe.edu.pucp.kingstore.repository.quotation.QuotationRepository;
+import pe.edu.pucp.kingstore.domain.dto.order.ShippingAddressRequestDTO;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
 import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
 
@@ -743,6 +744,135 @@ class OrderServiceTest {
         assertThatThrownBy(() -> service.ship(1, "GU-12345"))
                 .isInstanceOf(BusinessRuleException.class)
                 .hasMessageContaining("in preparation");
+    }
+
+// =========================================================================
+// setShippingAddress
+// =========================================================================
+
+    private ShippingAddressRequestDTO shippingRequest(String address, String district, String reference) {
+        ShippingAddressRequestDTO req = new ShippingAddressRequestDTO();
+        req.setAddress(address);
+        req.setDistrict(district);
+        req.setReference(reference);
+        return req;
+    }
+
+    @Test
+    void setShippingAddressCreatesNewShippingDetail() {
+        Order order = new Order();
+        order.setId(1);
+        order.setStatus(OrderStatus.PAYMENT_CONFIRMED);
+        when(orderRepository.findById(1)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Order result = service.setShippingAddress(1, shippingRequest("Av. Lima 123", "MIRAFLORES", "Frente al banco"));
+
+        assertThat(result.getShippingDetail()).isNotNull();
+        assertThat(result.getShippingDetail().getAddress()).isEqualTo("Av. Lima 123");
+        assertThat(result.getShippingDetail().getDistrict()).isEqualTo(District.MIRAFLORES);
+        assertThat(result.getShippingDetail().getDescription()).isEqualTo("Frente al banco");
+    }
+
+    @Test
+    void setShippingAddressUpdatesExistingShippingDetail() {
+        ShippingDetail existing = new ShippingDetail();
+        existing.setAddress("old address");
+        existing.setDistrict(District.CALLAO);
+        Order order = new Order();
+        order.setId(1);
+        order.setStatus(OrderStatus.PAYMENT_CONFIRMED);
+        order.setShippingDetail(existing);
+        when(orderRepository.findById(1)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Order result = service.setShippingAddress(1, shippingRequest("Av. Lima 456", "SAN_ISIDRO", null));
+
+        assertThat(result.getShippingDetail()).isSameAs(existing);
+        assertThat(result.getShippingDetail().getAddress()).isEqualTo("Av. Lima 456");
+        assertThat(result.getShippingDetail().getDistrict()).isEqualTo(District.SAN_ISIDRO);
+        assertThat(result.getShippingDetail().getDescription()).isNull();
+    }
+
+    @Test
+    void setShippingAddressThrowsWhenCancelled() {
+        Order order = new Order();
+        order.setId(1);
+        order.setStatus(OrderStatus.CANCELLED);
+        when(orderRepository.findById(1)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> service.setShippingAddress(1, shippingRequest("Av. Lima 123", "CALLAO", null)))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("cancelled");
+    }
+
+    @Test
+    void setShippingAddressThrowsWhenDelivered() {
+        Order order = new Order();
+        order.setId(1);
+        order.setStatus(OrderStatus.DELIVERED);
+        when(orderRepository.findById(1)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> service.setShippingAddress(1, shippingRequest("Av. Lima 123", "CALLAO", null)))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("delivered");
+    }
+
+    @Test
+    void setShippingAddressThrowsWhenAddressEmpty() {
+        Order order = new Order();
+        order.setId(1);
+        order.setStatus(OrderStatus.PAYMENT_CONFIRMED);
+        when(orderRepository.findById(1)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> service.setShippingAddress(1, shippingRequest("", "CALLAO", null)))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("address is required");
+    }
+
+    @Test
+    void setShippingAddressThrowsWhenDistrictInvalid() {
+        Order order = new Order();
+        order.setId(1);
+        order.setStatus(OrderStatus.PAYMENT_CONFIRMED);
+        when(orderRepository.findById(1)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> service.setShippingAddress(1, shippingRequest("Av. Lima 123", "INVALID_DISTRICT", null)))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("Invalid district");
+    }
+
+    @Test
+    void setShippingAddressAllowedOnPendingPayment() {
+        Order order = new Order();
+        order.setId(1);
+        order.setStatus(OrderStatus.PENDING_PAYMENT);
+        when(orderRepository.findById(1)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Order result = service.setShippingAddress(1, shippingRequest("Av. Lima 123", "CALLAO", null));
+        assertThat(result.getShippingDetail()).isNotNull();
+    }
+
+    @Test
+    void setShippingAddressSetsRecipientNameAndPhone() {
+        Order order = new Order();
+        order.setId(1);
+        order.setStatus(OrderStatus.PAYMENT_CONFIRMED);
+        when(orderRepository.findById(1)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ShippingAddressRequestDTO req = shippingRequest("Av. Lima 123", "MIRAFLORES", "Portón azul");
+        req.setRecipientName("Juan Pérez");
+        req.setPhone("987654321");
+
+        Order result = service.setShippingAddress(1, req);
+        assertThat(result.getShippingDetail().getRecipientName()).isEqualTo("Juan Pérez");
+        assertThat(result.getShippingDetail().getPhone()).isEqualTo("987654321");
     }
 
 }

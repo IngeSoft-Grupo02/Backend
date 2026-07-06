@@ -29,4 +29,10 @@ public class ShippingDetail extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private District district;
+
+    @Column(length = 150)
+    private String recipientName;
+
+    @Column(length = 20)
+    private String phone;
 }
