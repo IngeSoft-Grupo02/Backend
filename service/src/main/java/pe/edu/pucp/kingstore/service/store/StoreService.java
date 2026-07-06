@@ -25,6 +25,8 @@ import java.util.Optional;
 @Service
 public class StoreService extends AbstractCrudService<Store> {
 
+    public static final double DEFAULT_DESIGN_FEE_PERCENTAGE = 10.0;
+
     private final StoreRepository          storeRepository;
     private final MerchantRepository       merchantRepository;
     private final StoreCategoryRepository  categoryRepository;
@@ -75,6 +77,7 @@ public class StoreService extends AbstractCrudService<Store> {
 
         if (store.getCategory() == null)
             throw new BusinessRuleException("Store category is required");
+        store.setDesignFeePercentage(normalizeDesignFeePercentage(store.getDesignFeePercentage()));
     }
 
     @Transactional(readOnly = true)
@@ -128,6 +131,7 @@ public class StoreService extends AbstractCrudService<Store> {
         store.setStoreName(StoreSlugUtil.normalizeStoreName(dto.getStoreName()));
         store.setDescription(dto.getDescription());
         store.setLogoUrl(dto.getLogoUrl());
+        store.setDesignFeePercentage(normalizeDesignFeePercentage(dto.getDesignFeePercentage()));
 
         // Colores individuales
         if (dto.getPrimaryColor()   != null) store.setPrimaryColor(dto.getPrimaryColor());
@@ -163,6 +167,9 @@ public class StoreService extends AbstractCrudService<Store> {
             }
         }
         if (dto.getDescription()   != null) store.setDescription(dto.getDescription());
+        if (dto.getDesignFeePercentage() != null) {
+            store.setDesignFeePercentage(normalizeDesignFeePercentage(dto.getDesignFeePercentage()));
+        }
         if (dto.getPrimaryColor()  != null) store.setPrimaryColor(dto.getPrimaryColor());
         if (dto.getSecondaryColor()!= null) store.setSecondaryColor(dto.getSecondaryColor());
         if (dto.getTertiaryColor() != null) store.setTertiaryColor(dto.getTertiaryColor());
@@ -266,6 +273,7 @@ public class StoreService extends AbstractCrudService<Store> {
                 store.getDescription(),
                 store.getLogoUrl(),
                 store.getStoreStatus() != null ? store.getStoreStatus().name() : null,
+                normalizeDesignFeePercentage(store.getDesignFeePercentage()),
                 store.getPrimaryColor() != null ? store.getPrimaryColor().name() : null,
                 store.getSecondaryColor() != null ? store.getSecondaryColor().name() : null,
                 store.getTertiaryColor() != null ? store.getTertiaryColor().name() : null,
@@ -281,6 +289,7 @@ public class StoreService extends AbstractCrudService<Store> {
         dto.setSlug(store.getSlug());
         dto.setDescription(store.getDescription());
         dto.setLogoUrl(store.getLogoUrl());
+        dto.setDesignFeePercentage(normalizeDesignFeePercentage(store.getDesignFeePercentage()));
         dto.setCategory(store.getCategory() != null
                 ? store.getCategory().getStoreCategoryName() : null);
         dto.setContactPhone(store.getMerchant() != null ? store.getMerchant().getPhone() : null);
@@ -301,6 +310,9 @@ public class StoreService extends AbstractCrudService<Store> {
         }
         store.setDescription(blankToNull(request.getDescription()));
         store.setLogoUrl(blankToNull(request.getLogoUrl()));
+        if (request.getDesignFeePercentage() != null || store.getDesignFeePercentage() == null) {
+            store.setDesignFeePercentage(normalizeDesignFeePercentage(request.getDesignFeePercentage()));
+        }
         store.setPrimaryColor(request.getPrimaryColor() != null
                 ? request.getPrimaryColor()
                 : (store.getPrimaryColor() != null ? store.getPrimaryColor()
@@ -336,6 +348,18 @@ public class StoreService extends AbstractCrudService<Store> {
 
     private String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    public static double normalizeDesignFeePercentage(Double value) {
+        double percentage = value == null ? DEFAULT_DESIGN_FEE_PERCENTAGE : value;
+        if (Double.isNaN(percentage) || Double.isInfinite(percentage)) {
+            throw new BusinessRuleException("Invalid design fee percentage");
+        }
+        double rounded = Math.round(percentage * 100.0) / 100.0;
+        if (rounded == 5.0 || rounded == 10.0 || rounded == 15.0) {
+            return rounded;
+        }
+        throw new BusinessRuleException("Design fee percentage must be 5, 10 or 15");
     }
 
     private String normalizeSlug(String slug) {

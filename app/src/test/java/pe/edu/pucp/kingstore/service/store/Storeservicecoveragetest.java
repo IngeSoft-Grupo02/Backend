@@ -188,6 +188,53 @@ class StoreServiceCoverageTest {
     }
 
     @Test
+    void createForMerchantPersistsDesignFeePercentageWhenProvided() {
+        MerchantStoreRequestDTO dto = requestDTO();
+        dto.setSlug("mi-tienda");
+        dto.setDesignFeePercentage(5.0);
+
+        when(storeRepository.findBySlug("mi-tienda")).thenReturn(Optional.empty());
+        when(categoryRepository.findById(1)).thenReturn(Optional.of(category(1)));
+        when(storeRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Merchant merchant = new Merchant();
+        merchant.setId(1);
+
+        Store saved = service.createForMerchant(merchant, dto);
+
+        assertThat(saved.getDesignFeePercentage()).isEqualTo(5.0);
+    }
+
+    @Test
+    void createForMerchantDefaultsDesignFeePercentageToTenWhenMissing() {
+        MerchantStoreRequestDTO dto = requestDTO();
+        dto.setSlug("mi-tienda");
+
+        when(storeRepository.findBySlug("mi-tienda")).thenReturn(Optional.empty());
+        when(categoryRepository.findById(1)).thenReturn(Optional.of(category(1)));
+        when(storeRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Merchant merchant = new Merchant();
+        merchant.setId(1);
+
+        Store saved = service.createForMerchant(merchant, dto);
+
+        assertThat(saved.getDesignFeePercentage()).isEqualTo(10.0);
+    }
+
+    @Test
+    void createForMerchantRejectsInvalidDesignFeePercentage() {
+        MerchantStoreRequestDTO dto = requestDTO();
+        dto.setDesignFeePercentage(20.0);
+        Merchant merchant = new Merchant();
+        merchant.setId(1);
+
+        assertThatThrownBy(() -> service.createForMerchant(merchant, dto))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("5, 10 or 15");
+    }
+
+    @Test
     void updateForMerchantKeepsExistingColorsWhenRequestColorsNullAndStoreHasColors() {
         Store store = storeWithCategory(5, "mi-tienda");
         store.setPrimaryColor(PrimaryColor.CHARCOAL);
@@ -392,6 +439,7 @@ class StoreServiceCoverageTest {
         assertThat(dto.getCategoryId()).isEqualTo(1);
         assertThat(dto.getCategoryName()).isEqualTo("Ropa");
         assertThat(dto.getPendingQuotes()).isEqualTo(2);
+        assertThat(dto.getDesignFeePercentage()).isEqualTo(10.0);
     }
 
     @Test
@@ -435,6 +483,7 @@ class StoreServiceCoverageTest {
         assertThat(dto.getLogoUrl()).isEqualTo("https://cdn.test/logo.png");
         assertThat(dto.getCategory()).isEqualTo("Ropa");
         assertThat(dto.getPrimaryColor()).isEqualTo(PrimaryColor.CHARCOAL);
+        assertThat(dto.getDesignFeePercentage()).isEqualTo(10.0);
 
         store.setCategory(null);
         assertThat(service.toPublicDTO(store).getCategory()).isNull();

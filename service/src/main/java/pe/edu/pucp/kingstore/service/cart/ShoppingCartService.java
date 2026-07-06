@@ -16,6 +16,7 @@ import pe.edu.pucp.kingstore.domain.model.user.Customer;
 import pe.edu.pucp.kingstore.repository.product.DiscountRepository;
 import pe.edu.pucp.kingstore.domain.dto.product.CustomDesignRequestDTO;
 import pe.edu.pucp.kingstore.domain.model.product.CustomDesign;
+import pe.edu.pucp.kingstore.service.store.StoreService;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -24,7 +25,7 @@ import java.util.Optional;
 @Service
 public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
 
-    public static final double DESIGN_FEE_PERCENTAGE = 10.0;
+    public static final double DEFAULT_DESIGN_FEE_PERCENTAGE = StoreService.DEFAULT_DESIGN_FEE_PERCENTAGE;
 
     private final ShoppingCartRepository shoppingCartRepository;
     private final DiscountRepository discountRepository;
@@ -225,10 +226,12 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
             ProductVariant variant = item.getProductVariant();
             Product product = variant.getProduct();
             double originalPrice = product.getBasePrice();
+            double designFeePercentage = designFeePercentage(product);
             DiscountMatch discount = resolveDiscount(
                     product.getStore().getId(), product, item.getQuantity());
             PriceBreakdown pricing = priceBreakdown(
-                    originalPrice, item.getQuantity(), discount.percentage(), hasCustomDesign(item));
+                    originalPrice, item.getQuantity(), discount.percentage(),
+                    designFeePercentage, hasCustomDesign(item));
             CartResponseDTO.CustomDesignResponseDTO designDTO = null;
             if (item.getCustomDesign() != null) {
                 CustomDesign d = item.getCustomDesign();
@@ -261,6 +264,7 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
                     pricing.baseSubtotal(),
                     pricing.discountAmount(),
                     pricing.designFeeAmount(),
+                    pricing.designFeePercentage(),
                     pricing.lineTotal(),
                     discount.ruleLabel(),
                     pricing.designFeeAmount() > 0,
@@ -286,7 +290,8 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
                 responseCart.getTotalAmount(),
                 round(productSubtotal),
                 round(discountTotal),
-                round(designFeeTotal)
+                round(designFeeTotal),
+                representativeDesignFeePercentage(items)
         );
     }
 
@@ -365,7 +370,8 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
         double baseUnitPrice = product.getBasePrice();
         DiscountMatch discount = resolveDiscount(storeId, product, item.getQuantity());
         PriceBreakdown pricing = priceBreakdown(
-                baseUnitPrice, item.getQuantity(), discount.percentage(), hasCustomDesign(item));
+                baseUnitPrice, item.getQuantity(), discount.percentage(),
+                designFeePercentage(product), hasCustomDesign(item));
         item.setPrice(round(pricing.amountBeforeDiscount() / item.getQuantity()));
         item.setSubtotal(pricing.amountBeforeDiscount());
     }
@@ -373,27 +379,44 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
     private PriceBreakdown breakdownForCartItem(CartItem item) {
         if (item.getProductVariant() == null || item.getProductVariant().getProduct() == null) {
             double fallbackSubtotal = round(item.getPrice() * item.getQuantity());
-            return new PriceBreakdown(fallbackSubtotal, 0, 0, fallbackSubtotal, fallbackSubtotal);
+            return new PriceBreakdown(fallbackSubtotal, 0, 0,
+                    DEFAULT_DESIGN_FEE_PERCENTAGE, fallbackSubtotal, fallbackSubtotal);
         }
         Product product = item.getProductVariant().getProduct();
         Integer storeId = product.getStore() != null ? product.getStore().getId() : null;
         DiscountMatch discount = resolveDiscount(storeId, product, item.getQuantity());
         return priceBreakdown(product.getBasePrice(), item.getQuantity(),
-                discount.percentage(), hasCustomDesign(item));
+                discount.percentage(), designFeePercentage(product), hasCustomDesign(item));
     }
 
     private PriceBreakdown priceBreakdown(double baseUnitPrice, int quantity,
                                           double discountPercentage,
+                                          double designFeePercentage,
                                           boolean hasDesign) {
         double baseSubtotal = round(baseUnitPrice * quantity);
         double discountAmount = round(baseSubtotal * discountPercentage / 100);
         double designFeeAmount = hasDesign
-                ? round(baseSubtotal * DESIGN_FEE_PERCENTAGE / 100)
+                ? round(baseSubtotal * designFeePercentage / 100)
                 : 0;
         double amountBeforeDiscount = round(baseSubtotal + designFeeAmount);
         double lineTotal = round(amountBeforeDiscount - discountAmount);
         return new PriceBreakdown(baseSubtotal, discountAmount, designFeeAmount,
-                amountBeforeDiscount, lineTotal);
+                designFeePercentage, amountBeforeDiscount, lineTotal);
+    }
+
+    private double designFeePercentage(Product product) {
+        if (product == null || product.getStore() == null) {
+            return DEFAULT_DESIGN_FEE_PERCENTAGE;
+        }
+        return StoreService.normalizeDesignFeePercentage(product.getStore().getDesignFeePercentage());
+    }
+
+    private double representativeDesignFeePercentage(List<CartResponseDTO.CartItemResponseDTO> items) {
+        return items.stream()
+                .filter(CartResponseDTO.CartItemResponseDTO::isHasDesignFee)
+                .mapToDouble(CartResponseDTO.CartItemResponseDTO::getDesignFeePercentage)
+                .findFirst()
+                .orElse(DEFAULT_DESIGN_FEE_PERCENTAGE);
     }
 
     private boolean hasCustomDesign(CartItem item) {
@@ -431,6 +454,7 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
     private record DiscountMatch(double percentage, String ruleLabel) {}
 
     private record PriceBreakdown(double baseSubtotal, double discountAmount,
-                                  double designFeeAmount, double amountBeforeDiscount,
+                                  double designFeeAmount, double designFeePercentage,
+                                  double amountBeforeDiscount,
                                   double lineTotal) {}
 }

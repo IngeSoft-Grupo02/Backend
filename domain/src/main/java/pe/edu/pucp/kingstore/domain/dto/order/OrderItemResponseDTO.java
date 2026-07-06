@@ -21,4 +21,10 @@ public class OrderItemResponseDTO {
     private Integer quantity;
     private Double unitPrice;
     private Double subTotal;
+    private Double baseUnitPrice;
+    private Double baseSubtotal;
+    private Double designFeeAmount;
+    private Double designFeePercentage;
+    private Double lineTotal;
+    private Boolean hasDesignFee;
 }

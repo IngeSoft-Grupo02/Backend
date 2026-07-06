@@ -34,6 +34,7 @@ public class QuotationItemResponseDTO {
     private double baseSubtotal;
     private double discountAmount;
     private double designFeeAmount;
+    private double designFeePercentage;
     private double lineTotal;
     private String discountRuleLabel;
     private boolean hasDesignFee;

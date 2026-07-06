@@ -1,5 +1,6 @@
 package pe.edu.pucp.kingstore.domain.dto.store;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import lombok.Data;
 import pe.edu.pucp.kingstore.domain.model.store.enums.PrimaryColor;
 import pe.edu.pucp.kingstore.domain.model.store.enums.SecondaryColor;
@@ -19,4 +20,6 @@ public class MerchantStoreRequestDTO {
     private Integer categoryId;
     private String logoUrl;
     private String status;
+    @JsonAlias({"customizationIncrement", "customizationFeePercentage"})
+    private Double designFeePercentage;
 }
