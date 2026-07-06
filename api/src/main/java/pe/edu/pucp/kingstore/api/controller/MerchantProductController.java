@@ -109,7 +109,7 @@ public class MerchantProductController extends BaseMerchantController {
                                            @RequestBody ProductRequestDTO request) {
         return handle(() -> {
             Store store   = currentMerchantStore(authentication, storeId);
-            var   product = productService.findInStore(id, store.getId());
+            var   product = productService.findInStoreIncludingDeleted(id, store.getId());
             var   updated = productService.updateForStore(product, request);
             return ResponseEntity.ok(productService.toResponseDTO(updated));
         });

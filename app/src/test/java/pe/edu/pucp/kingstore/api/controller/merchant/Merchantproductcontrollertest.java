@@ -210,7 +210,7 @@ class MerchantProductControllerTest {
         ProductRequestDTO request = new ProductRequestDTO();
         Product existing = product(1, "Polo", true);
         Product updated = product(1, "Polo actualizado", true);
-        when(productService.findInStore(1, 10)).thenReturn(existing);
+        when(productService.findInStoreIncludingDeleted(1, 10)).thenReturn(existing);
         when(productService.updateForStore(existing, request)).thenReturn(updated);
         when(productService.toResponseDTO(updated)).thenReturn(responseDTO(1));
 

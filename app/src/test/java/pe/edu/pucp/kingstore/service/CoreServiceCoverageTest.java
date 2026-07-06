@@ -119,7 +119,6 @@ class CoreServiceCoverageTest {
         Product product = product();
         when(productRepository.save(any(Product.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(productRepository.findById(5)).thenReturn(Optional.of(product));
-        when(productRepository.existsById(5)).thenReturn(true);
         when(productRepository.findAll()).thenReturn(List.of(product));
         when(productRepository.findByStoreId(2)).thenReturn(List.of(product));
         when(productRepository.findByStoreIdAndActive(2, true)).thenReturn(List.of(product));
@@ -137,7 +136,9 @@ class CoreServiceCoverageTest {
         assertThat(productService.deactivate(5).getActive()).isFalse();
         assertThat(productService.reactivate(5).getActive()).isTrue();
         productService.delete(5);
-        verify(productRepository).deleteById(5);
+        assertThat(product.getDeleted()).isTrue();
+        assertThat(product.getDeletedAt()).isNotNull();
+        assertThat(product.getActive()).isFalse();
 
         assertThatThrownBy(() -> productService.findByStore(0)).isInstanceOf(BusinessRuleException.class);
         assertThatThrownBy(() -> productService.getById(99)).isInstanceOf(ResourceNotFoundException.class);

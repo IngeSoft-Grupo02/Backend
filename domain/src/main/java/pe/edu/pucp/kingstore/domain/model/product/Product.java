@@ -7,6 +7,7 @@ import pe.edu.pucp.kingstore.domain.model.BaseEntity;
 import pe.edu.pucp.kingstore.domain.model.product.enums.ProductStatus;
 import pe.edu.pucp.kingstore.domain.model.store.Store;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 
@@ -51,4 +52,14 @@ public class Product extends BaseEntity {
 
     @Column(length = 400)
     private String description;
+
+    @Column(nullable = false)
+    private Boolean deleted = false;
+
+    @Column
+    private LocalDateTime deletedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "replaced_by_product_id")
+    private Product replacedByProduct;
 }
