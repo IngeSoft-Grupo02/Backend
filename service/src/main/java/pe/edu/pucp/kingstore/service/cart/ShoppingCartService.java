@@ -263,7 +263,8 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
                     pricing.designFeeAmount(),
                     pricing.lineTotal(),
                     discount.ruleLabel(),
-                    pricing.designFeeAmount() > 0
+                    pricing.designFeeAmount() > 0,
+                    Boolean.TRUE.equals(product.getCustomizable())
             );
         }).toList();
 

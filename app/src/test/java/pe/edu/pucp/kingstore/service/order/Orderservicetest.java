@@ -214,7 +214,7 @@ class OrderServiceTest {
     }
 
     @Test
-    void createDefaultsStatusToPaymentConfirmedAndRecalculates() {
+    void createDefaultsStatusToPendingPaymentAndRecalculates() {
         OrderItem item = item(10.0, 2);
         Order order = order(null, quotation(5), null);
         order.setItems(new ArrayList<>(List.of(item)));
@@ -222,7 +222,7 @@ class OrderServiceTest {
 
         Order saved = service.create(order);
 
-        assertThat(saved.getStatus()).isEqualTo(OrderStatus.PAYMENT_CONFIRMED);
+        assertThat(saved.getStatus()).isEqualTo(OrderStatus.PENDING_PAYMENT);
         assertThat(item.getSubTotal()).isEqualTo(20.0);
         assertThat(saved.getPartialTotal()).isEqualTo(20.0);
         assertThat(saved.getFinalTotal()).isEqualTo(20.0);
@@ -541,7 +541,7 @@ class OrderServiceTest {
 
         Order result = service.createFromQuotation(quotation);
 
-        assertThat(result.getStatus()).isEqualTo(OrderStatus.PAYMENT_CONFIRMED);
+        assertThat(result.getStatus()).isEqualTo(OrderStatus.PENDING_PAYMENT);
         assertThat(result.getItems()).hasSize(1);
         assertThat(result.getItems().get(0).getQuantity()).isEqualTo(2);
     }

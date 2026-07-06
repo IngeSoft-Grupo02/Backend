@@ -263,6 +263,8 @@ class MerchantStringUtilTest {
 
     @Test
     void parseOrderStatusMapsKnownValues() {
+        assertThat(MerchantStringUtil.parseOrderStatus("pending_payment")).isEqualTo(OrderStatus.PENDING_PAYMENT);
+        assertThat(MerchantStringUtil.parseOrderStatus("pago pendiente")).isEqualTo(OrderStatus.PENDING_PAYMENT);
         assertThat(MerchantStringUtil.parseOrderStatus("payment_confirmed")).isEqualTo(OrderStatus.PAYMENT_CONFIRMED);
         assertThat(MerchantStringUtil.parseOrderStatus("pagado")).isEqualTo(OrderStatus.PAYMENT_CONFIRMED);
         assertThat(MerchantStringUtil.parseOrderStatus("aprobado")).isEqualTo(OrderStatus.PAYMENT_CONFIRMED);

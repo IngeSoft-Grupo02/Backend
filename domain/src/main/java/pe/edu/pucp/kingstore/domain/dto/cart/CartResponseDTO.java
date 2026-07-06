@@ -65,6 +65,7 @@ public class CartResponseDTO {
         private double lineTotal;
         private String discountRuleLabel;
         private boolean hasDesignFee;
+        private boolean customizable;
 
         public CartItemResponseDTO(Integer id, Integer productId,
                                    Integer productVariantId, String productName,
@@ -74,7 +75,7 @@ public class CartResponseDTO {
                                    CustomDesignResponseDTO customDesign) {
             this(id, productId, productVariantId, productName, size, color,
                     price, quantity, subtotal, discountApplied, customDesign,
-                    null, price, price * quantity, 0, 0, subtotal, null, false);
+                    null, price, price * quantity, 0, 0, subtotal, null, false, true);
         }
 
         public CartItemResponseDTO(Integer id, Integer productId,
@@ -87,7 +88,8 @@ public class CartResponseDTO {
                                    double baseUnitPrice, double baseSubtotal,
                                    double discountAmount, double designFeeAmount,
                                    double lineTotal, String discountRuleLabel,
-                                   boolean hasDesignFee) {
+                                   boolean hasDesignFee,
+                                   boolean customizable) {
             this.id = id;
             this.productId = productId;
             this.productVariantId = productVariantId;
@@ -107,6 +109,7 @@ public class CartResponseDTO {
             this.lineTotal = lineTotal;
             this.discountRuleLabel = discountRuleLabel;
             this.hasDesignFee = hasDesignFee;
+            this.customizable = customizable;
         }
     }
     @Data

@@ -124,6 +124,7 @@ public final class MerchantStringUtil {
     public static OrderStatus parseOrderStatus(String value) {
         String normalized = value.trim().toUpperCase().replace('-', '_').replace(' ', '_');
         return switch (normalized) {
+            case "PENDING_PAYMENT", "PAGO_PENDIENTE", "PENDIENTE_DE_PAGO" -> OrderStatus.PENDING_PAYMENT;
             case "PAYMENT_CONFIRMED", "PAGADO",    "APROBADO"  -> OrderStatus.PAYMENT_CONFIRMED;
             case "IN_PREPARATION",    "EN_PROCESO"              -> OrderStatus.IN_PREPARATION;
             case "IN_TRANSIT",        "ENVIADO"                 -> OrderStatus.IN_TRANSIT;

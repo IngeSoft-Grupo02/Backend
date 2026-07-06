@@ -7,6 +7,7 @@ import org.springframework.stereotype.Repository;
 import pe.edu.pucp.kingstore.domain.model.order.Order;
 import pe.edu.pucp.kingstore.domain.model.order.enums.OrderStatus;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -15,6 +16,7 @@ public interface OrderRepository
     extends JpaRepository<Order, Integer> {
     Optional<Order> findByQuotationId(Integer quotationId);
     List<Order> findByStatus(OrderStatus status);
+    List<Order> findByStatusAndCreatedAtBefore(OrderStatus status, LocalDateTime createdAt);
 
     @Query("""
             select distinct o

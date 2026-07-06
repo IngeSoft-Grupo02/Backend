@@ -283,6 +283,7 @@ public class StoreService extends AbstractCrudService<Store> {
         dto.setLogoUrl(store.getLogoUrl());
         dto.setCategory(store.getCategory() != null
                 ? store.getCategory().getStoreCategoryName() : null);
+        dto.setContactPhone(store.getMerchant() != null ? store.getMerchant().getPhone() : null);
         dto.setPrimaryColor(store.getPrimaryColor());
         dto.setSecondaryColor(store.getSecondaryColor());
         dto.setTertiaryColor(store.getTertiaryColor());

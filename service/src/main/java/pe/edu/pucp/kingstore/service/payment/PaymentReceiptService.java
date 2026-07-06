@@ -11,6 +11,7 @@ import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
 import pe.edu.pucp.kingstore.domain.model.order.Order;
 import pe.edu.pucp.kingstore.domain.model.order.enums.OrderStatus;
 import pe.edu.pucp.kingstore.repository.order.OrderRepository;
+import pe.edu.pucp.kingstore.service.order.OrderPaymentTimeoutPolicy;
 import java.util.Optional;
 
 @Service
@@ -43,9 +44,15 @@ public class PaymentReceiptService extends AbstractCrudService<PaymentReceipt> {
                                           String receiptType,
                                           String cardNumber, String cardHolder,
                                           String expiryDate, String cvv) {
-        if (order.getStatus() != OrderStatus.PAYMENT_CONFIRMED) {
+        if (OrderPaymentTimeoutPolicy.isExpired(order)) {
+            order.setStatus(OrderStatus.CANCELLED);
+            orderRepository.save(order);
             throw new pe.edu.pucp.kingstore.service.common.BusinessRuleException(
-                    "Only confirmed orders can be paid");
+                    "El tiempo para pagar expiró. El pedido fue cancelado");
+        }
+        if (order.getStatus() != OrderStatus.PENDING_PAYMENT) {
+            throw new pe.edu.pucp.kingstore.service.common.BusinessRuleException(
+                    "Solo se pueden pagar pedidos pendientes de pago");
         }
         paymentReceiptRepository.findByOrderId(order.getId()).ifPresent(existing -> {
             throw new pe.edu.pucp.kingstore.service.common.BusinessRuleException(

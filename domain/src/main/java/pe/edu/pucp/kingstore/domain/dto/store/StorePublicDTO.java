@@ -13,6 +13,7 @@ public class StorePublicDTO {
     private String description;
     private String logoUrl;
     private String category;
+    private String contactPhone;
     private PrimaryColor primaryColor;
     private SecondaryColor secondaryColor;
     private TertiaryColor tertiaryColor;

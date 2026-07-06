@@ -40,7 +40,7 @@ class PaymentReceiptServiceTest {
 
     @Test
     void simulatePaymentCreatesBoletaWithDefaultValues() {
-        Order order = order(OrderStatus.PAYMENT_CONFIRMED);
+        Order order = order(OrderStatus.PENDING_PAYMENT);
         when(paymentReceiptRepository.findByOrderId(77)).thenReturn(Optional.empty());
         when(paymentReceiptRepository.save(any(PaymentReceipt.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -66,7 +66,7 @@ class PaymentReceiptServiceTest {
 
     @Test
     void simulatePaymentCreatesFacturaWhenRucIsValid() {
-        Order order = order(OrderStatus.PAYMENT_CONFIRMED);
+        Order order = order(OrderStatus.PENDING_PAYMENT);
         when(paymentReceiptRepository.findByOrderId(77)).thenReturn(Optional.empty());
         when(paymentReceiptRepository.save(any(PaymentReceipt.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -89,7 +89,7 @@ class PaymentReceiptServiceTest {
 
     @Test
     void simulatePaymentRejectsMissingOrInvalidReceiptType() {
-        Order order = order(OrderStatus.PAYMENT_CONFIRMED);
+        Order order = order(OrderStatus.PENDING_PAYMENT);
         when(paymentReceiptRepository.findByOrderId(77)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.simulatePayment(
@@ -110,9 +110,9 @@ class PaymentReceiptServiceTest {
         assertThatThrownBy(() -> service.simulatePayment(
                 pending, null, null, "BOLETA", "4111111111111111", "Ana Perez", futureExpiry(), "123"
         )).isInstanceOf(BusinessRuleException.class)
-                .hasMessage("Only confirmed orders can be paid");
+                .hasMessage("Solo se pueden pagar pedidos pendientes de pago");
 
-        Order confirmed = order(OrderStatus.PAYMENT_CONFIRMED);
+        Order confirmed = order(OrderStatus.PENDING_PAYMENT);
         when(paymentReceiptRepository.findByOrderId(77)).thenReturn(Optional.of(new PaymentReceipt()));
 
         assertThatThrownBy(() -> service.simulatePayment(
@@ -123,7 +123,7 @@ class PaymentReceiptServiceTest {
 
     @Test
     void simulatePaymentRejectsCardValidationFailures() {
-        Order order = order(OrderStatus.PAYMENT_CONFIRMED);
+        Order order = order(OrderStatus.PENDING_PAYMENT);
         when(paymentReceiptRepository.findByOrderId(77)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.simulatePayment(
@@ -149,7 +149,7 @@ class PaymentReceiptServiceTest {
 
     @Test
     void simulatePaymentRejectsExpiryDeclinedCardAndInvalidRuc() {
-        Order order = order(OrderStatus.PAYMENT_CONFIRMED);
+        Order order = order(OrderStatus.PENDING_PAYMENT);
         when(paymentReceiptRepository.findByOrderId(77)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.simulatePayment(

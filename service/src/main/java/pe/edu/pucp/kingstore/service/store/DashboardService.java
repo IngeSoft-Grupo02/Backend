@@ -38,7 +38,7 @@ public class DashboardService {
 
         long pendingOrders = orders.stream()
                 .filter(o -> switch (o.getStatus()) {
-                    case PAYMENT_CONFIRMED, IN_PREPARATION, IN_TRANSIT -> true;
+                    case PENDING_PAYMENT, PAYMENT_CONFIRMED, IN_PREPARATION, IN_TRANSIT -> true;
                     default -> false;
                 }).count();
 
@@ -63,6 +63,7 @@ public class DashboardService {
                             o.getId(),
                             MerchantCustomerUtil.customerName(customer),
                             switch (o.getStatus()) {
+                                case PENDING_PAYMENT   -> "Pago pendiente";
                                 case PAYMENT_CONFIRMED -> "Pagado";
                                 case IN_PREPARATION    -> "En proceso";
                                 case IN_TRANSIT        -> "Enviado";

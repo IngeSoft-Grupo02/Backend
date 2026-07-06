@@ -46,6 +46,27 @@ public class OrderService extends AbstractCrudService<Order> {
     }
 
     @Transactional
+    public int expirePendingPayments() {
+        List<Order> expiredOrders = orderRepository.findByStatusAndCreatedAtBefore(
+                OrderStatus.PENDING_PAYMENT,
+                OrderPaymentTimeoutPolicy.expirationCutoff());
+        expiredOrders.forEach(order -> order.setStatus(OrderStatus.CANCELLED));
+        if (!expiredOrders.isEmpty()) {
+            orderRepository.saveAll(expiredOrders);
+        }
+        return expiredOrders.size();
+    }
+
+    @Transactional
+    public Order expireIfPaymentTimedOut(Order order) {
+        if (!OrderPaymentTimeoutPolicy.isExpired(order)) {
+            return order;
+        }
+        order.setStatus(OrderStatus.CANCELLED);
+        return orderRepository.save(order);
+    }
+
+    @Transactional
     public Order changeStatus(Integer id, OrderStatus status) {
         if (status == null) {
             throw new BusinessRuleException("Order status is required");
@@ -78,8 +99,9 @@ public class OrderService extends AbstractCrudService<Order> {
                 .findFirst()
                 .orElseThrow(() -> new ResourceNotFoundException("Order", orderId));
     }
-    @Transactional(readOnly = true)
+    @Transactional
     public OrderResponseDTO toResponseDTO(Order order, Integer storeId) {
+        order = expireIfPaymentTimedOut(order);
         var quotation = order.getQuotation();
         var customer = quotation != null && quotation.getShoppingCart() != null
                 ? quotation.getShoppingCart().getCustomer()
@@ -96,6 +118,7 @@ public class OrderService extends AbstractCrudService<Order> {
         dto.setCustomer(MerchantCustomerUtil.customerName(customer));
         dto.setStatus(order.getStatus());
         dto.setStatusLabel(switch (order.getStatus()) {
+            case PENDING_PAYMENT   -> "Pago pendiente";
             case PAYMENT_CONFIRMED -> "Pagado";
             case IN_PREPARATION    -> "En proceso";
             case IN_TRANSIT        -> "Enviado";
@@ -176,7 +199,7 @@ public class OrderService extends AbstractCrudService<Order> {
 
         Order order = new Order();
         order.setQuotation(quotation);
-        order.setStatus(OrderStatus.PAYMENT_CONFIRMED);
+        order.setStatus(OrderStatus.PENDING_PAYMENT);
         order.setTotalDiscount(quotation.getDiscount());
 
         List<OrderItem> items = quotation.getItems().stream().map(qi -> {
@@ -315,7 +338,7 @@ public class OrderService extends AbstractCrudService<Order> {
             throw new BusinessRuleException("Order must belong to a quotation");
         }
         if (order.getStatus() == null) {
-            order.setStatus(OrderStatus.PAYMENT_CONFIRMED);
+            order.setStatus(OrderStatus.PENDING_PAYMENT);
         }
         recalculateTotals(order);
     }
