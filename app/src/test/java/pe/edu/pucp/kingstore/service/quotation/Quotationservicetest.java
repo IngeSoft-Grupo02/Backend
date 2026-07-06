@@ -452,6 +452,50 @@ class QuotationServiceTest {
         assertThat(result.getStatus()).isEqualTo(QuotationStatus.PENDING);
         assertThat(result.getItems()).hasSize(1);
         assertThat(result.getItems().get(0).getQuantity()).isEqualTo(2);
+        assertThat(result.getItems().get(0).getSourceCartItemId()).isEqualTo(1);
+    }
+
+    @Test
+    void createFromCartPreservesDuplicateVariantAsSeparateItemsWithSourceCartItemIds() {
+        Product product = new Product();
+        product.setId(1);
+        product.setBasePrice(100.0);
+
+        ProductVariant variant = new ProductVariant();
+        variant.setId(188);
+        variant.setProduct(product);
+
+        pe.edu.pucp.kingstore.domain.model.cart.CartItem firstCartItem =
+                new pe.edu.pucp.kingstore.domain.model.cart.CartItem();
+        firstCartItem.setId(501);
+        firstCartItem.setProductVariant(variant);
+        firstCartItem.setQuantity(2);
+        firstCartItem.setPrice(100.0);
+        firstCartItem.setSubtotal(200.0);
+
+        pe.edu.pucp.kingstore.domain.model.cart.CartItem secondCartItem =
+                new pe.edu.pucp.kingstore.domain.model.cart.CartItem();
+        secondCartItem.setId(502);
+        secondCartItem.setProductVariant(variant);
+        secondCartItem.setQuantity(2);
+        secondCartItem.setPrice(100.0);
+        secondCartItem.setSubtotal(200.0);
+
+        ShoppingCart cart = cart(1);
+        cart.setItems(new ArrayList<>(List.of(firstCartItem, secondCartItem)));
+        cart.setDiscount(0.0);
+
+        when(quotationRepository.findByShoppingCartId(1)).thenReturn(Optional.empty());
+        when(quotationRepository.save(any(Quotation.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Quotation result = service.createFromCart(cart);
+
+        assertThat(result.getItems()).hasSize(2);
+        assertThat(result.getItems()).extracting(QuotationItem::getSourceCartItemId)
+                .containsExactly(501, 502);
+        assertThat(result.getItems()).extracting(item -> item.getProductVariant().getId())
+                .containsExactly(188, 188);
     }
 
     @Test
@@ -610,6 +654,45 @@ class QuotationServiceTest {
         assertThat(result.getItems().get(0).getSubTotal()).isEqualTo(220.0);
         assertThat(result.getItems().get(1).getSubTotal()).isEqualTo(100.0);
         assertThat(result.getTotalAmount()).isEqualTo(320.0);
+    }
+
+    @Test
+    void applyItemDesignFeesWithDuplicateVariantAddsFeeOnlyToDesignedItem() {
+        Product product = new Product();
+        product.setBasePrice(100.0);
+        ProductVariant variant = new ProductVariant();
+        variant.setId(188);
+        variant.setProduct(product);
+
+        QuotationItem designedItem = new QuotationItem();
+        designedItem.setId(201);
+        designedItem.setProductVariant(variant);
+        designedItem.setQuantity(2);
+        designedItem.setPrice(100.0);
+        designedItem.setSubTotal(200.0);
+
+        QuotationItem plainItem = new QuotationItem();
+        plainItem.setId(202);
+        plainItem.setProductVariant(variant);
+        plainItem.setQuantity(2);
+        plainItem.setPrice(100.0);
+        plainItem.setSubTotal(200.0);
+
+        QuotationDesign design = new QuotationDesign();
+        design.setQuotationItem(designedItem);
+        design.setActive(true);
+
+        Quotation quotation = quotation(1, cart(1), new ArrayList<>(List.of(designedItem, plainItem)), 0);
+        quotation.setDesigns(new ArrayList<>(List.of(design)));
+        when(quotationRepository.save(any(Quotation.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Quotation result = service.applyItemDesignFees(quotation);
+
+        assertThat(result.getItems().get(0).getSubTotal()).isEqualTo(220.0);
+        assertThat(result.getItems().get(1).getSubTotal()).isEqualTo(200.0);
+        assertThat(result.getDesignFeeTotal()).isEqualTo(20.0);
+        assertThat(result.getTotalAmount()).isEqualTo(420.0);
     }
 
     @Test

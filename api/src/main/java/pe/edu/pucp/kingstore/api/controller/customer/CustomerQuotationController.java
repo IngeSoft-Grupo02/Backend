@@ -3,6 +3,9 @@ package pe.edu.pucp.kingstore.api.controller.customer;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.transaction.NoTransactionException;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -68,6 +71,7 @@ public class CustomerQuotationController {
     }
 
     // POST /stores/{slug}/quotations
+    @Transactional
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> create(@PathVariable String slug,
                                     Authentication authentication,
@@ -76,6 +80,7 @@ public class CustomerQuotationController {
         return createQuotation(slug, authentication, description, List.of(), null);
     }
 
+    @Transactional
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> createMultipart(@PathVariable String slug,
                                              Authentication authentication,
@@ -110,6 +115,7 @@ public class CustomerQuotationController {
             return ResponseEntity.status(201).body(
                     quotationService.toResponseDTO(quotation, store.getId()));
         } catch (ResourceNotFoundException | BusinessRuleException e) {
+            markRollbackOnly();
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
@@ -126,13 +132,21 @@ public class CustomerQuotationController {
                     new com.fasterxml.jackson.databind.ObjectMapper();
             List<?> associations = mapper.readValue(designAssociationsJson, List.class);
 
+            Map<Integer, QuotationItem> quotationItemIdToItem = new HashMap<>();
+            Map<Integer, QuotationItem> cartItemIdToItem = new HashMap<>();
             Map<Integer, QuotationItem> productVariantIdToItem = new HashMap<>();
             Set<Integer> duplicatedVariantIds = new HashSet<>();
             for (QuotationItem qi : quotationItems) {
+                if (qi.getId() != null) {
+                    quotationItemIdToItem.put(qi.getId(), qi);
+                }
+                if (qi.getSourceCartItemId() != null) {
+                    cartItemIdToItem.put(qi.getSourceCartItemId(), qi);
+                }
                 if (qi.getProductVariant() != null && qi.getProductVariant().getId() != null) {
                     Integer productVariantId = qi.getProductVariant().getId();
                     QuotationItem previous = productVariantIdToItem.putIfAbsent(productVariantId, qi);
-                    if (previous != null && !Objects.equals(previous.getId(), qi.getId())) {
+                    if (previous != null && previous != qi) {
                         duplicatedVariantIds.add(productVariantId);
                     }
                 }
@@ -144,11 +158,13 @@ public class CustomerQuotationController {
                 if (entry == null) continue;
 
                 Integer productVariantId = productVariantIdFromAssociation(entry);
-                if (duplicatedVariantIds.contains(productVariantId)) {
-                    throw new BusinessRuleException(
-                            "Design association is ambiguous for product variant " + productVariantId);
-                }
-                QuotationItem item = productVariantIdToItem.get(productVariantId);
+                QuotationItem item = itemFromAssociation(
+                        entry,
+                        productVariantId,
+                        quotationItemIdToItem,
+                        cartItemIdToItem,
+                        productVariantIdToItem,
+                        duplicatedVariantIds);
                 if (item != null) {
                     result.put(i, new QuotationDesignService.DesignAssociation(
                             item,
@@ -166,20 +182,81 @@ public class CustomerQuotationController {
         }
     }
 
+    private QuotationItem itemFromAssociation(Object entry,
+                                             Integer productVariantId,
+                                             Map<Integer, QuotationItem> quotationItemIdToItem,
+                                             Map<Integer, QuotationItem> cartItemIdToItem,
+                                             Map<Integer, QuotationItem> productVariantIdToItem,
+                                             Set<Integer> duplicatedVariantIds) {
+        Integer quotationItemId = integerFromAssociation(entry, "quotationItemId", false);
+        if (quotationItemId != null) {
+            QuotationItem item = quotationItemIdToItem.get(quotationItemId);
+            if (item == null) {
+                throw new BusinessRuleException("Design association references an unknown quotationItemId");
+            }
+            validateProductVariantMatch(item, productVariantId);
+            return item;
+        }
+
+        Integer cartItemId = integerFromAssociation(entry, "cartItemId", false);
+        if (cartItemId != null) {
+            QuotationItem item = cartItemIdToItem.get(cartItemId);
+            if (item == null) {
+                throw new BusinessRuleException("Design association references an unknown cartItemId");
+            }
+            validateProductVariantMatch(item, productVariantId);
+            return item;
+        }
+
+        if (productVariantId == null) {
+            throw new BusinessRuleException(
+                    "Design association must include quotationItemId, cartItemId or productVariantId");
+        }
+        if (duplicatedVariantIds.contains(productVariantId)) {
+            throw new BusinessRuleException(
+                    "La asociacion del diseno requiere quotationItemId o cartItemId porque la variante aparece mas de una vez.");
+        }
+        return productVariantIdToItem.get(productVariantId);
+    }
+
     private Integer productVariantIdFromAssociation(Object entry) {
         if (entry instanceof Number n) {
             return n.intValue();
         }
+        return integerFromAssociation(entry, "productVariantId", false);
+    }
+
+    private Integer integerFromAssociation(Object entry, String key, boolean required) {
         if (entry instanceof Map<?, ?> map) {
             Object value = map.get("productVariantId");
+            if (!"productVariantId".equals(key)) {
+                value = map.get(key);
+            }
             if (value == null) {
-                throw new BusinessRuleException("Design association must include productVariantId");
+                if (required) {
+                    throw new BusinessRuleException("Design association must include " + key);
+                }
+                return null;
             }
             return value instanceof Number n
                     ? n.intValue()
                     : Integer.parseInt(String.valueOf(value));
         }
-        return Integer.parseInt(String.valueOf(entry));
+        if (required) {
+            return Integer.parseInt(String.valueOf(entry));
+        }
+        return null;
+    }
+
+    private void validateProductVariantMatch(QuotationItem item, Integer productVariantId) {
+        if (item == null || productVariantId == null
+                || item.getProductVariant() == null
+                || item.getProductVariant().getId() == null) {
+            return;
+        }
+        if (!Objects.equals(item.getProductVariant().getId(), productVariantId)) {
+            throw new BusinessRuleException("Design association productVariantId does not match the target item");
+        }
     }
 
     private Double doubleFromAssociation(Object entry, String key) {
@@ -200,6 +277,14 @@ public class CustomerQuotationController {
         if (designs != null) merged.addAll(designs);
         if (files != null) merged.addAll(files);
         return merged;
+    }
+
+    private void markRollbackOnly() {
+        try {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+        } catch (NoTransactionException ignored) {
+            // Unit tests call the controller directly; deployed requests run through Spring transactions.
+        }
     }
 
     // GET /stores/{slug}/quotations
