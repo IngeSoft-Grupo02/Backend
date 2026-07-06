@@ -901,4 +901,67 @@ class OrderServiceTest {
         assertThat(result.getShippingDetail().getDistrict()).isEqualTo(District.SAN_MIGUEL);
     }
 
+    @Test
+    void setShippingAddressAcceptsLosOlivosEnum() {
+        Order order = new Order();
+        order.setId(1);
+        order.setStatus(OrderStatus.PAYMENT_CONFIRMED);
+        when(orderRepository.findById(1)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Order result = service.setShippingAddress(1, shippingRequest("Jr. Hortencia 546", "LOS_OLIVOS", "Frente al parque"));
+        assertThat(result.getShippingDetail().getDistrict()).isEqualTo(District.LOS_OLIVOS);
+        assertThat(result.getShippingDetail().getAddress()).isEqualTo("Jr. Hortencia 546");
+    }
+
+    @Test
+    void setShippingAddressAcceptsLosOlivosLabel() {
+        Order order = new Order();
+        order.setId(1);
+        order.setStatus(OrderStatus.PAYMENT_CONFIRMED);
+        when(orderRepository.findById(1)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Order result = service.setShippingAddress(1, shippingRequest("Jr. Hortencia 546", "Los Olivos", "Frente al parque"));
+        assertThat(result.getShippingDetail().getDistrict()).isEqualTo(District.LOS_OLIVOS);
+    }
+
+    @Test
+    void setShippingAddressAcceptsLosOlivosLowercase() {
+        Order order = new Order();
+        order.setId(1);
+        order.setStatus(OrderStatus.PAYMENT_CONFIRMED);
+        when(orderRepository.findById(1)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Order result = service.setShippingAddress(1, shippingRequest("Jr. Hortencia 546", "los olivos", "Frente al parque"));
+        assertThat(result.getShippingDetail().getDistrict()).isEqualTo(District.LOS_OLIVOS);
+    }
+
+    @Test
+    void setShippingAddressResponseIncludesShippingDetail() {
+        Order order = new Order();
+        order.setId(1);
+        order.setStatus(OrderStatus.PAYMENT_CONFIRMED);
+        when(orderRepository.findById(1)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        ShippingAddressRequestDTO req = shippingRequest("Av. Arequipa 500", "SURCO", "Al lado del banco");
+        req.setRecipientName("María López");
+        req.setPhone("912345678");
+
+        Order result = service.setShippingAddress(1, req);
+        ShippingDetail detail = result.getShippingDetail();
+        assertThat(detail).isNotNull();
+        assertThat(detail.getAddress()).isEqualTo("Av. Arequipa 500");
+        assertThat(detail.getDistrict()).isEqualTo(District.SURCO);
+        assertThat(detail.getDescription()).isEqualTo("Al lado del banco");
+        assertThat(detail.getRecipientName()).isEqualTo("María López");
+        assertThat(detail.getPhone()).isEqualTo("912345678");
+    }
+
 }

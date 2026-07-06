@@ -1,5 +1,8 @@
 package pe.edu.pucp.kingstore.api.controller.customer;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -21,6 +24,8 @@ import java.util.Map;
 @RestController
 @RequestMapping("/stores/{slug}/orders")
 public class CustomerOrderController {
+
+    private static final Logger log = LoggerFactory.getLogger(CustomerOrderController.class);
 
     private final CustomerContext customerContext;
     private final OrderService    orderService;
@@ -79,7 +84,13 @@ public class CustomerOrderController {
             return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
         } catch (BusinessRuleException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (DataAccessException e) {
+            String cause = e.getMostSpecificCause().getMessage();
+            log.error("Persistence error saving shipping address for order {}: {}", id, cause, e);
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", "No se pudo guardar la dirección de envío."));
         } catch (Exception e) {
+            log.error("Unexpected error saving shipping address for order {}: {}", id, e.getMessage(), e);
             return ResponseEntity.internalServerError()
                     .body(Map.of("error", "No se pudo guardar la dirección de envío."));
         }
