@@ -46,27 +46,24 @@ public interface ProductRepository
     @Query("""
             select count(ci)
             from CartItem ci
-            where ci.productVariant in (
-                select v from Product p join p.variants v where p.id = :productId
-            )
+            join ci.productVariant v
+            where v.product.id = :productId
             """)
     long countCartItemReferences(@Param("productId") Integer productId);
 
     @Query("""
             select count(qi)
             from QuotationItem qi
-            where qi.productVariant in (
-                select v from Product p join p.variants v where p.id = :productId
-            )
+            join qi.productVariant v
+            where v.product.id = :productId
             """)
     long countQuotationItemReferences(@Param("productId") Integer productId);
 
     @Query("""
             select count(oi)
             from OrderItem oi
-            where oi.productVariant in (
-                select v from Product p join p.variants v where p.id = :productId
-            )
+            join oi.productVariant v
+            where v.product.id = :productId
             """)
     long countOrderItemReferences(@Param("productId") Integer productId);
 

@@ -265,6 +265,7 @@ public class ProductService extends AbstractCrudService<Product> {
         if (request == null) {
             throw new BusinessRuleException("Product request is required");
         }
+        List<String> currentImages = buildImageUrls(product.getImageUrls());
         List<String> requestImages = buildImageUrls(request.getImageUrls());
         return Objects.equals(clean(product.getName()), clean(request.getName()))
                 && Objects.equals(clean(product.getDescription()), clean(request.getDescription()))
@@ -272,7 +273,7 @@ public class ProductService extends AbstractCrudService<Product> {
                 && sameNumber(product.getCostPrice(), request.getCostPrice() == null ? 0 : request.getCostPrice())
                 && Objects.equals(customizableOrDefault(product), request.getCustomizable() == null
                         ? customizableOrDefault(product) : request.getCustomizable())
-                && Objects.equals(product.getImageUrls() == null ? List.of() : product.getImageUrls(), requestImages);
+                && Objects.equals(currentImages, requestImages);
     }
 
     private void applyInventoryRequest(Product product, ProductRequestDTO request) {
