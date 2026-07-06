@@ -79,6 +79,9 @@ public class CustomerOrderController {
             return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
         } catch (BusinessRuleException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", "No se pudo guardar la dirección de envío."));
         }
     }
 }
