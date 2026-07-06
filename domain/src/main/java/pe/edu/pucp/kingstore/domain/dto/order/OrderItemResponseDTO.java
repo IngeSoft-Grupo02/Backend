@@ -18,6 +18,9 @@ public class OrderItemResponseDTO {
     private String size;
     private String color;
     private Integer stockAvailable;
+    private Integer physicalStock;
+    private Integer reservedStock;
+    private Integer stockShortage;
     private Integer quantity;
     private Double unitPrice;
     private Double subTotal;

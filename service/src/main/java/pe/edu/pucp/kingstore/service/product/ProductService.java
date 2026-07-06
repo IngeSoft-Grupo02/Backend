@@ -34,12 +34,15 @@ public class ProductService extends AbstractCrudService<Product> {
 
     private final ProductRepository productRepository;
     private final DiscountRepository discountRepository;
+    private final StockAvailabilityService stockAvailabilityService;
 
     public ProductService(ProductRepository productRepository,
-                          DiscountRepository discountRepository) {
+                          DiscountRepository discountRepository,
+                          StockAvailabilityService stockAvailabilityService) {
         super(productRepository, "Product");
         this.productRepository = productRepository;
         this.discountRepository = discountRepository;
+        this.stockAvailabilityService = stockAvailabilityService;
     }
 
     @Transactional(readOnly = true)
@@ -292,11 +295,9 @@ public class ProductService extends AbstractCrudService<Product> {
         }
         for (ProductVariant variant : product.getVariants()) {
             VariantKey key = VariantKey.from(variant);
-            if (requested.containsKey(key)) {
-                variant.setStock(requested.remove(key));
-            } else {
-                variant.setStock(0);
-            }
+            int nextStock = requested.containsKey(key) ? requested.remove(key) : 0;
+            assertStockNotBelowReserved(variant, nextStock);
+            variant.setStock(nextStock);
             variant.setActive(true);
         }
         requested.forEach((key, stock) -> {
@@ -331,6 +332,13 @@ public class ProductService extends AbstractCrudService<Product> {
             variants.put(new VariantKey(request.getSize().trim(), color), request.getStock());
         }
         return variants;
+    }
+
+    private void assertStockNotBelowReserved(ProductVariant variant, int nextStock) {
+        if (variant == null || variant.getId() == null) {
+            return;
+        }
+        stockAvailabilityService.assertCanSetPhysicalStock(variant.getId(), nextStock);
     }
 
     private void copyProductDiscounts(Product oldProduct, Product newProduct) {

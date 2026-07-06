@@ -67,6 +67,7 @@ import pe.edu.pucp.kingstore.service.payment.PaymentReceiptService;
 import pe.edu.pucp.kingstore.service.product.DiscountService;
 import pe.edu.pucp.kingstore.service.product.ProductService;
 import pe.edu.pucp.kingstore.service.product.ProductVariantService;
+import pe.edu.pucp.kingstore.service.product.StockAvailabilityService;
 import pe.edu.pucp.kingstore.service.quotation.QuotationService;
 import pe.edu.pucp.kingstore.service.security.JwtUtil;
 import pe.edu.pucp.kingstore.service.storage.LocalStorageService;
@@ -92,6 +93,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -112,10 +114,11 @@ class CoreServiceCoverageTest {
     @Mock SystemAdministratorRepository administratorRepository;
     @Mock UserAccountRepository userAccountRepository;
     @Mock AuditLogRepository auditLogRepository;
+    @Mock StockAvailabilityService stockAvailabilityService;
 
     @Test
     void crudServicesCoverCreateUpdateQueriesAndValidation() {
-        ProductService productService = new ProductService(productRepository, discountRepository);
+        ProductService productService = new ProductService(productRepository, discountRepository, stockAvailabilityService);
         Product product = product();
         when(productRepository.save(any(Product.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(productRepository.findById(5)).thenReturn(Optional.of(product));
@@ -185,7 +188,7 @@ class CoreServiceCoverageTest {
         cart.getItems().get(0).setQuantity(0);
         assertThatThrownBy(() -> cartService.create(cart)).isInstanceOf(BusinessRuleException.class);
 
-        QuotationService quotationService = new QuotationService(quotationRepository);
+        QuotationService quotationService = new QuotationService(quotationRepository, stockAvailabilityService);
         Quotation quotation = quotation();
         when(quotationRepository.save(any(Quotation.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(quotationRepository.findById(6)).thenReturn(Optional.of(quotation));
@@ -198,19 +201,19 @@ class CoreServiceCoverageTest {
         assertThatThrownBy(() -> quotationService.respond(6, QuotationStatus.PENDING, "no"))
                 .isInstanceOf(BusinessRuleException.class);
 
-        OrderService orderService = new OrderService(orderRepository, quotationRepository);
+        OrderService orderService = new OrderService(orderRepository, quotationRepository, stockAvailabilityService);
         Order order = order();
         when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(orderRepository.findById(9)).thenReturn(Optional.of(order));
         when(orderRepository.findByQuotationId(6)).thenReturn(Optional.of(order));
         when(orderRepository.findByStatus(OrderStatus.IN_PREPARATION)).thenReturn(List.of(order));
-        assertThat(orderService.create(order).getFinalTotal()).isEqualTo(17);
+        assertThat(orderService.create(order).getFinalTotal()).isEqualTo(20.06);
         assertThat(orderService.findByQuotation(6)).contains(order);
         assertThat(orderService.findByStatus(OrderStatus.IN_PREPARATION)).containsExactly(order);
         assertThat(orderService.changeStatus(9, OrderStatus.IN_TRANSIT).getStatus()).isEqualTo(OrderStatus.IN_TRANSIT);
         assertThatThrownBy(() -> orderService.changeStatus(9, null)).isInstanceOf(BusinessRuleException.class);
 
-        PaymentReceiptService receiptService = new PaymentReceiptService(paymentReceiptRepository, orderRepository);
+        PaymentReceiptService receiptService = new PaymentReceiptService(paymentReceiptRepository, orderRepository, stockAvailabilityService);
         PaymentReceipt receipt = receipt(order);
         when(paymentReceiptRepository.save(any(PaymentReceipt.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(paymentReceiptRepository.findByOrderId(9)).thenReturn(Optional.of(receipt));
@@ -227,7 +230,7 @@ class CoreServiceCoverageTest {
         StoreCategoryDTO categoryDTO = new StoreCategoryDTO();
         categoryDTO.setStoreCategoryName(" Urban ");
         when(categoryRepository.save(any(StoreCategory.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(categoryRepository.findAll()).thenReturn(List.of(), List.of(category), List.of(category));
+        when(categoryRepository.findAll()).thenReturn(List.of(category), List.of(category), List.of(category));
         when(categoryRepository.findById(1)).thenReturn(Optional.of(category));
         assertThat(categoryService.createFromDTO(categoryDTO).getStoreCategoryName()).isEqualTo("Urban");
         assertThat(categoryService.search("urb")).containsExactly(category);
@@ -238,7 +241,7 @@ class CoreServiceCoverageTest {
         categoryDTO.setStoreCategoryName("Casual");
         assertThat(categoryService.updateFromDTO(1, categoryDTO).getStoreCategoryName()).isEqualTo("Casual");
         StoreCategory duplicate = category(2, "Casual");
-        when(categoryRepository.findAll()).thenReturn(List.of(duplicate));
+        when(categoryRepository.findByStoreCategoryNameIgnoreCase("Casual")).thenReturn(Optional.of(duplicate));
         assertThatThrownBy(() -> categoryService.updateFromDTO(1, categoryDTO))
                 .isInstanceOf(BusinessRuleException.class);
         category.setActive(true);
@@ -670,7 +673,7 @@ class CoreServiceCoverageTest {
         Customer customer = customerProfile();
         SystemAdministrator admin = adminProfile();
         when(userAccountRepository.findById(40)).thenReturn(Optional.of(phoneAccount));
-        when(userAccountRepository.findByEmail("phone@kingstore.pe")).thenReturn(Optional.of(phoneAccount));
+        lenient().when(userAccountRepository.findByEmail("phone@kingstore.pe")).thenReturn(Optional.of(phoneAccount));
         when(userAccountRepository.save(any(UserAccount.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(merchantRepository.findByUserAccountId(40)).thenReturn(Optional.of(merchant));
         when(customerRepository.findAllByUserAccountId(40)).thenReturn(List.of(customer));

@@ -43,4 +43,14 @@ public interface OrderRepository
                                        @Param("status") OrderStatus status);
     List<Order> findByQuotation_ShoppingCart_Customer_Id(Integer customerId);
 
+    @Query("""
+            select coalesce(sum(i.quantity), 0)
+            from Order o
+            join o.items i
+            where i.productVariant.id = :variantId
+              and o.status = pe.edu.pucp.kingstore.domain.model.order.enums.OrderStatus.PENDING_PAYMENT
+              and (:excludedOrderId is null or o.id <> :excludedOrderId)
+            """)
+    Long sumPendingPaymentQuantityByVariantId(@Param("variantId") Integer variantId,
+                                              @Param("excludedOrderId") Integer excludedOrderId);
 }

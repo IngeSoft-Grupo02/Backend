@@ -36,6 +36,8 @@ class ProductServiceTest {
 
     @Mock
     private ProductRepository productRepository;
+    @Mock
+    private StockAvailabilityService stockAvailabilityService;
 
     private ProductService service;
 
@@ -44,7 +46,7 @@ class ProductServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ProductService(productRepository, discountRepository);
+        service = new ProductService(productRepository, discountRepository, stockAvailabilityService);
     }
 
     private Product validProduct() {

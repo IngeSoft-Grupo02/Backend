@@ -20,6 +20,7 @@ import pe.edu.pucp.kingstore.repository.quotation.QuotationRepository;
 import pe.edu.pucp.kingstore.domain.dto.order.ShippingAddressRequestDTO;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
 import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
+import pe.edu.pucp.kingstore.service.product.StockAvailabilityService;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -29,6 +30,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 /**
@@ -47,12 +49,16 @@ class OrderServiceTest {
     private OrderRepository orderRepository;
     @Mock
     private QuotationRepository quotationRepository;
+    @Mock
+    private StockAvailabilityService stockAvailabilityService;
 
     private OrderService service;
 
     @BeforeEach
     void setUp() {
-        service = new OrderService(orderRepository, quotationRepository);
+        service = new OrderService(orderRepository, quotationRepository, stockAvailabilityService);
+        lenient().when(stockAvailabilityService.snapshot(any(Integer.class), any()))
+                .thenReturn(new StockAvailabilityService.StockSnapshot(10, 0, 10));
     }
 
     // -------------------------------------------------------------------------
@@ -229,7 +235,7 @@ class OrderServiceTest {
         assertThat(saved.getStatus()).isEqualTo(OrderStatus.PENDING_PAYMENT);
         assertThat(item.getSubTotal()).isEqualTo(20.0);
         assertThat(saved.getPartialTotal()).isEqualTo(20.0);
-        assertThat(saved.getFinalTotal()).isEqualTo(20.0);
+        assertThat(saved.getFinalTotal()).isEqualTo(23.6);
         assertThat(saved.getTotalDiscount()).isEqualTo(0.0);
     }
 

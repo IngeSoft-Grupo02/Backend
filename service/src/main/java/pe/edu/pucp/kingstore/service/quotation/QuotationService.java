@@ -12,6 +12,7 @@ import pe.edu.pucp.kingstore.service.common.AbstractCrudService;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
 import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
 import pe.edu.pucp.kingstore.domain.model.cart.ShoppingCart;
+import pe.edu.pucp.kingstore.service.product.StockAvailabilityService;
 import pe.edu.pucp.kingstore.service.store.StoreService;
 
 import pe.edu.pucp.kingstore.domain.dto.quotation.QuotationItemResponseDTO;
@@ -27,10 +28,13 @@ import java.util.Optional;
 public class QuotationService extends AbstractCrudService<Quotation> {
 
     private final QuotationRepository quotationRepository;
+    private final StockAvailabilityService stockAvailabilityService;
 
-    public QuotationService(QuotationRepository quotationRepository) {
+    public QuotationService(QuotationRepository quotationRepository,
+                            StockAvailabilityService stockAvailabilityService) {
         super(quotationRepository, "Quotation");
         this.quotationRepository = quotationRepository;
+        this.stockAvailabilityService = stockAvailabilityService;
     }
     /**
      * Crea una cotización a partir del carrito del cliente.
@@ -370,7 +374,18 @@ public class QuotationService extends AbstractCrudService<Quotation> {
         dto.setProductVariantId(variant != null ? variant.getId() : null);
         dto.setSize(size);
         dto.setColor(color);
-        dto.setStockAvailable(variant != null ? variant.getStock() : null);
+        if (variant != null && variant.getId() != null) {
+            var stock = stockAvailabilityService.snapshot(variant.getId());
+            dto.setPhysicalStock(stock.physicalStock());
+            dto.setReservedStock(stock.reservedStock());
+            dto.setStockAvailable(stock.availableStock());
+            dto.setStockShortage(stock.shortageFor(item.getQuantity()));
+        } else {
+            dto.setStockAvailable(null);
+            dto.setPhysicalStock(null);
+            dto.setReservedStock(null);
+            dto.setStockShortage(null);
+        }
         dto.setQuantity(item.getQuantity());
         dto.setUnitPrice(item.getPrice());
         dto.setSubTotal(item.getSubTotal());

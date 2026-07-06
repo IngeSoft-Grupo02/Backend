@@ -50,10 +50,12 @@ class ProductServiceCoverageTest {
     private ProductService service;
     @Mock
     private DiscountRepository discountRepository;
+    @Mock
+    private StockAvailabilityService stockAvailabilityService;
 
     @BeforeEach
     void setUp() {
-        service = new ProductService(productRepository, discountRepository);
+        service = new ProductService(productRepository, discountRepository, stockAvailabilityService);
     }
 
     private Store store() {

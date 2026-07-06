@@ -13,6 +13,7 @@ import pe.edu.pucp.kingstore.domain.model.payment.enums.ReceiptType;
 import pe.edu.pucp.kingstore.repository.order.OrderRepository;
 import pe.edu.pucp.kingstore.repository.payment.PaymentReceiptRepository;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
+import pe.edu.pucp.kingstore.service.product.StockAvailabilityService;
 
 import java.time.YearMonth;
 import java.util.Optional;
@@ -20,6 +21,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -30,12 +32,14 @@ class PaymentReceiptServiceTest {
     private PaymentReceiptRepository paymentReceiptRepository;
     @Mock
     private OrderRepository orderRepository;
+    @Mock
+    private StockAvailabilityService stockAvailabilityService;
 
     private PaymentReceiptService service;
 
     @BeforeEach
     void setUp() {
-        service = new PaymentReceiptService(paymentReceiptRepository, orderRepository);
+        service = new PaymentReceiptService(paymentReceiptRepository, orderRepository, stockAvailabilityService);
     }
 
     @Test
@@ -206,6 +210,7 @@ class PaymentReceiptServiceTest {
         order.setId(77);
         order.setStatus(status);
         order.setFinalTotal(118.0);
+        lenient().when(orderRepository.findById(order.getId())).thenReturn(Optional.of(order));
         return order;
     }
 

@@ -20,6 +20,7 @@ import pe.edu.pucp.kingstore.domain.model.quotation.Quotation;
 import pe.edu.pucp.kingstore.domain.model.quotation.QuotationItem;
 import pe.edu.pucp.kingstore.domain.model.quotation.enums.QuotationStatus;
 import pe.edu.pucp.kingstore.repository.quotation.QuotationRepository;
+import pe.edu.pucp.kingstore.service.product.StockAvailabilityService;
 import pe.edu.pucp.kingstore.service.store.StoreService;
 
 
@@ -34,11 +35,15 @@ public class OrderService extends AbstractCrudService<Order> {
 
     private final OrderRepository orderRepository;
     private final QuotationRepository quotationRepository;
+    private final StockAvailabilityService stockAvailabilityService;
 
-    public OrderService(OrderRepository orderRepository, QuotationRepository quotationRepository) {
+    public OrderService(OrderRepository orderRepository,
+                        QuotationRepository quotationRepository,
+                        StockAvailabilityService stockAvailabilityService) {
         super(orderRepository, "Order");
         this.orderRepository = orderRepository;
         this.quotationRepository = quotationRepository;
+        this.stockAvailabilityService = stockAvailabilityService;
     }
 
     @Transactional(readOnly = true)
@@ -113,6 +118,7 @@ public class OrderService extends AbstractCrudService<Order> {
     public OrderResponseDTO toResponseDTO(Order order, Integer storeId) {
         order = expireIfPaymentTimedOut(order);
         Double appliedPercentageSnapshot = order.getDesignFeePercentageApplied();
+        Integer orderId = order.getId();
         var quotation = order.getQuotation();
         var customer = quotation != null && quotation.getShoppingCart() != null
                 ? quotation.getShoppingCart().getCustomer()
@@ -121,7 +127,7 @@ public class OrderService extends AbstractCrudService<Order> {
         List<OrderItemResponseDTO> itemsDetail = order.getItems() == null
                 ? List.of()
                 : order.getItems().stream()
-                  .map(item -> toItemResponseDTO(item, appliedPercentageSnapshot))
+                  .map(item -> toItemResponseDTO(item, appliedPercentageSnapshot, orderId))
                   .toList();
 
         OrderResponseDTO dto = new OrderResponseDTO();
@@ -176,7 +182,9 @@ public class OrderService extends AbstractCrudService<Order> {
         return dto;
     }
 
-    private OrderItemResponseDTO toItemResponseDTO(OrderItem item, Double appliedPercentageSnapshot) {
+    private OrderItemResponseDTO toItemResponseDTO(OrderItem item,
+                                                  Double appliedPercentageSnapshot,
+                                                  Integer orderId) {
         var variant = item.getProductVariant();
         var product = variant != null ? variant.getProduct() : null;
 
@@ -186,7 +194,18 @@ public class OrderService extends AbstractCrudService<Order> {
         dto.setProductVariantId(variant != null ? variant.getId() : null);
         dto.setSize(variant != null ? variant.getSize() : null);
         dto.setColor(variant != null && variant.getColor() != null ? variant.getColor().name() : null);
-        dto.setStockAvailable(variant != null ? variant.getStock() : null);
+        if (variant != null && variant.getId() != null) {
+            var stock = stockAvailabilityService.snapshot(variant.getId(), orderId);
+            dto.setPhysicalStock(stock.physicalStock());
+            dto.setReservedStock(stock.reservedStock());
+            dto.setStockAvailable(stock.availableStock());
+            dto.setStockShortage(stock.shortageFor(item.getQuantity() == null ? 0 : item.getQuantity()));
+        } else {
+            dto.setStockAvailable(null);
+            dto.setPhysicalStock(null);
+            dto.setReservedStock(null);
+            dto.setStockShortage(null);
+        }
         dto.setQuantity(item.getQuantity());
         dto.setUnitPrice(item.getUnitPrice());
         dto.setSubTotal(item.getSubTotal());
@@ -268,6 +287,7 @@ public class OrderService extends AbstractCrudService<Order> {
         if (quotationItems == null || quotationItems.isEmpty()) {
             throw new BusinessRuleException("Quotation must have at least one item to create an order");
         }
+        stockAvailabilityService.assertCanReserveQuotationItems(quotationItems);
 
         Order order = new Order();
         order.setQuotation(quotation);

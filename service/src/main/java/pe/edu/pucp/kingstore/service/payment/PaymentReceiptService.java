@@ -12,6 +12,7 @@ import pe.edu.pucp.kingstore.domain.model.order.Order;
 import pe.edu.pucp.kingstore.domain.model.order.enums.OrderStatus;
 import pe.edu.pucp.kingstore.repository.order.OrderRepository;
 import pe.edu.pucp.kingstore.service.order.OrderPaymentTimeoutPolicy;
+import pe.edu.pucp.kingstore.service.product.StockAvailabilityService;
 import java.util.Optional;
 
 @Service
@@ -21,10 +22,15 @@ public class PaymentReceiptService extends AbstractCrudService<PaymentReceipt> {
 
     private final PaymentReceiptRepository paymentReceiptRepository;
     private final OrderRepository          orderRepository;
-    public PaymentReceiptService(PaymentReceiptRepository paymentReceiptRepository, OrderRepository orderRepository) {
+    private final StockAvailabilityService stockAvailabilityService;
+
+    public PaymentReceiptService(PaymentReceiptRepository paymentReceiptRepository,
+                                 OrderRepository orderRepository,
+                                 StockAvailabilityService stockAvailabilityService) {
         super(paymentReceiptRepository, "Payment receipt");
         this.paymentReceiptRepository = paymentReceiptRepository;
         this.orderRepository          = orderRepository;
+        this.stockAvailabilityService = stockAvailabilityService;
     }
 
     @Transactional(readOnly = true)
@@ -44,6 +50,9 @@ public class PaymentReceiptService extends AbstractCrudService<PaymentReceipt> {
                                           String receiptType,
                                           String cardNumber, String cardHolder,
                                           String expiryDate, String cvv) {
+        Integer orderId = order.getId();
+        order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new pe.edu.pucp.kingstore.service.common.ResourceNotFoundException("Order", orderId));
         if (OrderPaymentTimeoutPolicy.isExpired(order)) {
             order.setStatus(OrderStatus.CANCELLED);
             orderRepository.save(order);
@@ -70,6 +79,8 @@ public class PaymentReceiptService extends AbstractCrudService<PaymentReceipt> {
             throw new pe.edu.pucp.kingstore.service.common.BusinessRuleException(
                     "Payment declined — card rejected by issuer");
         }
+
+        stockAvailabilityService.consumeStockForPaidOrder(order);
 
         PaymentReceipt receipt = new PaymentReceipt();
         receipt.setOrder(order);

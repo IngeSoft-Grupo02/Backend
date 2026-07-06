@@ -19,6 +19,7 @@ import pe.edu.pucp.kingstore.domain.model.user.Customer;
 import pe.edu.pucp.kingstore.repository.quotation.QuotationRepository;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
 import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
+import pe.edu.pucp.kingstore.service.product.StockAvailabilityService;
 
 import java.util.List;
 import java.util.Optional;
@@ -26,6 +27,7 @@ import java.util.ArrayList;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 /**
@@ -41,12 +43,16 @@ class QuotationServiceTest {
 
     @Mock
     private QuotationRepository quotationRepository;
+    @Mock
+    private StockAvailabilityService stockAvailabilityService;
 
     private QuotationService service;
 
     @BeforeEach
     void setUp() {
-        service = new QuotationService(quotationRepository);
+        service = new QuotationService(quotationRepository, stockAvailabilityService);
+        lenient().when(stockAvailabilityService.snapshot(any(Integer.class)))
+                .thenReturn(new StockAvailabilityService.StockSnapshot(10, 0, 10));
     }
 
     // -------------------------------------------------------------------------
