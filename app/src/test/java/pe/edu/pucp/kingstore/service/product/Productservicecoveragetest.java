@@ -22,6 +22,7 @@ import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
 import pe.edu.pucp.kingstore.service.storage.StorageService;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -97,6 +98,16 @@ class ProductServiceCoverageTest {
     @Test
     void findInStoreThrowsNotFoundWhenStoreNull() {
         Product product = product(1, null);
+        when(productRepository.findById(1)).thenReturn(Optional.of(product));
+
+        assertThatThrownBy(() -> service.findInStore(1, 10))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void findInStoreThrowsNotFoundWhenProductIsDeleted() {
+        Product product = product(1, store());
+        product.setDeleted(true);
         when(productRepository.findById(1)).thenReturn(Optional.of(product));
 
         assertThatThrownBy(() -> service.findInStore(1, 10))
@@ -408,6 +419,15 @@ class ProductServiceCoverageTest {
 
         assertThatThrownBy(() -> service.findPublicInStore(3, 10))
                 .isInstanceOf(ResourceNotFoundException.class);
+
+        Product deleted = product(4, store());
+        deleted.setActive(true);
+        deleted.setStatus(ProductStatus.ACTIVE);
+        deleted.setDeleted(true);
+        when(productRepository.findById(4)).thenReturn(Optional.of(deleted));
+
+        assertThatThrownBy(() -> service.findPublicInStore(4, 10))
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test
@@ -495,6 +515,101 @@ class ProductServiceCoverageTest {
 
         assertThat(updated.getName()).isEqualTo("Polo actualizado");
         assertThat(updated.getImageUrls()).containsExactly("https://cdn.test/new.png");
+    }
+
+    @Test
+    void deleteMarksProductDeletedWithoutHardDelete() {
+        Product product = product(1, store());
+        when(productRepository.findById(1)).thenReturn(Optional.of(product));
+        when(productRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.delete(1);
+
+        assertThat(product.getDeleted()).isTrue();
+        assertThat(product.getDeletedAt()).isNotNull();
+        assertThat(product.getActive()).isFalse();
+        assertThat(product.getStatus()).isEqualTo(ProductStatus.INACTIVE);
+    }
+
+    @Test
+    void updateReferencedInventoryOnlyUpdatesInPlaceAndKeepsOldVariants() {
+        Product existing = product(1, store());
+        existing.setImageUrls(new ArrayList<>());
+        ProductVariant current = new ProductVariant();
+        current.setId(10);
+        current.setSize("M");
+        current.setColor(Color.BLACK);
+        current.setStock(8);
+        existing.setVariants(new ArrayList<>(List.of(current)));
+
+        ProductRequestDTO dto = requestDTO("Polo", 50.0);
+        dto.setCostPrice(20.0);
+        ProductRequestDTO.ProductVariantRequestDTO updated = new ProductRequestDTO.ProductVariantRequestDTO();
+        updated.setSize("M");
+        updated.setColor(Color.BLACK);
+        updated.setStock(3);
+        ProductRequestDTO.ProductVariantRequestDTO added = new ProductRequestDTO.ProductVariantRequestDTO();
+        added.setSize("L");
+        added.setColor(Color.RED);
+        added.setStock(5);
+        dto.setVariants(List.of(updated, added));
+
+        when(productRepository.countCartItemReferences(1)).thenReturn(1L);
+        when(productRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Product result = service.updateForStore(existing, dto);
+
+        assertThat(result).isSameAs(existing);
+        assertThat(existing.getDeleted()).isFalse();
+        assertThat(existing.getVariants()).hasSize(2);
+        assertThat(existing.getVariants().get(0).getId()).isEqualTo(10);
+        assertThat(existing.getVariants().get(0).getStock()).isEqualTo(3);
+        assertThat(existing.getVariants().get(1).getSize()).isEqualTo("L");
+    }
+
+    @Test
+    void updateReferencedNonStockCreatesReplacementAndArchivesOldProduct() {
+        Product existing = product(1, store());
+        existing.setImageUrls(new ArrayList<>());
+        existing.setVariants(new ArrayList<>());
+        Discount discount = discount(7, "Volumen", existing, true);
+        discount.setStore(store());
+
+        ProductRequestDTO dto = requestDTO("Polo nuevo", 60.0);
+        dto.setCostPrice(20.0);
+
+        when(productRepository.countQuotationItemReferences(1)).thenReturn(1L);
+        when(discountRepository.findByProductId(1)).thenReturn(List.of(discount));
+        when(productRepository.save(any(Product.class))).thenAnswer(inv -> {
+            Product saved = inv.getArgument(0);
+            if (saved.getId() == null) {
+                saved.setId(2);
+            }
+            return saved;
+        });
+        when(discountRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Product replacement = service.updateForStore(existing, dto);
+
+        assertThat(replacement.getId()).isEqualTo(2);
+        assertThat(replacement.getName()).isEqualTo("Polo nuevo");
+        assertThat(existing.getDeleted()).isTrue();
+        assertThat(existing.getActive()).isFalse();
+        assertThat(existing.getReplacedByProduct()).isSameAs(replacement);
+        assertThat(discount.getDeleted()).isTrue();
+        assertThat(discount.getActive()).isFalse();
+    }
+
+    @Test
+    void updateDeletedProductReturnsExistingReplacementForRetry() {
+        Product replacement = product(2, store());
+        Product deleted = product(1, store());
+        deleted.setDeleted(true);
+        deleted.setReplacedByProduct(replacement);
+
+        Product result = service.updateForStore(deleted, requestDTO("Polo", 50.0));
+
+        assertThat(result).isSameAs(replacement);
     }
 
     // =========================================================================

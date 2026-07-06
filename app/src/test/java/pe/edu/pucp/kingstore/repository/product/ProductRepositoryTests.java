@@ -81,18 +81,20 @@ public class ProductRepositoryTests {
     }
 
     @Test
-    public void testThatProductCanBeDeleted(){
+    public void testThatProductCanBeMarkedDeleted(){
         Store store = storeRepository.save(ProductTestDataUtil.createTestStoreA());
 
         Product product = underTest.save(ProductTestDataUtil.createTestProductA(store));
 
         assertThat(underTest.findById(product.getId())).isPresent();
 
-        underTest.deleteById(product.getId());
+        product.setDeleted(true);
+        underTest.save(product);
 
         Optional<Product> result = underTest.findById(product.getId());
 
-        assertThat(result).isEmpty();
+        assertThat(result).isPresent();
+        assertThat(result.get().getDeleted()).isTrue();
 
     }
     @Test
@@ -116,6 +118,22 @@ public class ProductRepositoryTests {
                         productA.getId(),
                         productB.getId()
                 );
+    }
+
+    @Test
+    public void testThatFindByStoreIdExcludesDeletedProducts(){
+        Store store = storeRepository.save(ProductTestDataUtil.createTestStoreA());
+        Product active = underTest.save(ProductTestDataUtil.createTestProductA(store));
+        Product deleted = ProductTestDataUtil.createTestProductB(store);
+        deleted.setDeleted(true);
+        deleted = underTest.save(deleted);
+
+        List<Product> result = underTest.findByStoreId(store.getId());
+
+        assertThat(result)
+                .extracting(Product::getId)
+                .contains(active.getId())
+                .doesNotContain(deleted.getId());
     }
 
     @Test

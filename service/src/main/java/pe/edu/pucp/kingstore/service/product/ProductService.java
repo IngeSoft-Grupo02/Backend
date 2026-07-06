@@ -23,7 +23,9 @@ import pe.edu.pucp.kingstore.service.storage.StorageService;
 import pe.edu.pucp.kingstore.service.user.util.MerchantStringUtil;
 import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -66,6 +68,19 @@ public class ProductService extends AbstractCrudService<Product> {
         requireId(productId);
         requireId(storeId);
         Product product = getById(productId);
+        if (product.getStore() == null
+                || !Objects.equals(product.getStore().getId(), storeId)
+                || isDeleted(product)) {
+            throw new ResourceNotFoundException("Product", productId);
+        }
+        return product;
+    }
+
+    @Transactional(readOnly = true)
+    public Product findInStoreIncludingDeleted(Integer productId, Integer storeId) {
+        requireId(productId);
+        requireId(storeId);
+        Product product = getById(productId);
         if (product.getStore() == null || !Objects.equals(product.getStore().getId(), storeId)) {
             throw new ResourceNotFoundException("Product", productId);
         }
@@ -83,15 +98,41 @@ public class ProductService extends AbstractCrudService<Product> {
 
     @Transactional
     public Product updateForStore(Product product, ProductRequestDTO request) {
+        if (isDeleted(product)) {
+            Product replacement = product.getReplacedByProduct();
+            if (replacement != null && !isDeleted(replacement)) {
+                return replacement;
+            }
+            throw new ResourceNotFoundException("Product", product.getId());
+        }
+        boolean referenced = hasReferences(product.getId());
+        if (referenced && isInventoryOnlyChange(product, request)) {
+            applyInventoryRequest(product, request);
+            return productRepository.save(product);
+        }
+        if (referenced) {
+            return replaceReferencedProduct(product, request);
+        }
         applyRequest(product, request);
         return productRepository.save(product);
     }
 
     @Transactional
     public Product toggleActive(Product product, boolean active) {
+        if (isDeleted(product)) {
+            throw new ResourceNotFoundException("Product", product.getId());
+        }
         product.setActive(active);
         product.setStatus(active ? ProductStatus.ACTIVE : ProductStatus.INACTIVE);
         return productRepository.save(product);
+    }
+
+    @Override
+    @Transactional
+    public void delete(Integer id) {
+        Product product = getById(id);
+        markDeleted(product, null);
+        productRepository.save(product);
     }
 
     // ── Image upload ──────────────────────────────────────────────────────────────
@@ -119,7 +160,8 @@ public class ProductService extends AbstractCrudService<Product> {
         Product product = getById(productId);
         if (!Objects.equals(product.getStore().getId(), storeId)
                 || !Boolean.TRUE.equals(product.getActive())
-                || product.getStatus() != ProductStatus.ACTIVE) {
+                || product.getStatus() != ProductStatus.ACTIVE
+                || isDeleted(product)) {
             throw new ResourceNotFoundException("Product", productId);
         }
         return product;
@@ -190,6 +232,131 @@ public class ProductService extends AbstractCrudService<Product> {
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────────
+    private Product replaceReferencedProduct(Product product, ProductRequestDTO request) {
+        Product replacement = new Product();
+        replacement.setStore(product.getStore());
+        applyRequest(replacement, request);
+        Product savedReplacement = productRepository.save(replacement);
+        copyProductDiscounts(product, savedReplacement);
+        markDeleted(product, savedReplacement);
+        productRepository.save(product);
+        return savedReplacement;
+    }
+
+    private void markDeleted(Product product, Product replacement) {
+        product.setDeleted(true);
+        product.setDeletedAt(LocalDateTime.now());
+        product.setReplacedByProduct(replacement);
+        product.setActive(false);
+        product.setStatus(ProductStatus.INACTIVE);
+    }
+
+    private boolean hasReferences(Integer productId) {
+        if (productId == null) {
+            return false;
+        }
+        return productRepository.countCartItemReferences(productId) > 0
+                || productRepository.countQuotationItemReferences(productId) > 0
+                || productRepository.countOrderItemReferences(productId) > 0
+                || productRepository.countDiscountReferences(productId) > 0;
+    }
+
+    private boolean isInventoryOnlyChange(Product product, ProductRequestDTO request) {
+        if (request == null) {
+            throw new BusinessRuleException("Product request is required");
+        }
+        List<String> requestImages = buildImageUrls(request.getImageUrls());
+        return Objects.equals(clean(product.getName()), clean(request.getName()))
+                && Objects.equals(clean(product.getDescription()), clean(request.getDescription()))
+                && sameNumber(product.getBasePrice(), request.getPrice() == null ? 0 : request.getPrice())
+                && sameNumber(product.getCostPrice(), request.getCostPrice() == null ? 0 : request.getCostPrice())
+                && Objects.equals(customizableOrDefault(product), request.getCustomizable() == null
+                        ? customizableOrDefault(product) : request.getCustomizable())
+                && Objects.equals(product.getImageUrls() == null ? List.of() : product.getImageUrls(), requestImages);
+    }
+
+    private void applyInventoryRequest(Product product, ProductRequestDTO request) {
+        applyVariantRequestInPlace(product, request.getVariants(), true);
+        ProductStatus status = resolveStatus(request);
+        product.setStatus(status);
+        product.setActive(status == ProductStatus.ACTIVE);
+    }
+
+    private void applyVariantRequestInPlace(Product product,
+                                            List<ProductRequestDTO.ProductVariantRequestDTO> variants,
+                                            boolean keepZeroStock) {
+        LinkedHashMap<VariantKey, Integer> requested = requestedVariantStock(variants, keepZeroStock);
+        if (product.getVariants() == null) {
+            product.setVariants(new ArrayList<>());
+        }
+        for (ProductVariant variant : product.getVariants()) {
+            VariantKey key = VariantKey.from(variant);
+            if (requested.containsKey(key)) {
+                variant.setStock(requested.remove(key));
+            } else {
+                variant.setStock(0);
+            }
+            variant.setActive(true);
+        }
+        requested.forEach((key, stock) -> {
+            ProductVariant variant = new ProductVariant();
+            variant.setSize(key.size());
+            variant.setColor(key.color());
+            variant.setStock(stock);
+            variant.setActive(true);
+            product.getVariants().add(variant);
+        });
+    }
+
+    private LinkedHashMap<VariantKey, Integer> requestedVariantStock(
+            List<ProductRequestDTO.ProductVariantRequestDTO> requests,
+            boolean keepZeroStock) {
+        LinkedHashMap<VariantKey, Integer> variants = new LinkedHashMap<>();
+        if (requests == null) {
+            return variants;
+        }
+        for (ProductRequestDTO.ProductVariantRequestDTO request : requests) {
+            if (request == null) {
+                continue;
+            }
+            requireText(request.getSize(), "Variant size");
+            if (request.getStock() == null || request.getStock() < 0) {
+                throw new BusinessRuleException("Variant stock cannot be negative");
+            }
+            if (!keepZeroStock && request.getStock() == 0) {
+                continue;
+            }
+            Color color = request.getColor() == null ? Color.BLACK : request.getColor();
+            variants.put(new VariantKey(request.getSize().trim(), color), request.getStock());
+        }
+        return variants;
+    }
+
+    private void copyProductDiscounts(Product oldProduct, Product newProduct) {
+        List<Discount> discounts = discountRepository.findByProductId(oldProduct.getId());
+        for (Discount discount : discounts) {
+            Discount copy = new Discount();
+            copy.setStore(discount.getStore());
+            copy.setProduct(newProduct);
+            copy.setName(discount.getName());
+            copy.setDiscountType(discount.getDiscountType());
+            copy.setAppliesTo(discount.getAppliesTo());
+            copy.setUsageCount(discount.getUsageCount());
+            copy.setVolumeType(discount.getVolumeType());
+            copy.setMinQuantity(discount.getMinQuantity());
+            copy.setMaxQuantity(discount.getMaxQuantity());
+            copy.setDiscountPercentage(discount.getDiscountPercentage());
+            copy.setActive(discount.getActive());
+            copy.setDeleted(false);
+            discountRepository.save(copy);
+
+            discount.setActive(false);
+            discount.setDeleted(true);
+            discount.setDeletedAt(LocalDateTime.now());
+            discountRepository.save(discount);
+        }
+    }
+
     private void applyRequest(Product product, ProductRequestDTO request) {
         if (request == null) throw new BusinessRuleException("Product request is required");
         ProductStatus status  = resolveStatus(request);
@@ -211,7 +378,11 @@ public class ProductService extends AbstractCrudService<Product> {
         product.setCustomizable(customizable);
         replaceCollection(product.getImageUrls(),  buildImageUrls(request.getImageUrls()),   product::setImageUrls);
         replaceCollection(product.getAttributes(), List.of(),                                product::setAttributes);
-        replaceCollection(product.getVariants(),   buildVariants(request.getVariants()),     product::setVariants);
+        if (product.getId() == null) {
+            replaceCollection(product.getVariants(), buildVariants(request.getVariants()), product::setVariants);
+        } else {
+            applyVariantRequestInPlace(product, request.getVariants(), false);
+        }
         product.setStatus(status);
         product.setActive(status == ProductStatus.ACTIVE);
     }
@@ -248,20 +419,11 @@ public class ProductService extends AbstractCrudService<Product> {
 
     private List<ProductVariant> buildVariants(
             List<ProductRequestDTO.ProductVariantRequestDTO> requests) {
-        if (requests == null || requests.isEmpty()) return new ArrayList<>();
-        return requests.stream().filter(r -> {
-            if (r == null) return false;
-            if (r.getStock() == null || r.getStock() < 0) return true;
-            return r.getStock() > 0;
-        }).map(r -> {
-            requireText(r.getSize(), "Variant size");
-            if (r.getStock() == null || r.getStock() < 0) {
-                throw new BusinessRuleException("Variant stock cannot be negative");
-            }
+        return requestedVariantStock(requests, false).entrySet().stream().map(entry -> {
             ProductVariant v = new ProductVariant();
-            v.setSize(r.getSize().trim());
-            v.setColor(r.getColor() == null ? Color.BLACK : r.getColor());
-            v.setStock(r.getStock());
+            v.setSize(entry.getKey().size());
+            v.setColor(entry.getKey().color());
+            v.setStock(entry.getValue());
             v.setActive(true);
             return v;
         }).collect(Collectors.toCollection(ArrayList::new));
@@ -272,6 +434,24 @@ public class ProductService extends AbstractCrudService<Product> {
         if (current == null) { setter.accept(new ArrayList<>(next)); return; }
         current.clear();
         current.addAll(next);
+    }
+
+    private String clean(String value) {
+        return MerchantStringUtil.blankToNull(value) == null ? null : value.trim();
+    }
+
+    private boolean sameNumber(double current, double next) {
+        return Math.abs(current - next) < 0.0001;
+    }
+
+    private boolean isDeleted(Product product) {
+        return Boolean.TRUE.equals(product.getDeleted());
+    }
+
+    private record VariantKey(String size, Color color) {
+        private static VariantKey from(ProductVariant variant) {
+            return new VariantKey(variant.getSize(), variant.getColor() == null ? Color.BLACK : variant.getColor());
+        }
     }
 
     private String resolveStatusLabel(Product product, int stock) {
