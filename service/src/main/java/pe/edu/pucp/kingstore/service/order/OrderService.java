@@ -13,6 +13,8 @@ import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
 import pe.edu.pucp.kingstore.domain.dto.order.OrderItemResponseDTO;
 import pe.edu.pucp.kingstore.domain.dto.order.OrderResponseDTO;
 import pe.edu.pucp.kingstore.domain.dto.order.OrderShippingResponseDTO;
+import pe.edu.pucp.kingstore.domain.dto.order.ShippingAddressRequestDTO;
+import pe.edu.pucp.kingstore.domain.model.order.enums.District;
 import pe.edu.pucp.kingstore.service.user.util.MerchantCustomerUtil;
 import pe.edu.pucp.kingstore.domain.model.quotation.Quotation;
 import pe.edu.pucp.kingstore.domain.model.quotation.QuotationItem;
@@ -227,6 +229,8 @@ public class OrderService extends AbstractCrudService<Order> {
         dto.setAddress(shipping.getAddress());
         dto.setDistrict(shipping.getDistrict() != null ? shipping.getDistrict().name() : null);
         dto.setReference(shipping.getDescription());
+        dto.setRecipientName(shipping.getRecipientName());
+        dto.setPhone(shipping.getPhone());
         dto.setEstimatedDeliveryDate(shipping.getEstimatedDeliveryDate());
         dto.setActualDeliveryDate(shipping.getActualDeliveryDate());
         return dto;
@@ -374,6 +378,73 @@ public class OrderService extends AbstractCrudService<Order> {
         if (order.getQuotation() != null) {
             order.getQuotation().setObservations(reason);
         }
+        return orderRepository.save(order);
+    }
+
+    @Transactional
+    public Order setShippingAddress(Integer orderId, ShippingAddressRequestDTO request) {
+        Order order = getById(orderId);
+        if (order.getStatus() == OrderStatus.CANCELLED) {
+            throw new BusinessRuleException("Cannot set shipping address on a cancelled order");
+        }
+        if (order.getStatus() == OrderStatus.DELIVERED) {
+            throw new BusinessRuleException("Cannot set shipping address on a delivered order");
+        }
+
+        String address = request.getAddress() != null ? request.getAddress().trim() : "";
+        if (address.isEmpty()) {
+            throw new BusinessRuleException("Shipping address is required");
+        }
+        if (address.length() > 255) {
+            throw new BusinessRuleException("Shipping address must not exceed 255 characters");
+        }
+
+        String districtStr = request.getDistrict() != null ? request.getDistrict().trim() : "";
+        if (districtStr.isEmpty()) {
+            throw new BusinessRuleException("District is required");
+        }
+        District district;
+        try {
+            district = District.valueOf(districtStr);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessRuleException("Invalid district: " + districtStr);
+        }
+
+        String reference = request.getReference() != null ? request.getReference().trim() : null;
+        if (reference != null && reference.isEmpty()) {
+            reference = null;
+        }
+        if (reference != null && reference.length() > 500) {
+            throw new BusinessRuleException("Reference must not exceed 500 characters");
+        }
+
+        String recipientName = request.getRecipientName() != null ? request.getRecipientName().trim() : null;
+        if (recipientName != null && recipientName.isEmpty()) {
+            recipientName = null;
+        }
+        if (recipientName != null && recipientName.length() > 150) {
+            throw new BusinessRuleException("Recipient name must not exceed 150 characters");
+        }
+
+        String phone = request.getPhone() != null ? request.getPhone().trim() : null;
+        if (phone != null && phone.isEmpty()) {
+            phone = null;
+        }
+        if (phone != null && phone.length() > 20) {
+            throw new BusinessRuleException("Phone must not exceed 20 characters");
+        }
+
+        ShippingDetail shipping = order.getShippingDetail();
+        if (shipping == null) {
+            shipping = new ShippingDetail();
+            order.setShippingDetail(shipping);
+        }
+        shipping.setAddress(address);
+        shipping.setDistrict(district);
+        shipping.setDescription(reference);
+        shipping.setRecipientName(recipientName);
+        shipping.setPhone(phone);
+
         return orderRepository.save(order);
     }
 

@@ -6,6 +6,7 @@ import org.springframework.web.bind.annotation.*;
 import pe.edu.pucp.kingstore.api.context.CustomerContext;
 import pe.edu.pucp.kingstore.domain.model.store.Store;
 import pe.edu.pucp.kingstore.domain.model.user.Customer;
+import pe.edu.pucp.kingstore.domain.dto.order.ShippingAddressRequestDTO;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
 import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
 import pe.edu.pucp.kingstore.service.order.OrderService;
@@ -59,6 +60,25 @@ public class CustomerOrderController {
             return ResponseEntity.ok(orderService.toResponseDTO(order, store.getId()));
         } catch (ResourceNotFoundException | BusinessRuleException e) {
             return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    // PUT /stores/{slug}/orders/{id}/shipping-address
+    @PutMapping("/{id}/shipping-address")
+    public ResponseEntity<?> setShippingAddress(@PathVariable String slug,
+                                                @PathVariable Integer id,
+                                                Authentication authentication,
+                                                @RequestBody ShippingAddressRequestDTO request) {
+        try {
+            Store store       = customerContext.store(slug);
+            Customer customer = customerContext.customer(authentication, store);
+            orderService.findByCustomerInStore(id, customer.getId(), store.getId());
+            var updated = orderService.setShippingAddress(id, request);
+            return ResponseEntity.ok(orderService.toResponseDTO(updated, store.getId()));
+        } catch (ResourceNotFoundException e) {
+            return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
+        } catch (BusinessRuleException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 }

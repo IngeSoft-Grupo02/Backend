@@ -12,6 +12,7 @@ import pe.edu.pucp.kingstore.domain.model.order.Order;
 import pe.edu.pucp.kingstore.domain.model.order.enums.OrderStatus;
 import pe.edu.pucp.kingstore.domain.model.store.Store;
 import pe.edu.pucp.kingstore.domain.model.user.Customer;
+import pe.edu.pucp.kingstore.domain.dto.order.ShippingAddressRequestDTO;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
 import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
 import pe.edu.pucp.kingstore.service.order.OrderService;
@@ -117,5 +118,69 @@ class CustomerOrderControllerTest {
         var result = controller.findById("tienda-luna", 99, authentication);
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    // ── PUT /stores/{slug}/orders/{id}/shipping-address ───────────────────────
+
+    private ShippingAddressRequestDTO shippingRequest() {
+        var dto = new ShippingAddressRequestDTO();
+        dto.setAddress("Av. Larco 123");
+        dto.setDistrict("MIRAFLORES");
+        dto.setReference("Frente al parque");
+        dto.setRecipientName("Ana García");
+        dto.setPhone("987654321");
+        return dto;
+    }
+
+    @Test
+    void setShippingAddressReturnsOk() {
+        var request = shippingRequest();
+        when(customerContext.store("tienda-luna")).thenReturn(store);
+        when(customerContext.customer(authentication, store)).thenReturn(customer);
+        when(orderService.findByCustomerInStore(1, 1, 10)).thenReturn(order);
+        when(orderService.setShippingAddress(1, request)).thenReturn(order);
+        when(orderService.toResponseDTO(order, 10)).thenReturn(new OrderResponseDTO());
+
+        var result = controller.setShippingAddress("tienda-luna", 1, authentication, request);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void setShippingAddressReturns404WhenOrderNotFound() {
+        var request = shippingRequest();
+        when(customerContext.store("tienda-luna")).thenReturn(store);
+        when(customerContext.customer(authentication, store)).thenReturn(customer);
+        when(orderService.findByCustomerInStore(99, 1, 10))
+                .thenThrow(new ResourceNotFoundException("Order", 99));
+
+        var result = controller.setShippingAddress("tienda-luna", 99, authentication, request);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void setShippingAddressReturnsBadRequestOnBusinessRule() {
+        var request = shippingRequest();
+        when(customerContext.store("tienda-luna")).thenReturn(store);
+        when(customerContext.customer(authentication, store)).thenReturn(customer);
+        when(orderService.findByCustomerInStore(1, 1, 10)).thenReturn(order);
+        when(orderService.setShippingAddress(1, request))
+                .thenThrow(new BusinessRuleException("Order is cancelled"));
+
+        var result = controller.setShippingAddress("tienda-luna", 1, authentication, request);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    void setShippingAddressReturnsBadRequestWhenStoreNotFound() {
+        var request = shippingRequest();
+        when(customerContext.store("tienda-luna"))
+                .thenThrow(new BusinessRuleException("Store not found"));
+
+        var result = controller.setShippingAddress("tienda-luna", 1, authentication, request);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 }
