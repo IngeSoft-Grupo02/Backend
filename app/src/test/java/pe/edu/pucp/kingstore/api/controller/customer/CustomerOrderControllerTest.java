@@ -166,11 +166,12 @@ class CustomerOrderControllerTest {
         when(customerContext.customer(authentication, store)).thenReturn(customer);
         when(orderService.findByCustomerInStore(1, 1, 10)).thenReturn(order);
         when(orderService.setShippingAddress(1, request))
-                .thenThrow(new BusinessRuleException("Order is cancelled"));
+                .thenThrow(new BusinessRuleException("Distrito inválido: Atlantis"));
 
         var result = controller.setShippingAddress("tienda-luna", 1, authentication, request);
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(result.getBody()).isEqualTo(Map.of("error", "Distrito inválido: Atlantis"));
     }
 
     @Test

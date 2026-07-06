@@ -23,6 +23,8 @@ import pe.edu.pucp.kingstore.repository.quotation.QuotationRepository;
 import pe.edu.pucp.kingstore.service.store.StoreService;
 
 
+import java.text.Normalizer;
+import java.util.Locale;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -358,6 +360,30 @@ public class OrderService extends AbstractCrudService<Order> {
         return orderRepository.save(order);
     }
 
+    private District parseDistrict(String rawDistrict) {
+        String districtStr = rawDistrict != null ? rawDistrict.trim() : "";
+        if (districtStr.isEmpty()) {
+            throw new BusinessRuleException("District is required");
+        }
+
+        String normalizedDistrict = normalizeDistrictCode(districtStr);
+        try {
+            return District.valueOf(normalizedDistrict);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessRuleException("Distrito inválido: " + districtStr);
+        }
+    }
+
+    private String normalizeDistrictCode(String value) {
+        String withoutDiacritics = Normalizer.normalize(value, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}+", "");
+        return withoutDiacritics
+                .toUpperCase(Locale.ROOT)
+                .replaceAll("[^A-Z0-9]+", "_")
+                .replaceAll("_+", "_")
+                .replaceAll("^_|_$", "");
+    }
+
     /**
      * Cancela un pedido. El motivo es obligatorio.
      * Solo se pueden cancelar pedidos que no estén entregados ni ya cancelados.
@@ -383,6 +409,10 @@ public class OrderService extends AbstractCrudService<Order> {
 
     @Transactional
     public Order setShippingAddress(Integer orderId, ShippingAddressRequestDTO request) {
+        if (request == null) {
+            throw new BusinessRuleException("Shipping address request is required");
+        }
+
         Order order = getById(orderId);
         if (order.getStatus() == OrderStatus.CANCELLED) {
             throw new BusinessRuleException("Cannot set shipping address on a cancelled order");
@@ -399,16 +429,7 @@ public class OrderService extends AbstractCrudService<Order> {
             throw new BusinessRuleException("Shipping address must not exceed 255 characters");
         }
 
-        String districtStr = request.getDistrict() != null ? request.getDistrict().trim() : "";
-        if (districtStr.isEmpty()) {
-            throw new BusinessRuleException("District is required");
-        }
-        District district;
-        try {
-            district = District.valueOf(districtStr.toUpperCase().replace(' ', '_'));
-        } catch (IllegalArgumentException e) {
-            throw new BusinessRuleException("Invalid district: " + districtStr);
-        }
+        District district = parseDistrict(request.getDistrict());
 
         String reference = request.getReference() != null ? request.getReference().trim() : null;
         if (reference != null && reference.isEmpty()) {

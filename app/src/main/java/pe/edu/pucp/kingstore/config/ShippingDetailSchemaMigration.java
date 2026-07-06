@@ -65,6 +65,7 @@ public class ShippingDetailSchemaMigration implements ApplicationRunner {
         addColumnIfMissing("shipping_detail", "active", "BIT(1) NOT NULL DEFAULT 1");
         addColumnIfMissing("shipping_detail", "address", "VARCHAR(255) NOT NULL DEFAULT ''");
         addColumnIfMissing("shipping_detail", "district", "VARCHAR(255) NOT NULL DEFAULT 'OTRO'");
+        ensureDistrictColumnType();
         addColumnIfMissing("shipping_detail", "description", "VARCHAR(500) NULL");
         addColumnIfMissing("shipping_detail", "estimated_delivery_date", "DATE NULL");
         addColumnIfMissing("shipping_detail", "actual_delivery_date", "DATE NULL");
@@ -89,6 +90,34 @@ public class ShippingDetailSchemaMigration implements ApplicationRunner {
         log.info("Adding shipping_detail.id primary key column");
         jdbcTemplate.execute(
                 "ALTER TABLE shipping_detail ADD COLUMN id INT AUTO_INCREMENT PRIMARY KEY FIRST");
+    }
+
+    private void ensureDistrictColumnType() {
+        List<Map<String, Object>> columns = jdbcTemplate.queryForList("""
+                SELECT DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, IS_NULLABLE
+                FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = 'shipping_detail'
+                  AND COLUMN_NAME = 'district'
+                """);
+        if (columns.isEmpty()) {
+            return;
+        }
+
+        Map<String, Object> column = columns.get(0);
+        String dataType = String.valueOf(column.getOrDefault("DATA_TYPE", ""));
+        Object maxLength = column.get("CHARACTER_MAXIMUM_LENGTH");
+        String isNullable = String.valueOf(column.getOrDefault("IS_NULLABLE", ""));
+        boolean isVarchar = "varchar".equalsIgnoreCase(dataType);
+        boolean hasEnoughLength = maxLength instanceof Number number && number.longValue() >= 255;
+        boolean isNotNull = "NO".equalsIgnoreCase(isNullable);
+        if (isVarchar && hasEnoughLength && isNotNull) {
+            return;
+        }
+
+        log.info("Normalizing shipping_detail.district column to VARCHAR(255) NOT NULL");
+        jdbcTemplate.execute("UPDATE shipping_detail SET district = 'OTRO' WHERE district IS NULL");
+        jdbcTemplate.execute("ALTER TABLE shipping_detail MODIFY COLUMN district VARCHAR(255) NOT NULL DEFAULT 'OTRO'");
     }
 
     private void ensureOrderFkColumn() {

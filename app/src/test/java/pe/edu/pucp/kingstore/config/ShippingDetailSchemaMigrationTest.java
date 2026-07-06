@@ -76,6 +76,23 @@ class ShippingDetailSchemaMigrationTest {
     }
 
     @Test
+    void normalizesDistrictColumnWhenExistingTypeIsNotVarchar() throws Exception {
+        JdbcTemplate jdbcTemplate = mysqlJdbcTemplate();
+
+        whenShippingDetailTableExists(jdbcTemplate, true);
+        whenShippingDetailIdExists(jdbcTemplate);
+        whenShippingDetailColumnsExist(jdbcTemplate);
+        whenDistrictColumnIsEnum(jdbcTemplate);
+        whenPurchaseOrderShippingDetailColumnExists(jdbcTemplate);
+        whenExistingForeignKey(jdbcTemplate);
+
+        new ShippingDetailSchemaMigration(jdbcTemplate).run(mock(ApplicationArguments.class));
+
+        verify(jdbcTemplate).execute("UPDATE shipping_detail SET district = 'OTRO' WHERE district IS NULL");
+        verify(jdbcTemplate).execute("ALTER TABLE shipping_detail MODIFY COLUMN district VARCHAR(255) NOT NULL DEFAULT 'OTRO'");
+    }
+
+    @Test
     void addsIndexAndForeignKeyWhenSafeAndMissing() throws Exception {
         JdbcTemplate jdbcTemplate = mysqlJdbcTemplate();
 
@@ -159,6 +176,19 @@ class ShippingDetailSchemaMigrationTest {
     private void whenShippingDetailColumnsExist(JdbcTemplate jdbcTemplate) {
         when(jdbcTemplate.queryForList(eq("SHOW COLUMNS FROM shipping_detail LIKE ?"), anyString()))
                 .thenReturn(List.of(Map.of("Field", "exists")));
+    }
+
+    private void whenDistrictColumnIsEnum(JdbcTemplate jdbcTemplate) {
+        when(jdbcTemplate.queryForList("""
+                SELECT DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, IS_NULLABLE
+                FROM information_schema.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = 'shipping_detail'
+                  AND COLUMN_NAME = 'district'
+                """)).thenReturn(List.of(Map.of(
+                "DATA_TYPE", "enum",
+                "CHARACTER_MAXIMUM_LENGTH", 20,
+                "IS_NULLABLE", "NO")));
     }
 
     private void whenPurchaseOrderShippingDetailColumnExists(JdbcTemplate jdbcTemplate) {
