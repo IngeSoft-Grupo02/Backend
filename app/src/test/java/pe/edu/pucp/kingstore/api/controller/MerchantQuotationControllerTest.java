@@ -15,7 +15,7 @@ import pe.edu.pucp.kingstore.domain.model.quotation.Quotation;
 import pe.edu.pucp.kingstore.domain.model.quotation.enums.QuotationStatus;
 import pe.edu.pucp.kingstore.domain.model.store.Store;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
-import pe.edu.pucp.kingstore.service.order.OrderService;
+import pe.edu.pucp.kingstore.service.quotation.QuotationOrderWorkflowService;
 import pe.edu.pucp.kingstore.service.quotation.QuotationService;
 
 import java.util.List;
@@ -23,7 +23,6 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -31,7 +30,7 @@ class MerchantQuotationControllerTest {
 
     @Mock private MerchantContext merchantContext;
     @Mock private QuotationService quotationService;
-    @Mock private OrderService orderService;
+    @Mock private QuotationOrderWorkflowService quotationOrderWorkflowService;
 
     private MerchantQuotationController controller;
     private Authentication authentication;
@@ -39,7 +38,8 @@ class MerchantQuotationControllerTest {
 
     @BeforeEach
     void setUp() {
-        controller = new MerchantQuotationController(merchantContext, quotationService, orderService);
+        controller = new MerchantQuotationController(
+                merchantContext, quotationService, quotationOrderWorkflowService);
         authentication = mock(Authentication.class);
         store = new Store();
         store.setId(10);
@@ -112,14 +112,15 @@ class MerchantQuotationControllerTest {
         request.setObservations("Aprobado");
 
         when(merchantContext.currentStore(authentication, 10)).thenReturn(store);
-        when(quotationService.findInStore(7, 10)).thenReturn(quotation);
-        when(quotationService.respond(7, QuotationStatus.APPROVED, "Aprobado", null)).thenReturn(responded);
+        when(quotationOrderWorkflowService.respondMerchantQuotation(
+                7, 10, QuotationStatus.APPROVED, "Aprobado", null)).thenReturn(responded);
         when(quotationService.toResponseDTO(7, 10)).thenReturn(dto);
 
         var result = controller.respondQuotation(authentication, 7, 10, request);
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
-        verify(orderService).createFromQuotation(7);
+        verify(quotationOrderWorkflowService).respondMerchantQuotation(
+                7, 10, QuotationStatus.APPROVED, "Aprobado", null);
     }
 
     @Test
@@ -137,14 +138,15 @@ class MerchantQuotationControllerTest {
         request.setObservations("Sin stock");
 
         when(merchantContext.currentStore(authentication, 10)).thenReturn(store);
-        when(quotationService.findInStore(8, 10)).thenReturn(quotation);
-        when(quotationService.respond(8, QuotationStatus.REJECTED, "Sin stock", null)).thenReturn(responded);
+        when(quotationOrderWorkflowService.respondMerchantQuotation(
+                8, 10, QuotationStatus.REJECTED, "Sin stock", null)).thenReturn(responded);
         when(quotationService.toResponseDTO(8, 10)).thenReturn(dto);
 
         var result = controller.respondQuotation(authentication, 8, 10, request);
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
-        verify(orderService, never()).createFromQuotation(8);
+        verify(quotationOrderWorkflowService).respondMerchantQuotation(
+                8, 10, QuotationStatus.REJECTED, "Sin stock", null);
     }
 
     @Test
@@ -152,7 +154,9 @@ class MerchantQuotationControllerTest {
         QuotationResponseRequestDTO request = new QuotationResponseRequestDTO();
         request.setStatus(QuotationStatus.APPROVED);
         when(merchantContext.currentStore(authentication, 10)).thenReturn(store);
-        when(quotationService.findInStore(9, 10)).thenThrow(new BusinessRuleException("No pertenece a la tienda"));
+        when(quotationOrderWorkflowService.respondMerchantQuotation(
+                9, 10, QuotationStatus.APPROVED, null, null))
+                .thenThrow(new BusinessRuleException("No pertenece a la tienda"));
 
         var result = controller.respondQuotation(authentication, 9, 10, request);
 

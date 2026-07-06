@@ -13,6 +13,8 @@ import pe.edu.pucp.kingstore.api.context.CustomerContext;
 import pe.edu.pucp.kingstore.domain.dto.quotation.QuotationCreateRequestDTO;
 import pe.edu.pucp.kingstore.domain.dto.quotation.QuotationResponseDTO;
 import pe.edu.pucp.kingstore.domain.model.cart.ShoppingCart;
+import pe.edu.pucp.kingstore.domain.model.order.Order;
+import pe.edu.pucp.kingstore.domain.dto.order.OrderResponseDTO;
 import pe.edu.pucp.kingstore.domain.model.product.Product;
 import pe.edu.pucp.kingstore.domain.model.product.ProductVariant;
 import pe.edu.pucp.kingstore.domain.model.quotation.Quotation;
@@ -23,7 +25,9 @@ import pe.edu.pucp.kingstore.domain.model.user.Customer;
 import pe.edu.pucp.kingstore.service.cart.ShoppingCartService;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
 import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
+import pe.edu.pucp.kingstore.service.order.OrderService;
 import pe.edu.pucp.kingstore.service.quotation.QuotationDesignService;
+import pe.edu.pucp.kingstore.service.quotation.QuotationOrderWorkflowService;
 import pe.edu.pucp.kingstore.service.quotation.QuotationService;
 import java.util.List;
 import java.util.Map;
@@ -45,6 +49,8 @@ class CustomerQuotationControllerTest {
     @Mock private ShoppingCartService shoppingCartService;
     @Mock private QuotationService    quotationService;
     @Mock private QuotationDesignService quotationDesignService;
+    @Mock private QuotationOrderWorkflowService quotationOrderWorkflowService;
+    @Mock private OrderService orderService;
     private CustomerQuotationController controller;
     private Authentication authentication;
     private Store store;
@@ -56,7 +62,12 @@ class CustomerQuotationControllerTest {
     @BeforeEach
     void setUp() {
         controller = new CustomerQuotationController(
-                customerContext, shoppingCartService, quotationService, quotationDesignService);
+                customerContext,
+                shoppingCartService,
+                quotationService,
+                quotationDesignService,
+                quotationOrderWorkflowService,
+                orderService);
         authentication = mock(Authentication.class);
 
         store = new Store();
@@ -321,6 +332,50 @@ class CustomerQuotationControllerTest {
                 .thenThrow(new ResourceNotFoundException("Quotation", 99));
 
         var result = controller.findById("tienda-luna", 99, authentication);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void ensureOrderReturnsOrderForApprovedQuotation() {
+        Order order = new Order();
+        order.setId(77);
+        OrderResponseDTO dto = new OrderResponseDTO();
+        dto.setId(77);
+
+        when(customerContext.store("tienda-luna")).thenReturn(store);
+        when(customerContext.customer(authentication, store)).thenReturn(customer);
+        when(quotationOrderWorkflowService.ensureCustomerOrderFromApprovedQuotation(1, 1, 10))
+                .thenReturn(order);
+        when(orderService.toResponseDTO(order, 10)).thenReturn(dto);
+
+        var result = controller.ensureOrder("tienda-luna", 1, authentication);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(((OrderResponseDTO) result.getBody()).getId()).isEqualTo(77);
+    }
+
+    @Test
+    void ensureOrderReturnsBadRequestWhenQuotationIsNotApproved() {
+        when(customerContext.store("tienda-luna")).thenReturn(store);
+        when(customerContext.customer(authentication, store)).thenReturn(customer);
+        when(quotationOrderWorkflowService.ensureCustomerOrderFromApprovedQuotation(1, 1, 10))
+                .thenThrow(new BusinessRuleException(
+                        "Order can only be created from an approved quotation"));
+
+        var result = controller.ensureOrder("tienda-luna", 1, authentication);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    void ensureOrderReturns404WhenQuotationDoesNotBelongToCustomer() {
+        when(customerContext.store("tienda-luna")).thenReturn(store);
+        when(customerContext.customer(authentication, store)).thenReturn(customer);
+        when(quotationOrderWorkflowService.ensureCustomerOrderFromApprovedQuotation(99, 1, 10))
+                .thenThrow(new ResourceNotFoundException("Quotation", 99));
+
+        var result = controller.ensureOrder("tienda-luna", 99, authentication);
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
