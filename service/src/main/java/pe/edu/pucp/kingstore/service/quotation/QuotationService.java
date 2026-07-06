@@ -58,6 +58,8 @@ public class QuotationService extends AbstractCrudService<Quotation> {
         quotation.setStatus(QuotationStatus.PENDING);
         quotation.setDiscount(0);
         quotation.setDescription(normalizeDescription(description));
+        quotation.setDesignFeePercentageApplied(designFeePercentage(cart));
+        quotation.setDesignFeeTotal(0.0);
 
         List<QuotationItem> items = cart.getItems().stream().map(cartItem -> {
             QuotationItem qi = new QuotationItem();
@@ -86,16 +88,22 @@ public class QuotationService extends AbstractCrudService<Quotation> {
             return quotation;
         }
 
+        double appliedPercentage = appliedDesignFeePercentage(quotation);
+        quotation.setDesignFeePercentageApplied(appliedPercentage);
+
+        double designFeeTotal = 0;
         for (QuotationItem item : quotation.getItems()) {
             boolean hasItemDesign = quotation.getDesigns().stream()
                     .anyMatch(design -> isDesignForItem(design, item)
                             && Boolean.TRUE.equals(design.getActive()));
             double baseSubtotal = baseSubtotal(item);
-            double designFeeAmount = hasItemDesign ? designFeeAmount(item) : 0;
+            double designFeeAmount = hasItemDesign ? designFeeAmount(item, appliedPercentage) : 0;
+            designFeeTotal += designFeeAmount;
             double amountBeforeDiscount = round(baseSubtotal + designFeeAmount);
             item.setSubTotal(amountBeforeDiscount);
             item.setPrice(round(amountBeforeDiscount / item.getQuantity()));
         }
+        quotation.setDesignFeeTotal(round(designFeeTotal));
         recalculateTotals(quotation);
         return quotationRepository.save(quotation);
     }
@@ -237,6 +245,12 @@ public class QuotationService extends AbstractCrudService<Quotation> {
         if (quotation.getStatus() == null) {
             quotation.setStatus(QuotationStatus.PENDING);
         }
+        if (quotation.getDesignFeePercentageApplied() == null) {
+            quotation.setDesignFeePercentageApplied(designFeePercentage(quotation.getShoppingCart()));
+        }
+        if (quotation.getDesignFeeTotal() == null) {
+            quotation.setDesignFeeTotal(0.0);
+        }
         recalculateTotals(quotation);
     }
 
@@ -278,10 +292,11 @@ public class QuotationService extends AbstractCrudService<Quotation> {
                 ? List.of()
                 : quotation.getDesigns();
 
+        Double appliedPercentageSnapshot = quotation.getDesignFeePercentageApplied();
         List<QuotationItemResponseDTO> items = quotation.getItems() == null
                 ? List.of()
                 : quotation.getItems().stream()
-                  .map(item -> toItemResponseDTO(item, allDesigns))
+                  .map(item -> toItemResponseDTO(item, allDesigns, appliedPercentageSnapshot))
                   .toList();
 
         QuotationResponseDTO dto = new QuotationResponseDTO();
@@ -302,8 +317,13 @@ public class QuotationService extends AbstractCrudService<Quotation> {
                 .mapToDouble(QuotationItemResponseDTO::getBaseSubtotal)
                 .sum()));
         dto.setDiscountTotal(discount);
-        dto.setDesignFeeTotal(round(quotation.getSubTotal() - dto.getProductSubtotal()));
-        dto.setDesignFeePercentage(representativeDesignFeePercentage(items));
+        double designFeeTotal = quotation.getDesignFeeTotal() == null
+                ? round(quotation.getSubTotal() - dto.getProductSubtotal())
+                : round(quotation.getDesignFeeTotal());
+        double designFeePercentage = responseDesignFeePercentage(quotation, items);
+        dto.setDesignFeeTotal(designFeeTotal);
+        dto.setDesignFeePercentage(designFeePercentage);
+        dto.setDesignFeePercentageApplied(designFeePercentage);
         dto.setRequestedAt(quotation.getRequestedAt());
         dto.setResponseAt(quotation.getResponseAt());
         dto.setDescription(quotation.getDescription());
@@ -325,7 +345,8 @@ public class QuotationService extends AbstractCrudService<Quotation> {
     }
 
     private QuotationItemResponseDTO toItemResponseDTO(QuotationItem item,
-                                                        List<QuotationDesign> allDesigns) {
+                                                       List<QuotationDesign> allDesigns,
+                                                       Double appliedPercentageSnapshot) {
         var variant = item.getProductVariant();
         var product = variant != null ? variant.getProduct() : null;
 
@@ -353,7 +374,7 @@ public class QuotationService extends AbstractCrudService<Quotation> {
         dto.setQuantity(item.getQuantity());
         dto.setUnitPrice(item.getPrice());
         dto.setSubTotal(item.getSubTotal());
-        applyPricingBreakdown(dto, item, itemDesigns);
+        applyPricingBreakdown(dto, item, itemDesigns, appliedPercentageSnapshot);
         dto.setCustomerDescription(item.getCustomerDescription());
         dto.setDesigns(itemDesigns);
 
@@ -377,7 +398,8 @@ public class QuotationService extends AbstractCrudService<Quotation> {
     }
 
     private void applyPricingBreakdown(QuotationItemResponseDTO dto, QuotationItem item,
-                                       List<QuotationDesignDTO> itemDesigns) {
+                                       List<QuotationDesignDTO> itemDesigns,
+                                       Double appliedPercentageSnapshot) {
         double baseUnitPrice = item.getProductVariant() != null
                 && item.getProductVariant().getProduct() != null
                 ? item.getProductVariant().getProduct().getBasePrice()
@@ -385,8 +407,9 @@ public class QuotationService extends AbstractCrudService<Quotation> {
         double baseSubtotal = round(baseUnitPrice * item.getQuantity());
         boolean hasDesignFee = !itemDesigns.isEmpty();
         double designFeeAmount = hasDesignFee ? historicalDesignFeeAmount(item, baseSubtotal) : 0;
-        double designFeePercentage = hasDesignFee ? percentageFromAmount(baseSubtotal, designFeeAmount)
-                : designFeePercentage(item);
+        double designFeePercentage = appliedPercentageSnapshot == null
+                ? (hasDesignFee ? percentageFromAmount(baseSubtotal, designFeeAmount) : designFeePercentage(item))
+                : StoreService.effectiveDesignFeePercentage(appliedPercentageSnapshot);
         double discountAmount = 0;
         double lineTotal = round(item.getSubTotal());
 
@@ -410,8 +433,8 @@ public class QuotationService extends AbstractCrudService<Quotation> {
         return associatedItem == item;
     }
 
-    private double designFeeAmount(QuotationItem item) {
-        return round(baseSubtotal(item) * designFeePercentage(item) / 100);
+    private double designFeeAmount(QuotationItem item, double designFeePercentage) {
+        return round(baseSubtotal(item) * designFeePercentage / 100);
     }
 
     private double baseSubtotal(QuotationItem item) {
@@ -432,6 +455,29 @@ public class QuotationService extends AbstractCrudService<Quotation> {
         return StoreService.effectiveDesignFeePercentage(product.getStore().getDesignFeePercentage());
     }
 
+    private double designFeePercentage(ShoppingCart cart) {
+        if (cart == null || cart.getItems() == null) {
+            return StoreService.DEFAULT_DESIGN_FEE_PERCENTAGE;
+        }
+        return cart.getItems().stream()
+                .map(item -> item.getProductVariant() != null ? item.getProductVariant().getProduct() : null)
+                .filter(Objects::nonNull)
+                .map(Product::getStore)
+                .filter(Objects::nonNull)
+                .map(store -> StoreService.effectiveDesignFeePercentage(store.getDesignFeePercentage()))
+                .findFirst()
+                .orElse(StoreService.DEFAULT_DESIGN_FEE_PERCENTAGE);
+    }
+
+    private double appliedDesignFeePercentage(Quotation quotation) {
+        if (quotation == null || quotation.getDesignFeePercentageApplied() == null) {
+            return quotation == null
+                    ? StoreService.DEFAULT_DESIGN_FEE_PERCENTAGE
+                    : designFeePercentage(quotation.getShoppingCart());
+        }
+        return StoreService.effectiveDesignFeePercentage(quotation.getDesignFeePercentageApplied());
+    }
+
     private double historicalDesignFeeAmount(QuotationItem item, double baseSubtotal) {
         return round(Math.max(0, item.getSubTotal() - baseSubtotal));
     }
@@ -449,6 +495,17 @@ public class QuotationService extends AbstractCrudService<Quotation> {
                 .mapToDouble(QuotationItemResponseDTO::getDesignFeePercentage)
                 .findFirst()
                 .orElse(StoreService.DEFAULT_DESIGN_FEE_PERCENTAGE);
+    }
+
+    private double responseDesignFeePercentage(Quotation quotation, List<QuotationItemResponseDTO> items) {
+        if (quotation.getDesignFeePercentageApplied() != null) {
+            return StoreService.effectiveDesignFeePercentage(quotation.getDesignFeePercentageApplied());
+        }
+        return items.stream()
+                .filter(QuotationItemResponseDTO::isHasDesignFee)
+                .mapToDouble(QuotationItemResponseDTO::getDesignFeePercentage)
+                .findFirst()
+                .orElseGet(() -> designFeePercentage(quotation.getShoppingCart()));
     }
 
     private double round(double value) {

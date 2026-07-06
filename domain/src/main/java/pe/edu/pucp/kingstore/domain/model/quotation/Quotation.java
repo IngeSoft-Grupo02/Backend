@@ -29,6 +29,10 @@ public class Quotation extends BaseEntity {
     private double discount;
     @Column(nullable = false)
     private double totalAmount;
+    @Column(name = "design_fee_total")
+    private Double designFeeTotal;
+    @Column(name = "design_fee_percentage_applied")
+    private Double designFeePercentageApplied;
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private QuotationStatus status;

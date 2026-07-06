@@ -536,6 +536,8 @@ class OrderServiceTest {
         quotation.setId(1);
         quotation.setStatus(pe.edu.pucp.kingstore.domain.model.quotation.enums.QuotationStatus.APPROVED);
         quotation.setDiscount(0.0);
+        quotation.setDesignFeeTotal(15.0);
+        quotation.setDesignFeePercentageApplied(15.0);
         quotation.setItems(new java.util.ArrayList<>(List.of(qi)));
 
         when(quotationRepository.findById(1)).thenReturn(Optional.of(quotation));
@@ -550,6 +552,30 @@ class OrderServiceTest {
         assertThat(result.getItems().get(0).getQuantity()).isEqualTo(2);
         assertThat(result.getPartialTotal()).isEqualTo(200.0);
         assertThat(result.getFinalTotal()).isEqualTo(236.0);
+        assertThat(result.getDesignFeeTotal()).isEqualTo(15.0);
+        assertThat(result.getDesignFeePercentageApplied()).isEqualTo(15.0);
+    }
+
+    @Test
+    void createFromQuotationKeepsDesignFeeSnapshotOnExistingOrder() {
+        pe.edu.pucp.kingstore.domain.model.quotation.Quotation quotation =
+                new pe.edu.pucp.kingstore.domain.model.quotation.Quotation();
+        quotation.setId(1);
+        quotation.setStatus(pe.edu.pucp.kingstore.domain.model.quotation.enums.QuotationStatus.APPROVED);
+        quotation.setItems(new java.util.ArrayList<>());
+
+        Order existing = new Order();
+        existing.setId(1);
+        existing.setDesignFeeTotal(10.0);
+        existing.setDesignFeePercentageApplied(10.0);
+        when(quotationRepository.findById(1)).thenReturn(Optional.of(quotation));
+        when(orderRepository.findByQuotationId(1)).thenReturn(Optional.of(existing));
+
+        Order result = service.createFromQuotation(quotation);
+
+        assertThat(result).isSameAs(existing);
+        assertThat(result.getDesignFeeTotal()).isEqualTo(10.0);
+        assertThat(result.getDesignFeePercentageApplied()).isEqualTo(10.0);
     }
 
     @Test
