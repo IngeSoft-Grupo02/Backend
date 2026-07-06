@@ -71,6 +71,7 @@ public class QuotationService extends AbstractCrudService<Quotation> {
             qi.setQuantity(cartItem.getQuantity());
             qi.setPrice(cartItem.getPrice());
             qi.setSubTotal(cartItem.getSubtotal());
+            qi.setSourceCartItemId(cartItem.getId());
             if (cartItem.getCustomDesign() != null
                     && cartItem.getCustomDesign().getDescription() != null
                     && !cartItem.getCustomDesign().getDescription().isBlank()) {

@@ -23,4 +23,7 @@ public class QuotationItem extends BaseEntity {
 
     @Column(length = 500)
     private String customerDescription;
+
+    @Transient
+    private Integer sourceCartItemId;
 }

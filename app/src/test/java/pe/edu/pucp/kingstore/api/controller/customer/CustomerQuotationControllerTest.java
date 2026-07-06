@@ -209,6 +209,129 @@ class CustomerQuotationControllerTest {
     }
 
     @Test
+    void createQuotation_withDuplicateVariant_shouldAssociateDesignsByCartItemId() {
+        MockMultipartFile firstDesign = new MockMultipartFile(
+                "designs", "diseno-a.png", "image/png", "imagen-a".getBytes());
+        MockMultipartFile secondDesign = new MockMultipartFile(
+                "designs", "diseno-b.png", "image/png", "imagen-b".getBytes());
+
+        ProductVariant variant = new ProductVariant();
+        variant.setId(188);
+        QuotationItem firstItem = new QuotationItem();
+        firstItem.setId(201);
+        firstItem.setSourceCartItemId(501);
+        firstItem.setProductVariant(variant);
+        QuotationItem secondItem = new QuotationItem();
+        secondItem.setId(202);
+        secondItem.setSourceCartItemId(502);
+        secondItem.setProductVariant(variant);
+        quotation.setItems(List.of(firstItem, secondItem));
+
+        when(customerContext.store("tienda-luna")).thenReturn(store);
+        when(customerContext.customer(authentication, store)).thenReturn(customer);
+        when(shoppingCartService.getOrCreateCart(customer)).thenReturn(cart);
+        when(quotationService.createFromCart(cart, "Necesito dos disenos")).thenReturn(quotation);
+        when(quotationService.applyItemDesignFees(quotation)).thenReturn(quotation);
+        when(quotationService.toResponseDTO(quotation, 10)).thenReturn(responseDTO);
+
+        var result = controller.createMultipart(
+                "tienda-luna",
+                authentication,
+                "Necesito dos disenos",
+                List.of(firstDesign, secondDesign),
+                null,
+                "[{\"cartItemId\":501,\"productVariantId\":188},{\"cartItemId\":502,\"productVariantId\":188}]");
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        ArgumentCaptor<Map<Integer, QuotationDesignService.DesignAssociation>> associationsCaptor =
+                (ArgumentCaptor) ArgumentCaptor.forClass(Map.class);
+        verify(quotationDesignService).uploadDesignsWithAssociations(
+                eq(quotation), eq("tienda-luna"), eq(10), anyList(), associationsCaptor.capture());
+        assertThat(associationsCaptor.getValue().get(0).item()).isSameAs(firstItem);
+        assertThat(associationsCaptor.getValue().get(1).item()).isSameAs(secondItem);
+    }
+
+    @Test
+    void createQuotation_withDuplicateVariant_shouldAssociateDesignByQuotationItemId() {
+        MockMultipartFile design = new MockMultipartFile(
+                "designs", "diseno-a.png", "image/png", "imagen-a".getBytes());
+
+        ProductVariant variant = new ProductVariant();
+        variant.setId(188);
+        QuotationItem firstItem = new QuotationItem();
+        firstItem.setId(201);
+        firstItem.setSourceCartItemId(501);
+        firstItem.setProductVariant(variant);
+        QuotationItem secondItem = new QuotationItem();
+        secondItem.setId(202);
+        secondItem.setSourceCartItemId(502);
+        secondItem.setProductVariant(variant);
+        quotation.setItems(List.of(firstItem, secondItem));
+
+        when(customerContext.store("tienda-luna")).thenReturn(store);
+        when(customerContext.customer(authentication, store)).thenReturn(customer);
+        when(shoppingCartService.getOrCreateCart(customer)).thenReturn(cart);
+        when(quotationService.createFromCart(cart, "Necesito un diseno")).thenReturn(quotation);
+        when(quotationService.applyItemDesignFees(quotation)).thenReturn(quotation);
+        when(quotationService.toResponseDTO(quotation, 10)).thenReturn(responseDTO);
+
+        var result = controller.createMultipart(
+                "tienda-luna",
+                authentication,
+                "Necesito un diseno",
+                List.of(design),
+                null,
+                "[{\"quotationItemId\":202,\"productVariantId\":188}]");
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        ArgumentCaptor<Map<Integer, QuotationDesignService.DesignAssociation>> associationsCaptor =
+                (ArgumentCaptor) ArgumentCaptor.forClass(Map.class);
+        verify(quotationDesignService).uploadDesignsWithAssociations(
+                eq(quotation), eq("tienda-luna"), eq(10), anyList(), associationsCaptor.capture());
+        assertThat(associationsCaptor.getValue().get(0).item()).isSameAs(secondItem);
+    }
+
+    @Test
+    void createQuotation_withDuplicateVariantAndLegacyAssociation_shouldReturnClearBadRequest() {
+        MockMultipartFile design = new MockMultipartFile(
+                "designs", "diseno-a.png", "image/png", "imagen-a".getBytes());
+
+        ProductVariant variant = new ProductVariant();
+        variant.setId(188);
+        QuotationItem firstItem = new QuotationItem();
+        firstItem.setId(201);
+        firstItem.setProductVariant(variant);
+        QuotationItem secondItem = new QuotationItem();
+        secondItem.setId(202);
+        secondItem.setProductVariant(variant);
+        quotation.setItems(List.of(firstItem, secondItem));
+
+        when(customerContext.store("tienda-luna")).thenReturn(store);
+        when(customerContext.customer(authentication, store)).thenReturn(customer);
+        when(shoppingCartService.getOrCreateCart(customer)).thenReturn(cart);
+        when(quotationService.createFromCart(cart, "Necesito diseno")).thenReturn(quotation);
+
+        var result = controller.createMultipart(
+                "tienda-luna",
+                authentication,
+                "Necesito diseno",
+                List.of(design),
+                null,
+                "[{\"productVariantId\":188}]");
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        @SuppressWarnings("unchecked")
+        var body = (Map<String, Object>) result.getBody();
+        assertThat(body.get("error")).isEqualTo(
+                "La asociacion del diseno requiere quotationItemId o cartItemId porque la variante aparece mas de una vez.");
+        verify(quotationDesignService, never()).uploadDesignsWithAssociations(
+                eq(quotation), eq("tienda-luna"), eq(10), anyList(), anyMap());
+        verify(shoppingCartService, never()).deactivate(anyInt());
+    }
+
+    @Test
     void createQuotation_whenDesignUploadFails_shouldReturnClearErrorAndNotDeactivateCart() {
         MockMultipartFile design = new MockMultipartFile(
                 "designs", "diseno-frontal.png", "image/png", "imagen".getBytes());
