@@ -184,7 +184,7 @@ public class OrderService extends AbstractCrudService<Order> {
             oi.setProductVariant(qi.getProductVariant());
             oi.setQuantity(qi.getQuantity());
             oi.setUnitPrice(qi.getPrice());
-            oi.setSubTotal(qi.getSubTotal());
+            oi.setSubTotal(qi.getSubTotal()*1.18);
             return oi;
         }).toList();
 
