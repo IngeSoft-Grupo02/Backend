@@ -408,7 +408,7 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
         if (product == null || product.getStore() == null) {
             return DEFAULT_DESIGN_FEE_PERCENTAGE;
         }
-        return StoreService.normalizeDesignFeePercentage(product.getStore().getDesignFeePercentage());
+        return StoreService.effectiveDesignFeePercentage(product.getStore().getDesignFeePercentage());
     }
 
     private double representativeDesignFeePercentage(List<CartResponseDTO.CartItemResponseDTO> items) {
