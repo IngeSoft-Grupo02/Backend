@@ -40,6 +40,12 @@ public class Order extends BaseEntity {
     @Column(nullable = false)
     private Double totalDiscount;
 
+    @Column(name = "design_fee_total")
+    private Double designFeeTotal;
+
+    @Column(name = "design_fee_percentage_applied")
+    private Double designFeePercentageApplied;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private OrderStatus status;

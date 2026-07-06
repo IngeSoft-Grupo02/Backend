@@ -14,6 +14,7 @@ import pe.edu.pucp.kingstore.domain.model.quotation.Quotation;
 import pe.edu.pucp.kingstore.domain.model.quotation.QuotationDesign;
 import pe.edu.pucp.kingstore.domain.model.quotation.QuotationItem;
 import pe.edu.pucp.kingstore.domain.model.quotation.enums.QuotationStatus;
+import pe.edu.pucp.kingstore.domain.model.store.Store;
 import pe.edu.pucp.kingstore.domain.model.user.Customer;
 import pe.edu.pucp.kingstore.repository.quotation.QuotationRepository;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
@@ -448,6 +449,81 @@ class QuotationServiceTest {
     }
 
     @Test
+    void createFromCartSnapshotsCurrentStoreDesignFeePercentage() {
+        Store store = new Store();
+        store.setDesignFeePercentage(15.0);
+        Product product = new Product();
+        product.setId(1);
+        product.setBasePrice(100.0);
+        product.setStore(store);
+        ProductVariant variant = new ProductVariant();
+        variant.setId(1);
+        variant.setProduct(product);
+
+        pe.edu.pucp.kingstore.domain.model.cart.CartItem cartItem =
+                new pe.edu.pucp.kingstore.domain.model.cart.CartItem();
+        cartItem.setId(1);
+        cartItem.setProductVariant(variant);
+        cartItem.setQuantity(1);
+        cartItem.setPrice(100.0);
+        cartItem.setSubtotal(100.0);
+
+        ShoppingCart cart = cart(1);
+        cart.setItems(new ArrayList<>(List.of(cartItem)));
+        cart.setDiscount(0.0);
+
+        when(quotationRepository.findByShoppingCartId(1)).thenReturn(Optional.empty());
+        when(quotationRepository.save(any(Quotation.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Quotation result = service.createFromCart(cart);
+
+        assertThat(result.getDesignFeePercentageApplied()).isEqualTo(15.0);
+        assertThat(result.getDesignFeeTotal()).isEqualTo(0.0);
+    }
+
+    @Test
+    void createFromCartSnapshotsFiveAndTenPercentDesignFees() {
+        ShoppingCart fivePercentCart = cartWithDesignFee(5, 5.0);
+        ShoppingCart tenPercentCart = cartWithDesignFee(10, 10.0);
+        when(quotationRepository.findByShoppingCartId(5)).thenReturn(Optional.empty());
+        when(quotationRepository.findByShoppingCartId(10)).thenReturn(Optional.empty());
+        when(quotationRepository.save(any(Quotation.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Quotation fivePercent = service.createFromCart(fivePercentCart);
+        Quotation tenPercent = service.createFromCart(tenPercentCart);
+
+        assertThat(fivePercent.getDesignFeePercentageApplied()).isEqualTo(5.0);
+        assertThat(tenPercent.getDesignFeePercentageApplied()).isEqualTo(10.0);
+    }
+
+    private ShoppingCart cartWithDesignFee(int cartId, double designFeePercentage) {
+        Store store = new Store();
+        store.setDesignFeePercentage(designFeePercentage);
+        Product product = new Product();
+        product.setId(cartId);
+        product.setBasePrice(100.0);
+        product.setStore(store);
+        ProductVariant variant = new ProductVariant();
+        variant.setId(cartId);
+        variant.setProduct(product);
+
+        pe.edu.pucp.kingstore.domain.model.cart.CartItem cartItem =
+                new pe.edu.pucp.kingstore.domain.model.cart.CartItem();
+        cartItem.setId(cartId);
+        cartItem.setProductVariant(variant);
+        cartItem.setQuantity(1);
+        cartItem.setPrice(100.0);
+        cartItem.setSubtotal(100.0);
+
+        ShoppingCart cart = cart(cartId);
+        cart.setItems(new ArrayList<>(List.of(cartItem)));
+        cart.setDiscount(0.0);
+        return cart;
+    }
+
+    @Test
     void createFromCartCopiesItemCustomerDescription() {
         pe.edu.pucp.kingstore.domain.model.product.Product product =
                 new pe.edu.pucp.kingstore.domain.model.product.Product();
@@ -531,6 +607,40 @@ class QuotationServiceTest {
     }
 
     @Test
+    void applyItemDesignFeesUsesQuotationSnapshotWhenStorePercentageChanges() {
+        Store store = new Store();
+        store.setDesignFeePercentage(5.0);
+        Product product = new Product();
+        product.setBasePrice(100.0);
+        product.setStore(store);
+        ProductVariant variant = new ProductVariant();
+        variant.setId(101);
+        variant.setProduct(product);
+        QuotationItem item = new QuotationItem();
+        item.setId(201);
+        item.setProductVariant(variant);
+        item.setQuantity(1);
+        item.setPrice(100.0);
+        item.setSubTotal(100.0);
+
+        QuotationDesign design = new QuotationDesign();
+        design.setQuotationItem(item);
+        design.setActive(true);
+
+        Quotation quotation = quotation(1, cart(1), new ArrayList<>(List.of(item)), 0);
+        quotation.setDesignFeePercentageApplied(15.0);
+        quotation.setDesigns(new ArrayList<>(List.of(design)));
+        when(quotationRepository.save(any(Quotation.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Quotation result = service.applyItemDesignFees(quotation);
+
+        assertThat(result.getDesignFeePercentageApplied()).isEqualTo(15.0);
+        assertThat(result.getDesignFeeTotal()).isEqualTo(15.0);
+        assertThat(result.getTotalAmount()).isEqualTo(115.0);
+    }
+
+    @Test
     void toResponseDTOExposesPricingBreakdownForDiscountAndDesign() {
         pe.edu.pucp.kingstore.domain.model.product.Product product =
                 new pe.edu.pucp.kingstore.domain.model.product.Product();
@@ -567,7 +677,46 @@ class QuotationServiceTest {
 
         assertThat(dto.getProductSubtotal()).isEqualTo(1000.0);
         assertThat(dto.getDesignFeeTotal()).isEqualTo(100.0);
+        assertThat(dto.getDesignFeePercentage()).isEqualTo(10.0);
         assertThat(dto.getItems().get(0).getDesignFeeAmount()).isEqualTo(100.0);
+    }
+
+    @Test
+    void toResponseDTOExposesPersistedDesignFeeSnapshot() {
+        Product product = new Product();
+        product.setId(1);
+        product.setName("Polo");
+        product.setBasePrice(100.0);
+        ProductVariant variant = new ProductVariant();
+        variant.setId(101);
+        variant.setProduct(product);
+
+        QuotationItem item = new QuotationItem();
+        item.setId(201);
+        item.setProductVariant(variant);
+        item.setQuantity(1);
+        item.setPrice(115.0);
+        item.setSubTotal(115.0);
+
+        QuotationDesign design = new QuotationDesign();
+        design.setQuotationItem(item);
+        design.setActive(true);
+
+        Quotation quotation = quotation(1, cart(1), List.of(item), 0);
+        quotation.setStatus(QuotationStatus.PENDING);
+        quotation.setSubTotal(115.0);
+        quotation.setTotalAmount(115.0);
+        quotation.setDesignFeeTotal(15.0);
+        quotation.setDesignFeePercentageApplied(15.0);
+        quotation.setDesigns(List.of(design));
+
+        var dto = service.toResponseDTO(quotation, 10);
+
+        assertThat(dto.getProductSubtotal()).isEqualTo(100.0);
+        assertThat(dto.getDesignFeeTotal()).isEqualTo(15.0);
+        assertThat(dto.getDesignFeePercentage()).isEqualTo(15.0);
+        assertThat(dto.getDesignFeePercentageApplied()).isEqualTo(15.0);
+        assertThat(dto.getItems().get(0).getDesignFeePercentage()).isEqualTo(15.0);
     }
 
     @Test

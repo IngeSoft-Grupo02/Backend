@@ -28,6 +28,7 @@ public class QuotationResponseDTO {
     private double discountTotal;
     private double designFeeTotal;
     private double designFeePercentage;
+    private Double designFeePercentageApplied;
     private LocalDateTime requestedAt;
     private LocalDateTime responseAt;
     private String description;

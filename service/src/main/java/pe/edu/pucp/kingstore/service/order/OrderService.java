@@ -108,6 +108,7 @@ public class OrderService extends AbstractCrudService<Order> {
     @Transactional
     public OrderResponseDTO toResponseDTO(Order order, Integer storeId) {
         order = expireIfPaymentTimedOut(order);
+        Double appliedPercentageSnapshot = order.getDesignFeePercentageApplied();
         var quotation = order.getQuotation();
         var customer = quotation != null && quotation.getShoppingCart() != null
                 ? quotation.getShoppingCart().getCustomer()
@@ -116,7 +117,7 @@ public class OrderService extends AbstractCrudService<Order> {
         List<OrderItemResponseDTO> itemsDetail = order.getItems() == null
                 ? List.of()
                 : order.getItems().stream()
-                  .map(this::toItemResponseDTO)
+                  .map(item -> toItemResponseDTO(item, appliedPercentageSnapshot))
                   .toList();
 
         OrderResponseDTO dto = new OrderResponseDTO();
@@ -156,17 +157,22 @@ public class OrderService extends AbstractCrudService<Order> {
         dto.setProductSubtotal(round(itemsDetail.stream()
                 .mapToDouble(item -> item.getBaseSubtotal() == null ? 0 : item.getBaseSubtotal())
                 .sum()));
-        dto.setDesignFeeTotal(round(itemsDetail.stream()
-                .mapToDouble(item -> item.getDesignFeeAmount() == null ? 0 : item.getDesignFeeAmount())
-                .sum()));
-        dto.setDesignFeePercentage(representativeDesignFeePercentage(itemsDetail));
+        double designFeeTotal = order.getDesignFeeTotal() == null
+                ? round(itemsDetail.stream()
+                    .mapToDouble(item -> item.getDesignFeeAmount() == null ? 0 : item.getDesignFeeAmount())
+                    .sum())
+                : round(order.getDesignFeeTotal());
+        double designFeePercentage = responseDesignFeePercentage(order, itemsDetail);
+        dto.setDesignFeeTotal(designFeeTotal);
+        dto.setDesignFeePercentage(designFeePercentage);
+        dto.setDesignFeePercentageApplied(designFeePercentage);
 
         // Observaciones provenientes de la cotización asociada (si existen).
         dto.setObservations(quotation != null ? quotation.getObservations() : null);
         return dto;
     }
 
-    private OrderItemResponseDTO toItemResponseDTO(OrderItem item) {
+    private OrderItemResponseDTO toItemResponseDTO(OrderItem item, Double appliedPercentageSnapshot) {
         var variant = item.getProductVariant();
         var product = variant != null ? variant.getProduct() : null;
 
@@ -188,7 +194,9 @@ public class OrderService extends AbstractCrudService<Order> {
         dto.setBaseUnitPrice(round(baseUnitPrice));
         dto.setBaseSubtotal(baseSubtotal);
         dto.setDesignFeeAmount(designFeeAmount);
-        dto.setDesignFeePercentage(percentageFromAmount(baseSubtotal, designFeeAmount));
+        dto.setDesignFeePercentage(appliedPercentageSnapshot == null
+                ? percentageFromAmount(baseSubtotal, designFeeAmount)
+                : StoreService.effectiveDesignFeePercentage(appliedPercentageSnapshot));
         dto.setLineTotal(item.getSubTotal());
         dto.setHasDesignFee(designFeeAmount > 0);
         return dto;
@@ -259,6 +267,8 @@ public class OrderService extends AbstractCrudService<Order> {
         order.setQuotation(quotation);
         order.setStatus(OrderStatus.PENDING_PAYMENT);
         order.setTotalDiscount(quotation.getDiscount());
+        order.setDesignFeeTotal(quotationDesignFeeTotal(quotation));
+        order.setDesignFeePercentageApplied(quotationDesignFeePercentage(quotation));
 
         List<OrderItem> items = quotationItems.stream().map(qi -> {
             if (qi.getProductVariant() == null || qi.getProductVariant().getId() == null) {
@@ -401,6 +411,12 @@ public class OrderService extends AbstractCrudService<Order> {
         if (order.getStatus() == null) {
             order.setStatus(OrderStatus.PENDING_PAYMENT);
         }
+        if (order.getDesignFeePercentageApplied() == null && order.getQuotation() != null) {
+            order.setDesignFeePercentageApplied(quotationDesignFeePercentage(order.getQuotation()));
+        }
+        if (order.getDesignFeeTotal() == null && order.getQuotation() != null) {
+            order.setDesignFeeTotal(quotationDesignFeeTotal(order.getQuotation()));
+        }
         recalculateTotals(order);
     }
 
@@ -431,6 +447,68 @@ public class OrderService extends AbstractCrudService<Order> {
 
     private double round(double value) {
         return Math.round(value * 100.0) / 100.0;
+    }
+
+    private double quotationDesignFeePercentage(Quotation quotation) {
+        if (quotation == null) {
+            return StoreService.DEFAULT_DESIGN_FEE_PERCENTAGE;
+        }
+        if (quotation.getDesignFeePercentageApplied() != null) {
+            return StoreService.effectiveDesignFeePercentage(quotation.getDesignFeePercentageApplied());
+        }
+        if (quotation.getItems() == null) {
+            return StoreService.DEFAULT_DESIGN_FEE_PERCENTAGE;
+        }
+        return quotation.getItems().stream()
+                .mapToDouble(this::quotationItemDesignFeePercentage)
+                .filter(value -> value > 0)
+                .findFirst()
+                .orElse(StoreService.DEFAULT_DESIGN_FEE_PERCENTAGE);
+    }
+
+    private double quotationDesignFeeTotal(Quotation quotation) {
+        if (quotation == null) {
+            return 0.0;
+        }
+        if (quotation.getDesignFeeTotal() != null) {
+            return round(quotation.getDesignFeeTotal());
+        }
+        if (quotation.getItems() == null) {
+            return 0.0;
+        }
+        return round(quotation.getItems().stream()
+                .mapToDouble(this::quotationItemDesignFeeTotal)
+                .sum());
+    }
+
+    private double quotationItemDesignFeeTotal(QuotationItem item) {
+        var variant = item.getProductVariant();
+        var product = variant != null ? variant.getProduct() : null;
+        double baseUnitPrice = product != null ? product.getBasePrice() : item.getPrice();
+        double baseSubtotal = round(baseUnitPrice * item.getQuantity());
+        return round(Math.max(0, item.getSubTotal() - baseSubtotal));
+    }
+
+    private double quotationItemDesignFeePercentage(QuotationItem item) {
+        var variant = item.getProductVariant();
+        var product = variant != null ? variant.getProduct() : null;
+        double baseUnitPrice = product != null ? product.getBasePrice() : item.getPrice();
+        double baseSubtotal = round(baseUnitPrice * item.getQuantity());
+        double designFeeAmount = round(Math.max(0, item.getSubTotal() - baseSubtotal));
+        if (baseSubtotal <= 0 || designFeeAmount <= 0) {
+            return 0.0;
+        }
+        return percentageFromAmount(baseSubtotal, designFeeAmount);
+    }
+
+    private double responseDesignFeePercentage(Order order, List<OrderItemResponseDTO> itemsDetail) {
+        if (order.getDesignFeePercentageApplied() != null) {
+            return StoreService.effectiveDesignFeePercentage(order.getDesignFeePercentageApplied());
+        }
+        if (order.getQuotation() != null && order.getQuotation().getDesignFeePercentageApplied() != null) {
+            return StoreService.effectiveDesignFeePercentage(order.getQuotation().getDesignFeePercentageApplied());
+        }
+        return representativeDesignFeePercentage(itemsDetail);
     }
 
 }

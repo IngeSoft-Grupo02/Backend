@@ -291,7 +291,7 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
                 round(productSubtotal),
                 round(discountTotal),
                 round(designFeeTotal),
-                representativeDesignFeePercentage(items)
+                representativeDesignFeePercentage(items, responseCart)
         );
     }
 
@@ -411,10 +411,24 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
         return StoreService.effectiveDesignFeePercentage(product.getStore().getDesignFeePercentage());
     }
 
-    private double representativeDesignFeePercentage(List<CartResponseDTO.CartItemResponseDTO> items) {
+    private double representativeDesignFeePercentage(List<CartResponseDTO.CartItemResponseDTO> items, ShoppingCart cart) {
         return items.stream()
                 .filter(CartResponseDTO.CartItemResponseDTO::isHasDesignFee)
                 .mapToDouble(CartResponseDTO.CartItemResponseDTO::getDesignFeePercentage)
+                .findFirst()
+                .orElseGet(() -> designFeePercentage(cart));
+    }
+
+    private double designFeePercentage(ShoppingCart cart) {
+        if (cart == null || cart.getItems() == null) {
+            return DEFAULT_DESIGN_FEE_PERCENTAGE;
+        }
+        return cart.getItems().stream()
+                .map(item -> item.getProductVariant() != null ? item.getProductVariant().getProduct() : null)
+                .filter(java.util.Objects::nonNull)
+                .map(Product::getStore)
+                .filter(java.util.Objects::nonNull)
+                .map(store -> StoreService.effectiveDesignFeePercentage(store.getDesignFeePercentage()))
                 .findFirst()
                 .orElse(DEFAULT_DESIGN_FEE_PERCENTAGE);
     }

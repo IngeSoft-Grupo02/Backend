@@ -802,6 +802,7 @@ class ShoppingCartServiceTest {
     void toResponseDTOMapsCartCorrectly() {
         Customer customer = customer(1);
         Store store = store(10);
+        store.setDesignFeePercentage(15.0);
         Product product = product(1, store, 100.0);
         product.setImageUrls(List.of("https://cdn.test/producto-1.png"));
         ProductVariant variant = variant(1, product, 50);
@@ -825,6 +826,9 @@ class ShoppingCartServiceTest {
         assertThat(result.getItems().get(0).getProductName()).isEqualTo("Producto 1");
         assertThat(result.getItems().get(0).getProductImageUrl()).isEqualTo("https://cdn.test/producto-1.png");
         assertThat(result.getTotalAmount()).isEqualTo(100.0);
+        assertThat(result.getDesignFeePercentage()).isEqualTo(15.0);
+        assertThat(result.getItems().get(0).getDesignFeePercentage()).isEqualTo(15.0);
+        assertThat(result.getDesignFeeTotal()).isZero();
     }
 
     @Test
