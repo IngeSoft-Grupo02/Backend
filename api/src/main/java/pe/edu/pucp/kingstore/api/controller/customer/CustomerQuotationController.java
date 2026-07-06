@@ -22,7 +22,9 @@ import pe.edu.pucp.kingstore.domain.model.user.Customer;
 import pe.edu.pucp.kingstore.service.cart.ShoppingCartService;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
 import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
+import pe.edu.pucp.kingstore.service.order.OrderService;
 import pe.edu.pucp.kingstore.service.quotation.QuotationDesignService;
+import pe.edu.pucp.kingstore.service.quotation.QuotationOrderWorkflowService;
 import pe.edu.pucp.kingstore.service.quotation.QuotationService;
 
 import java.util.ArrayList;
@@ -48,15 +50,21 @@ public class CustomerQuotationController {
     private final ShoppingCartService shoppingCartService;
     private final QuotationService quotationService;
     private final QuotationDesignService quotationDesignService;
+    private final QuotationOrderWorkflowService quotationOrderWorkflowService;
+    private final OrderService orderService;
 
     public CustomerQuotationController(CustomerContext customerContext,
                                        ShoppingCartService shoppingCartService,
                                        QuotationService quotationService,
-                                       QuotationDesignService quotationDesignService) {
+                                       QuotationDesignService quotationDesignService,
+                                       QuotationOrderWorkflowService quotationOrderWorkflowService,
+                                       OrderService orderService) {
         this.customerContext = customerContext;
         this.shoppingCartService = shoppingCartService;
         this.quotationService = quotationService;
         this.quotationDesignService = quotationDesignService;
+        this.quotationOrderWorkflowService = quotationOrderWorkflowService;
+        this.orderService = orderService;
     }
 
     // POST /stores/{slug}/quotations
@@ -225,6 +233,24 @@ public class CustomerQuotationController {
                     quotationService.toResponseDTO(quotation, store.getId()));
         } catch (ResourceNotFoundException | BusinessRuleException e) {
             return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    // POST /stores/{slug}/quotations/{id}/order
+    @PostMapping("/{id}/order")
+    public ResponseEntity<?> ensureOrder(@PathVariable String slug,
+                                         @PathVariable Integer id,
+                                         Authentication authentication) {
+        try {
+            Store store = customerContext.store(slug);
+            Customer customer = customerContext.customer(authentication, store);
+            var order = quotationOrderWorkflowService.ensureCustomerOrderFromApprovedQuotation(
+                    id, customer.getId(), store.getId());
+            return ResponseEntity.ok(orderService.toResponseDTO(order, store.getId()));
+        } catch (ResourceNotFoundException e) {
+            return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
+        } catch (BusinessRuleException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 }
