@@ -16,6 +16,7 @@ import pe.edu.pucp.kingstore.domain.model.product.enums.Color;
 import pe.edu.pucp.kingstore.domain.model.quotation.Quotation;
 import pe.edu.pucp.kingstore.domain.model.user.Customer;
 import pe.edu.pucp.kingstore.repository.order.OrderRepository;
+import pe.edu.pucp.kingstore.repository.quotation.QuotationRepository;
 import pe.edu.pucp.kingstore.service.common.BusinessRuleException;
 import pe.edu.pucp.kingstore.service.common.ResourceNotFoundException;
 
@@ -43,12 +44,14 @@ class OrderServiceTest {
 
     @Mock
     private OrderRepository orderRepository;
+    @Mock
+    private QuotationRepository quotationRepository;
 
     private OrderService service;
 
     @BeforeEach
     void setUp() {
-        service = new OrderService(orderRepository);
+        service = new OrderService(orderRepository, quotationRepository);
     }
 
     // -------------------------------------------------------------------------
@@ -535,6 +538,7 @@ class OrderServiceTest {
         quotation.setDiscount(0.0);
         quotation.setItems(new java.util.ArrayList<>(List.of(qi)));
 
+        when(quotationRepository.findById(1)).thenReturn(Optional.of(quotation));
         when(orderRepository.findByQuotationId(1)).thenReturn(Optional.empty());
         when(orderRepository.save(any(Order.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -544,6 +548,8 @@ class OrderServiceTest {
         assertThat(result.getStatus()).isEqualTo(OrderStatus.PENDING_PAYMENT);
         assertThat(result.getItems()).hasSize(1);
         assertThat(result.getItems().get(0).getQuantity()).isEqualTo(2);
+        assertThat(result.getPartialTotal()).isEqualTo(200.0);
+        assertThat(result.getFinalTotal()).isEqualTo(236.0);
     }
 
     @Test
@@ -554,13 +560,15 @@ class OrderServiceTest {
         quotation.setStatus(pe.edu.pucp.kingstore.domain.model.quotation.enums.QuotationStatus.PENDING);
         quotation.setItems(new java.util.ArrayList<>());
 
+        when(quotationRepository.findById(1)).thenReturn(Optional.of(quotation));
+
         assertThatThrownBy(() -> service.createFromQuotation(quotation))
                 .isInstanceOf(BusinessRuleException.class)
                 .hasMessageContaining("approved quotation");
     }
 
     @Test
-    void createFromQuotationThrowsWhenOrderAlreadyExists() {
+    void createFromQuotationReturnsExistingOrderWhenOrderAlreadyExists() {
         pe.edu.pucp.kingstore.domain.model.quotation.Quotation quotation =
                 new pe.edu.pucp.kingstore.domain.model.quotation.Quotation();
         quotation.setId(1);
@@ -569,11 +577,10 @@ class OrderServiceTest {
 
         Order existing = new Order();
         existing.setId(1);
+        when(quotationRepository.findById(1)).thenReturn(Optional.of(quotation));
         when(orderRepository.findByQuotationId(1)).thenReturn(Optional.of(existing));
 
-        assertThatThrownBy(() -> service.createFromQuotation(quotation))
-                .isInstanceOf(BusinessRuleException.class)
-                .hasMessageContaining("already exists");
+        assertThat(service.createFromQuotation(quotation)).isSameAs(existing);
     }
 
 // =========================================================================

@@ -15,6 +15,9 @@ import pe.edu.pucp.kingstore.domain.dto.order.OrderResponseDTO;
 import pe.edu.pucp.kingstore.domain.dto.order.OrderShippingResponseDTO;
 import pe.edu.pucp.kingstore.service.user.util.MerchantCustomerUtil;
 import pe.edu.pucp.kingstore.domain.model.quotation.Quotation;
+import pe.edu.pucp.kingstore.domain.model.quotation.QuotationItem;
+import pe.edu.pucp.kingstore.domain.model.quotation.enums.QuotationStatus;
+import pe.edu.pucp.kingstore.repository.quotation.QuotationRepository;
 
 
 import java.util.List;
@@ -25,10 +28,12 @@ import java.util.Optional;
 public class OrderService extends AbstractCrudService<Order> {
 
     private final OrderRepository orderRepository;
+    private final QuotationRepository quotationRepository;
 
-    public OrderService(OrderRepository orderRepository) {
+    public OrderService(OrderRepository orderRepository, QuotationRepository quotationRepository) {
         super(orderRepository, "Order");
         this.orderRepository = orderRepository;
+        this.quotationRepository = quotationRepository;
     }
 
     @Transactional(readOnly = true)
@@ -189,20 +194,40 @@ public class OrderService extends AbstractCrudService<Order> {
      */
     @Transactional
     public Order createFromQuotation(Quotation quotation) {
-        if (quotation.getStatus() != pe.edu.pucp.kingstore.domain.model.quotation.enums.QuotationStatus.APPROVED) {
+        if (quotation == null || quotation.getId() == null) {
+            throw new BusinessRuleException("Quotation id is required to create an order");
+        }
+        return createFromQuotation(quotation.getId());
+    }
+
+    @Transactional
+    public Order createFromQuotation(Integer quotationId) {
+        requireId(quotationId);
+        Quotation quotation = quotationRepository.findById(quotationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Quotation", quotationId));
+
+        if (quotation.getStatus() != QuotationStatus.APPROVED) {
             throw new BusinessRuleException("Order can only be created from an approved quotation");
         }
-        // Verificar que no existe ya un pedido para esta cotización
-        orderRepository.findByQuotationId(quotation.getId()).ifPresent(existing -> {
-            throw new BusinessRuleException("Order already exists for this quotation");
-        });
+        Optional<Order> existingOrder = orderRepository.findByQuotationId(quotation.getId());
+        if (existingOrder.isPresent()) {
+            return existingOrder.get();
+        }
+
+        List<QuotationItem> quotationItems = quotation.getItems();
+        if (quotationItems == null || quotationItems.isEmpty()) {
+            throw new BusinessRuleException("Quotation must have at least one item to create an order");
+        }
 
         Order order = new Order();
         order.setQuotation(quotation);
         order.setStatus(OrderStatus.PENDING_PAYMENT);
         order.setTotalDiscount(quotation.getDiscount());
 
-        List<OrderItem> items = quotation.getItems().stream().map(qi -> {
+        List<OrderItem> items = quotationItems.stream().map(qi -> {
+            if (qi.getProductVariant() == null || qi.getProductVariant().getId() == null) {
+                throw new BusinessRuleException("Quotation item must have a product variant to create an order");
+            }
             OrderItem oi = new OrderItem();
             oi.setProductVariant(qi.getProductVariant());
             oi.setQuantity(qi.getQuantity());

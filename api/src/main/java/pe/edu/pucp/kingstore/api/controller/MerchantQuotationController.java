@@ -36,7 +36,7 @@ public class MerchantQuotationController extends BaseMerchantController {
                     ? quotationService.findByStoreId(store.getId())
                     : quotationService.findByStoreIdAndStatus(store.getId(), parseQuotationStatus(status));
             return ResponseEntity.ok(quotations.stream()
-                    .map(q -> quotationService.toResponseDTO(q, store.getId()))
+                    .map(q -> quotationService.toResponseDTO(q.getId(), store.getId()))
                     .toList());
         });
     }
@@ -58,9 +58,9 @@ public class MerchantQuotationController extends BaseMerchantController {
             );
             // Merchant aprueba → orden creada automáticamente
             if (responded.getStatus() == QuotationStatus.APPROVED) {
-                orderService.createFromQuotation(responded);
+                orderService.createFromQuotation(responded.getId());
             }
-            return ResponseEntity.ok(quotationService.toResponseDTO(responded, store.getId()));
+            return ResponseEntity.ok(quotationService.toResponseDTO(responded.getId(), store.getId()));
         });
     }
 }

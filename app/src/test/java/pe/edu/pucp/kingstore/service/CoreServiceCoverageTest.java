@@ -197,7 +197,7 @@ class CoreServiceCoverageTest {
         assertThatThrownBy(() -> quotationService.respond(6, QuotationStatus.PENDING, "no"))
                 .isInstanceOf(BusinessRuleException.class);
 
-        OrderService orderService = new OrderService(orderRepository);
+        OrderService orderService = new OrderService(orderRepository, quotationRepository);
         Order order = order();
         when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(orderRepository.findById(9)).thenReturn(Optional.of(order));

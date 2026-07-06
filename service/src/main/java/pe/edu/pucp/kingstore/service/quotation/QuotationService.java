@@ -263,6 +263,12 @@ public class QuotationService extends AbstractCrudService<Quotation> {
     }
 
     @Transactional(readOnly = true)
+    public QuotationResponseDTO toResponseDTO(Integer quotationId, Integer storeId) {
+        requireId(quotationId);
+        return toResponseDTO(getById(quotationId), storeId);
+    }
+
+    @Transactional(readOnly = true)
     public QuotationResponseDTO toResponseDTO(Quotation quotation, Integer storeId) {
         var customer = quotation.getShoppingCart() != null
                 ? quotation.getShoppingCart().getCustomer()

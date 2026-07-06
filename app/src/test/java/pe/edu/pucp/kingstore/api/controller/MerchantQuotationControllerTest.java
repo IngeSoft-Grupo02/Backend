@@ -21,7 +21,6 @@ import pe.edu.pucp.kingstore.service.quotation.QuotationService;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.never;
@@ -66,7 +65,7 @@ class MerchantQuotationControllerTest {
 
         when(merchantContext.currentStore(authentication, 10)).thenReturn(store);
         when(quotationService.findByStoreId(10)).thenReturn(List.of(quotation));
-        when(quotationService.toResponseDTO(quotation, 10)).thenReturn(dto);
+        when(quotationService.toResponseDTO(1, 10)).thenReturn(dto);
 
         var result = controller.quotations(authentication, null, 10);
 
@@ -88,7 +87,7 @@ class MerchantQuotationControllerTest {
 
         when(merchantContext.currentStore(authentication, 10)).thenReturn(store);
         when(quotationService.findByStoreIdAndStatus(10, QuotationStatus.APPROVED)).thenReturn(List.of(quotation));
-        when(quotationService.toResponseDTO(quotation, 10)).thenReturn(dto);
+        when(quotationService.toResponseDTO(2, 10)).thenReturn(dto);
 
         var result = controller.quotations(authentication, "approved", 10);
 
@@ -114,13 +113,13 @@ class MerchantQuotationControllerTest {
 
         when(merchantContext.currentStore(authentication, 10)).thenReturn(store);
         when(quotationService.findInStore(7, 10)).thenReturn(quotation);
-        when(quotationService.respond(7, QuotationStatus.APPROVED, "Aprobado")).thenReturn(responded);
-        when(quotationService.toResponseDTO(responded, 10)).thenReturn(dto);
+        when(quotationService.respond(7, QuotationStatus.APPROVED, "Aprobado", null)).thenReturn(responded);
+        when(quotationService.toResponseDTO(7, 10)).thenReturn(dto);
 
         var result = controller.respondQuotation(authentication, 7, 10, request);
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
-        verify(orderService).createFromQuotation(responded);
+        verify(orderService).createFromQuotation(7);
     }
 
     @Test
@@ -139,13 +138,13 @@ class MerchantQuotationControllerTest {
 
         when(merchantContext.currentStore(authentication, 10)).thenReturn(store);
         when(quotationService.findInStore(8, 10)).thenReturn(quotation);
-        when(quotationService.respond(8, QuotationStatus.REJECTED, "Sin stock")).thenReturn(responded);
-        when(quotationService.toResponseDTO(eq(responded), eq(10))).thenReturn(dto);
+        when(quotationService.respond(8, QuotationStatus.REJECTED, "Sin stock", null)).thenReturn(responded);
+        when(quotationService.toResponseDTO(8, 10)).thenReturn(dto);
 
         var result = controller.respondQuotation(authentication, 8, 10, request);
 
         assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
-        verify(orderService, never()).createFromQuotation(responded);
+        verify(orderService, never()).createFromQuotation(8);
     }
 
     @Test
