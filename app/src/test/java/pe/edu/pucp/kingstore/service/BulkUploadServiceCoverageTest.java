@@ -93,6 +93,23 @@ class BulkUploadServiceCoverageTest {
     }
 
     @Test
+    void processCreatesValidMerchantsWhenEmailHeaderHasUtf8Bom() throws Exception {
+        MockMultipartFile merchants = csv("merchants.csv",
+                "\uFEFFemail,password,firstName,paternalSurname,maternalSurname,documentType,documentNumber,birthDate,phone,gender,ruc\n"
+                        + "Merchant@Kingstore.pe,secret,Ana,Perez,Rojas,DNI,12345678,1990-01-20,999999999,FEMALE,12345678901\n");
+        when(userAccountRepository.findByEmail("merchant@kingstore.pe")).thenReturn(Optional.empty());
+
+        BulkUploadResponseDTO response = service.process(merchants, null, null);
+
+        assertThat(response.getMerchantsProcessed()).isEqualTo(1);
+        assertThat(response.getMerchantsCreated()).isEqualTo(1);
+        assertThat(response.getErrorCount()).isZero();
+        assertThat(response.getIncidences()).extracting(BulkIncidenceDTO::getDetail)
+                .doesNotContain("email es obligatorio");
+        verify(userAccountService).createWithRole(any());
+    }
+
+    @Test
     void processCollectsMerchantValidationErrorsAndSkipsCreation() throws Exception {
         MockMultipartFile merchants = csv("merchants.csv", """
                 email,password,firstName,paternalSurname,maternalSurname,documentType,documentNumber,birthDate,phone,gender,ruc
@@ -107,6 +124,26 @@ class BulkUploadServiceCoverageTest {
         assertThat(response.getIncidences())
                 .extracting(BulkIncidenceDTO::getBlock)
                 .containsOnly(BulkIncidenceDTO.IncidenceBlock.MERCHANTS);
+        verify(userAccountService, never()).createWithRole(any());
+    }
+
+    @Test
+    void processReportsStructuredIncidenceWhenMerchantEmailIsEmpty() throws Exception {
+        MockMultipartFile merchants = csv("merchants.csv", """
+                email,password,firstName,paternalSurname,maternalSurname,documentType,documentNumber,birthDate,phone,gender,ruc
+                ,secret,Ana,Perez,Rojas,DNI,12345678,1990-01-20,999999999,FEMALE,12345678901
+                """);
+
+        BulkUploadResponseDTO response = service.process(merchants, null, null);
+
+        assertThat(response.getErrorCount()).isEqualTo(1);
+        assertThat(response.getIncidences()).singleElement().satisfies(incidence -> {
+            assertThat(incidence.getBlock()).isEqualTo(BulkIncidenceDTO.IncidenceBlock.MERCHANTS);
+            assertThat(incidence.getRow()).isEqualTo(2);
+            assertThat(incidence.getCode()).isEqualTo("VAL_EMAIL");
+            assertThat(incidence.getType()).isEqualTo(BulkIncidenceDTO.IncidenceType.ERROR);
+            assertThat(incidence.getDetail()).isEqualTo("email es obligatorio");
+        });
         verify(userAccountService, never()).createWithRole(any());
     }
 
@@ -238,6 +275,28 @@ class BulkUploadServiceCoverageTest {
         assertThat(captor.getValue().getPrimaryColor()).isEqualTo(PrimaryColor.ONYX_BLACK);
         assertThat(captor.getValue().getMerchantId()).isEqualTo(9);
         assertThat(captor.getValue().getSlug()).isNull();
+    }
+
+    @Test
+    void processCreatesStoresWhenStoreNameHeaderHasUtf8Bom() throws Exception {
+        StoreCategory category = category(1);
+        UserAccount account = account(8, "merchant@kingstore.pe", "secret");
+        Merchant merchant = matchingMerchant(9, account);
+        MockMultipartFile stores = csv("stores.csv",
+                "\uFEFFstoreName,categoryId,primaryColor,secondaryColor,tertiaryColor,description,merchantEmail,logoFileName\n"
+                        + "King Store,1,ONYX_BLACK,SLATE,RAW_GOLD,Main store,merchant@kingstore.pe,\n");
+        when(categoryRepository.findById(1)).thenReturn(Optional.of(category));
+        when(userAccountRepository.findByEmail("merchant@kingstore.pe")).thenReturn(Optional.of(account));
+        when(merchantRepository.findByUserAccountId(8)).thenReturn(Optional.of(merchant));
+
+        BulkUploadResponseDTO response = service.process(null, stores, null);
+
+        assertThat(response.getStoresProcessed()).isEqualTo(1);
+        assertThat(response.getStoresCreated()).isEqualTo(1);
+        assertThat(response.getErrorCount()).isZero();
+        assertThat(response.getIncidences()).extracting(BulkIncidenceDTO::getDetail)
+                .doesNotContain("storeName es obligatorio");
+        verify(storeService).createFromDTO(any());
     }
 
     @Test
