@@ -723,11 +723,12 @@ public class BulkUploadService {
     }
 
     private String normalizeEmail(String email) {
-        return email == null || email.isBlank() ? null : email.trim().toLowerCase(Locale.ROOT);
+        String normalized = normalizeCsvValue(email);
+        return normalized == null ? null : normalized.toLowerCase(Locale.ROOT);
     }
 
     private String trim(String value) {
-        return value == null ? null : value.trim();
+        return normalizeCsvValue(value);
     }
 
     private boolean textEquals(String left, String right) {
@@ -779,7 +780,10 @@ public class BulkUploadService {
     private Map<String, Integer> buildIndex(String[] headers) {
         Map<String, Integer> idx = new HashMap<>();
         for (int i = 0; i < headers.length; i++) {
-            idx.put(headers[i].trim(), i);
+            String header = normalizeCsvHeader(headers[i]);
+            if (!header.isBlank()) {
+                idx.put(header, i);
+            }
         }
         return idx;
     }
@@ -789,8 +793,26 @@ public class BulkUploadService {
         if (i == null || i >= cols.length) {
             return null;
         }
-        String val = cols[i].trim();
-        return val.isEmpty() ? null : val;
+        return normalizeCsvValue(cols[i]);
+    }
+
+    private String normalizeCsvHeader(String header) {
+        if (header == null) {
+            return "";
+        }
+        return removeUtf8Bom(header).trim();
+    }
+
+    private String normalizeCsvValue(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = removeUtf8Bom(value).trim();
+        return normalized.isEmpty() ? null : normalized;
+    }
+
+    private String removeUtf8Bom(String value) {
+        return value.replace("\uFEFF", "");
     }
 
     private static final class ValidationContext {
