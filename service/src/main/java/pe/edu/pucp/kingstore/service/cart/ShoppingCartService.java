@@ -91,12 +91,19 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
     @Transactional
     public ShoppingCart addItem(ShoppingCart cart, ProductVariant variant,
                                 int quantity, Integer storeId) {
-        return addItem(cart, variant, quantity, storeId, false);
+        return addItem(cart, variant, quantity, storeId, false, null);
     }
 
     @Transactional
     public ShoppingCart addItem(ShoppingCart cart, ProductVariant variant,
                                 int quantity, Integer storeId, boolean separateItem) {
+        return addItem(cart, variant, quantity, storeId, separateItem, null);
+    }
+
+    @Transactional
+    public ShoppingCart addItem(ShoppingCart cart, ProductVariant variant,
+                                int quantity, Integer storeId, boolean separateItem,
+                                String selectedProductImageUrl) {
         if (quantity <= 0) {
             throw new BusinessRuleException("Quantity must be positive");
         }
@@ -114,11 +121,17 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
         if (existing != null) {
             int newQty = existing.getQuantity() + quantity;
             existing.setQuantity(newQty);
+            existing.setSelectedProductImageUrl(normalizeSelectedProductImageUrl(
+                    selectedProductImageUrl,
+                    variant.getProduct(),
+                    existing.getSelectedProductImageUrl()
+            ));
             priceCartItem(existing, storeId);
         } else {
             CartItem item = new CartItem();
             item.setProductVariant(variant);
             item.setQuantity(quantity);
+            item.setSelectedProductImageUrl(normalizeSelectedProductImageUrl(selectedProductImageUrl, variant.getProduct(), null));
             priceCartItem(item, storeId);
             cart.getItems().add(item);
         }
@@ -259,7 +272,7 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
                     pricing.lineTotal(),
                     round(discount.percentage()),
                     designDTO,
-                    firstProductImage(product),
+                    selectedOrFirstProductImage(item, product),
                     round(originalPrice),
                     pricing.baseSubtotal(),
                     pricing.discountAmount(),
@@ -305,6 +318,33 @@ public class ShoppingCartService extends AbstractCrudService<ShoppingCart> {
                 .filter(url -> url != null && !url.isBlank())
                 .findFirst()
                 .orElse(null);
+    }
+
+    private String selectedOrFirstProductImage(CartItem item, Product product) {
+        String selected = normalizeImageUrl(item.getSelectedProductImageUrl(), null);
+        return selected != null ? selected : firstProductImage(product);
+    }
+
+    private String normalizeImageUrl(String value, String fallback) {
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+        return value.trim();
+    }
+
+    private String normalizeSelectedProductImageUrl(String value, Product product, String fallback) {
+        String normalized = normalizeImageUrl(value, null);
+        if (normalized == null) {
+            return fallback;
+        }
+        if (product == null || product.getImageUrls() == null) {
+            return fallback;
+        }
+        boolean belongsToProduct = product.getImageUrls().stream()
+                .filter(url -> url != null && !url.isBlank())
+                .map(String::trim)
+                .anyMatch(normalized::equals);
+        return belongsToProduct ? normalized : fallback;
     }
 
     /**

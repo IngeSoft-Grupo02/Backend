@@ -25,6 +25,9 @@ public class CartItem extends BaseEntity {
     @Column(nullable = false)
     private double subtotal;
 
+    @Column(length = 1000)
+    private String selectedProductImageUrl;
+
     @OneToOne(cascade = CascadeType.ALL, orphanRemoval = true)
     @JoinColumn(name = "custom_design_id")
     private CustomDesign customDesign;

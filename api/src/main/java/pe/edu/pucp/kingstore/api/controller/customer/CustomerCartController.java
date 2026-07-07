@@ -78,7 +78,8 @@ public class CustomerCartController {
             ShoppingCart cart = shoppingCartService.getOrCreateCart(customer);
             ShoppingCart updated = shoppingCartService.addItem(
                     cart, variant, request.getQuantity(), store.getId(),
-                    Boolean.TRUE.equals(request.getSeparateItem()));
+                    Boolean.TRUE.equals(request.getSeparateItem()),
+                    request.getSelectedProductImageUrl());
             return ResponseEntity.ok(shoppingCartService.toResponseDTO(updated));
         } catch (ResourceNotFoundException | BusinessRuleException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));

@@ -72,6 +72,7 @@ public class QuotationService extends AbstractCrudService<Quotation> {
             qi.setPrice(cartItem.getPrice());
             qi.setSubTotal(cartItem.getSubtotal());
             qi.setSourceCartItemId(cartItem.getId());
+            qi.setSelectedProductImageUrl(cartItem.getSelectedProductImageUrl());
             if (cartItem.getCustomDesign() != null
                     && cartItem.getCustomDesign().getDescription() != null
                     && !cartItem.getCustomDesign().getDescription().isBlank()) {
@@ -371,7 +372,7 @@ public class QuotationService extends AbstractCrudService<Quotation> {
         dto.setId(item.getId());
         dto.setProductId(product != null ? product.getId() : null);
         dto.setProductName(productName);
-        dto.setProductImageUrl(firstProductImageUrl(product));
+        dto.setProductImageUrl(selectedOrFirstProductImageUrl(item, product));
         dto.setProductVariantId(variant != null ? variant.getId() : null);
         dto.setSize(size);
         dto.setColor(color);
@@ -411,6 +412,13 @@ public class QuotationService extends AbstractCrudService<Quotation> {
                 .filter(url -> !url.isBlank())
                 .findFirst()
                 .orElse(null);
+    }
+
+    private String selectedOrFirstProductImageUrl(QuotationItem item, Product product) {
+        if (item.getSelectedProductImageUrl() != null && !item.getSelectedProductImageUrl().isBlank()) {
+            return item.getSelectedProductImageUrl().trim();
+        }
+        return firstProductImageUrl(product);
     }
 
     private void applyPricingBreakdown(QuotationItemResponseDTO dto, QuotationItem item,

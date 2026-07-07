@@ -92,7 +92,7 @@ class CustomerCartControllerTest {
         when(customerContext.customer(authentication, store)).thenReturn(customer);
         when(productVariantService.getByIdWithProduct(1)).thenReturn(variant);
         when(shoppingCartService.getOrCreateCart(customer)).thenReturn(cart);
-        when(shoppingCartService.addItem(cart, variant, 2, 10, false)).thenReturn(cart);
+        when(shoppingCartService.addItem(cart, variant, 2, 10, false, null)).thenReturn(cart);
         when(shoppingCartService.toResponseDTO(cart)).thenReturn(cartResponseDTO);
 
         var result = controller.addItem("tienda-luna", authentication, request);
@@ -113,7 +113,28 @@ class CustomerCartControllerTest {
         when(customerContext.customer(authentication, store)).thenReturn(customer);
         when(productVariantService.getByIdWithProduct(1)).thenReturn(variant);
         when(shoppingCartService.getOrCreateCart(customer)).thenReturn(cart);
-        when(shoppingCartService.addItem(cart, variant, 2, 10, true)).thenReturn(cart);
+        when(shoppingCartService.addItem(cart, variant, 2, 10, true, null)).thenReturn(cart);
+        when(shoppingCartService.toResponseDTO(cart)).thenReturn(cartResponseDTO);
+
+        var result = controller.addItem("tienda-luna", authentication, request);
+
+        assertThat(result.getStatusCode()).isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void addItemPassesSelectedProductImageWhenProvided() {
+        ProductVariant variant = new ProductVariant();
+        variant.setId(1);
+        CartItemRequestDTO request = new CartItemRequestDTO();
+        request.setProductVariantId(1);
+        request.setQuantity(2);
+        request.setSelectedProductImageUrl("https://cdn.test/product-2.png");
+
+        when(customerContext.store("tienda-luna")).thenReturn(store);
+        when(customerContext.customer(authentication, store)).thenReturn(customer);
+        when(productVariantService.getByIdWithProduct(1)).thenReturn(variant);
+        when(shoppingCartService.getOrCreateCart(customer)).thenReturn(cart);
+        when(shoppingCartService.addItem(cart, variant, 2, 10, false, "https://cdn.test/product-2.png")).thenReturn(cart);
         when(shoppingCartService.toResponseDTO(cart)).thenReturn(cartResponseDTO);
 
         var result = controller.addItem("tienda-luna", authentication, request);
