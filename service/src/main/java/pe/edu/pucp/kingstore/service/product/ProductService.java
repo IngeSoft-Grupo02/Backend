@@ -177,7 +177,7 @@ public class ProductService extends AbstractCrudService<Product> {
                         : product.getVariants().stream()
                           .filter(v -> v.getStock()>0)
                           .map(v -> new ProductPublicDTO.ProductVariantPublicDTO(
-                                  v.getId(), v.getSize(), v.getColor(), v.getStock()))
+                                  v.getId(), normalizeSize(v.getSize()), v.getColor(), v.getStock()))
                           .toList();
         List<DiscountPublicDTO> discounts =
                 discountRepository.findByStoreId(product.getStore().getId()).stream()
@@ -215,7 +215,7 @@ public class ProductService extends AbstractCrudService<Product> {
                 ? List.of()
                 : product.getVariants().stream()
                   .map(v -> new ProductResponseDTO.ProductVariantResponseDTO(
-                          v.getId(), v.getSize(), v.getColor(), v.getStock()))
+                          v.getId(), normalizeSize(v.getSize()), v.getColor(), v.getStock()))
                   .collect(Collectors.toList());
         int stock = variants.stream().mapToInt(v -> v.getStock()).sum();
         return new ProductResponseDTO(
@@ -329,7 +329,7 @@ public class ProductService extends AbstractCrudService<Product> {
                 continue;
             }
             Color color = request.getColor() == null ? Color.BLACK : request.getColor();
-            variants.put(new VariantKey(request.getSize().trim(), color), request.getStock());
+            variants.put(new VariantKey(normalizeSize(request.getSize()), color), request.getStock());
         }
         return variants;
     }
@@ -457,9 +457,17 @@ public class ProductService extends AbstractCrudService<Product> {
         return Boolean.TRUE.equals(product.getDeleted());
     }
 
+    public static String normalizeSize(String size) {
+        if (size == null || size.isBlank()) {
+            return size;
+        }
+        return size.trim().toUpperCase(java.util.Locale.ROOT);
+    }
+
     private record VariantKey(String size, Color color) {
         private static VariantKey from(ProductVariant variant) {
-            return new VariantKey(variant.getSize(), variant.getColor() == null ? Color.BLACK : variant.getColor());
+            return new VariantKey(normalizeSize(variant.getSize()),
+                    variant.getColor() == null ? Color.BLACK : variant.getColor());
         }
     }
 
