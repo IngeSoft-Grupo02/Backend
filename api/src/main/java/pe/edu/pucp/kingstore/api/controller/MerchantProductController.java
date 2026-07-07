@@ -345,7 +345,7 @@ public class MerchantProductController extends BaseMerchantController {
                 builder.addImages(imageNames);
                 ProductRequestDTO.ProductVariantRequestDTO variant =
                         new ProductRequestDTO.ProductVariantRequestDTO();
-                variant.setSize(size);
+                variant.setSize(ProductService.normalizeSize(size));
                 variant.setColor(color);
                 variant.setStock(stock);
                 builder.addVariant(variant);

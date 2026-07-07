@@ -225,4 +225,38 @@ class ProductServiceTest {
 
         verify(productRepository).save(any());
     }
+
+    // =========================================================================
+    // normalizeSize
+    // =========================================================================
+
+    @Test
+    void normalizeSize_lowercaseToUppercase() {
+        assertThat(ProductService.normalizeSize("s")).isEqualTo("S");
+        assertThat(ProductService.normalizeSize("xl")).isEqualTo("XL");
+        assertThat(ProductService.normalizeSize("xxl")).isEqualTo("XXL");
+    }
+
+    @Test
+    void normalizeSize_trimAndUppercase() {
+        assertThat(ProductService.normalizeSize("  xs  ")).isEqualTo("XS");
+        assertThat(ProductService.normalizeSize(" m ")).isEqualTo("M");
+    }
+
+    @Test
+    void normalizeSize_numericUnchanged() {
+        assertThat(ProductService.normalizeSize("20")).isEqualTo("20");
+        assertThat(ProductService.normalizeSize("30")).isEqualTo("30");
+    }
+
+    @Test
+    void normalizeSize_nullAndBlankPassThrough() {
+        assertThat(ProductService.normalizeSize(null)).isNull();
+        assertThat(ProductService.normalizeSize("   ")).isEqualTo("   ");
+    }
+
+    @Test
+    void normalizeSize_mixedCase() {
+        assertThat(ProductService.normalizeSize("Talla1")).isEqualTo("TALLA1");
+    }
 }
