@@ -61,6 +61,7 @@ public class MerchantContext {
                 .findAllByMerchant_UserAccount_Id(userAccountId(authentication))
                 .stream()
                 .filter(store -> Boolean.TRUE.equals(store.getActive()))
+                .filter(store -> store.getStoreStatus() != StoreStatus.INACTIVE)
                 .sorted(Comparator.comparing(Store::getId,
                         Comparator.nullsLast(Comparator.naturalOrder())))
                 .toList();
@@ -90,6 +91,7 @@ public class MerchantContext {
         Integer userAccountId = userAccountId(authentication);
         return storeRepository.findByIdAndMerchant_UserAccount_Id(storeId, userAccountId)
                 .filter(store -> Boolean.TRUE.equals(store.getActive()))
+                .filter(store -> store.getStoreStatus() != StoreStatus.INACTIVE)
                 .orElseThrow(() -> new ResourceNotFoundException("Store", storeId));
     }
 }

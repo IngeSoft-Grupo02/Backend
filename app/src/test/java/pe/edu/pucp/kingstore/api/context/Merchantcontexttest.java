@@ -133,9 +133,10 @@ class MerchantContextTest {
         Store id3 = store(3, true, StoreStatus.ACTIVE);
         Store id1 = store(1, true, StoreStatus.ACTIVE);
         Store inactive = store(2, false, StoreStatus.ACTIVE);
+        Store inactiveStatus = store(4, true, StoreStatus.INACTIVE);
 
         when(storeRepository.findAllByMerchant_UserAccount_Id(7))
-                .thenReturn(List.of(withNullId, id3, id1, inactive));
+                .thenReturn(List.of(withNullId, id3, id1, inactive, inactiveStatus));
 
         List<Store> result = context.stores(authentication);
 
@@ -256,6 +257,16 @@ class MerchantContextTest {
     void storeByIdThrowsNotFoundWhenStoreInactive() {
         when(authentication.getName()).thenReturn("7");
         Store inactive = store(5, false, StoreStatus.ACTIVE);
+        when(storeRepository.findByIdAndMerchant_UserAccount_Id(5, 7)).thenReturn(Optional.of(inactive));
+
+        assertThatThrownBy(() -> context.storeById(authentication, 5))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void storeByIdThrowsNotFoundWhenStoreStatusInactive() {
+        when(authentication.getName()).thenReturn("7");
+        Store inactive = store(5, true, StoreStatus.INACTIVE);
         when(storeRepository.findByIdAndMerchant_UserAccount_Id(5, 7)).thenReturn(Optional.of(inactive));
 
         assertThatThrownBy(() -> context.storeById(authentication, 5))
